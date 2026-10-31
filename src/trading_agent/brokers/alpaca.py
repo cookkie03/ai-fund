@@ -22,7 +22,7 @@ from requests.exceptions import JSONDecodeError, RequestException
 
 from .models import Account, BrokerError, ErrorKind, Order, OrderQuery, Position
 
-PAPER_TRADING_URL = "https://paper-api.alpaca.markets/v2"
+PAPER_TRADING_URL = "https://paper-api.alpaca.markets"
 
 
 def _sdk_base_url(trading_url: str) -> str:
