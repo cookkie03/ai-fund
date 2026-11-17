@@ -9,6 +9,7 @@ Per ogni richiesta relativa a questo progetto, prima di proporre soluzioni, prog
 3. Basa il lavoro sui requisiti pertinenti e sulle istruzioni correnti di Luca. Segnala le contraddizioni che incidono sulla richiesta; distingui decisioni consolidate, proposte e reference storiche.
 4. Verifica nel repository il comportamento effettivo: la wiki descrive specifiche e decisioni, non dimostra che codice, test o deploy funzionino. Il codice preesistente è materiale da valutare rispetto al piano di ripartenza; conserva quanto presente finché il lavoro richiesto non ne definisce la destinazione.
 5. Registra nella wiki decisioni e avanzamenti rilevanti, seguendo la sua taxonomy e le regole di board, log e hot-cache.
+6. Aggiorna la wiki man mano che ogni decisione viene presa (anche durante interviste di design come `grill-with-docs`), non a fine sessione: pagina tematica, `decision-log`, board, log e hot-cache. Committa e pusha la wiki insieme al lavoro.
 
 Il codice Python vive in questo repository; documentazione, decisioni e backlog condivisi vivono nella wiki adiacente. Se la wiki non è accessibile, rendi esplicita la lacuna prima di procedere con attività che dipendono dai suoi requisiti.
 
