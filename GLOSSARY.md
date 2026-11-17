@@ -9,7 +9,7 @@ Uno dei sei ruoli autonomi del sistema: Market Analyst, Sentiment Analyst, Techn
 _Avoid_: desk, bot
 
 **Analyst**:
-Uno dei cinque agenti specialisti (Market, Sentiment, Technical, Fundamental, Risk). Produce un'Analysis sulla propria specialità ma può esprimersi su tutto.
+Uno dei cinque agenti specialisti (Market, Sentiment, Technical, Fundamental, Risk). Produce un'Analysis sulla propria specialità ma può esprimersi su tutto. Ragiona con un LLM; i numeri li ottiene da tool deterministici.
 _Avoid_: desk, desk analyst
 
 **Portfolio Manager (PM)**:
@@ -27,6 +27,23 @@ _Avoid_: Risk Analyst, risk agent
 **Analysis**:
 Il contributo strutturato di un Analyst in un processo di analisi, con istante di osservazione.
 _Avoid_: DeskOpinion, desk opinion
+
+## Lavoro
+
+**Alert**:
+Evento che arriva al Portfolio Manager e fa partire un Ciclo di analisi (prezzo, calendario, `next_check_date`, richiesta manuale).
+_Avoid_: trigger (per l'evento)
+
+**Trigger engine**:
+La parte del sistema che genera gli Alert.
+
+**Ciclo di analisi**:
+Tutto il lavoro che va da un Alert a una decisione del Portfolio Manager. Lo chiude solo il PM, quando il quadro basta o quando si raggiunge il tetto del ciclo; «pending» è una decisione valida.
+_Avoid_: research cycle, run
+
+**Chat**:
+La conversazione di un agente su un argomento: un ticker, o per il Market Analyst un genere di notizie. Ogni agente ha le sue chat; i messaggi inviati da un altro agente compaiono nella chat del destinatario. A ogni nuovo Ciclo di analisi la cronologia viene compattata e la chat riparte dal timestamp di fine del ciclo precedente fino al timestamp attuale.
+_Avoid_: thread, canale
 
 ## Informazione
 
