@@ -52,14 +52,24 @@ _Avoid_: thread, canale
 Il messaggio che il PM invia a ogni Analyst quando apre un Ciclo di analisi.
 
 **Rimando**:
-Decisione del PM di non decidere e rianalizzare alla `next_check_date`. È l'esito deterministico di default quando il Ciclo di analisi raggiunge il numero massimo di messaggi.
+Decisione del PM di non decidere e rianalizzare alla `next_check_date`. È anche l'esito deterministico quando il Ciclo di analisi esaurisce il Budget del ciclo.
 _Avoid_: skip, pending (come esito)
+
+**Budget del ciclo**:
+Numero massimo, generoso, di messaggi e chiamate a subagent di tutti gli agenti in un Ciclo di analisi. Serve solo a fermare i loop: se viene raggiunto scatta il Rimando, con un avviso.
 
 ## Ordini
 
 **Bracket order**:
-Ordine strutturato con entrata a prezzo limite, take profit e stop loss. Il prezzo di entrata lo propone il Risk Analyst; size, take profit e stop loss sono generati in modo deterministico secondo le regole; il PM valida l'ordine; il Risk Gate controlla i limiti rigidi.
+Ordine strutturato con entrata a prezzo limite, take profit e stop loss. Scade alla `next_check_date` se non eseguito.
 _Avoid_: ordine a mercato (non usato)
+
+**Bozza dell'ordine**:
+Il Bracket order completo calcolato in modo deterministico appena nello state ci sono gli input minimi (ticker, direzione, convinzione, prezzo attuale, ATR, capitale e posizioni). Gli Analyst responsabili la modificano solo tramite i Coefficienti; ogni modifica la ricalcola. Il PM la accetta o rimanda.
+
+**Coefficienti dell'ordine**:
+I parametri in unità di ATR da cui derivano i prezzi: `k_entry` e percentuale di rischio (responsabilità del Risk Analyst), `k_stop` e `k_tp` (responsabilità del Technical Analyst). Gli agenti scelgono coefficienti, mai prezzi.
+_Avoid_: prezzo deciso dall'LLM
 
 ## Informazione
 
