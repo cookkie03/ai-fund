@@ -13,20 +13,23 @@ Uno dei cinque agenti specialisti (Market, Sentiment, Technical, Fundamental, Ri
 _Avoid_: desk, desk analyst
 
 **Portfolio Manager (PM)**:
-L'agente che riceve gli Alert, avvia ogni processo di analisi, valida il lavoro degli Analyst e prende la decisione. È pari agli altri agenti in tutto il resto.
-_Avoid_: CEO, orchestratore, PM reviewer
+L'agente che riceve gli Alert, apre il Ciclo di analisi, orchestra il lavoro degli Analyst, valida gli ordini e prende la decisione.
+_Avoid_: CEO, PM reviewer
 
 **Risk Analyst**:
-L'Analyst che porta la tesi contraria (bear) e i dubbi di rischio prima della decisione del PM. Non ha potere di veto.
+L'Analyst che porta la tesi contraria (bear) e i dubbi di rischio prima della decisione del PM, e propone il prezzo di entrata dell'ordine. Non ha potere di veto e non valida gli ordini.
 _Avoid_: Risk Gate, risk desk
 
 **Risk Gate**:
-Il controllo deterministico, non un agente, che dopo la decisione del PM verifica i limiti di rischio e ha l'ultima parola: può solo bloccare, mai approvare al posto del PM.
+Il controllo deterministico, non un agente, che dopo la validazione del PM verifica i limiti rigidi (esposizione, cassa, rischio per trade) e ha l'ultima parola: può solo bloccare, mai approvare né modificare.
 _Avoid_: Risk Analyst, risk agent
 
 **Analysis**:
 Il contributo strutturato di un Analyst in un processo di analisi, con istante di osservazione.
 _Avoid_: DeskOpinion, desk opinion
+
+**Subagent**:
+Un aiutante generico che un agente può invocare con un tool per un compito circoscritto. Non è un Agente e non ha chat proprie.
 
 ## Lavoro
 
@@ -38,12 +41,25 @@ _Avoid_: trigger (per l'evento)
 La parte del sistema che genera gli Alert.
 
 **Ciclo di analisi**:
-Tutto il lavoro che va da un Alert a una decisione del Portfolio Manager. Lo chiude solo il PM, quando il quadro basta o quando si raggiunge il tetto del ciclo; «pending» è una decisione valida.
+Tutto il lavoro che va da un Alert a una decisione del Portfolio Manager. Lo chiude solo il PM, quando il quadro basta o quando si raggiunge il tetto del ciclo; il Rimando è una decisione valida.
 _Avoid_: research cycle, run
 
 **Chat**:
 La conversazione di un agente su un argomento: un ticker, o per il Market Analyst un genere di notizie. Ogni agente ha le sue chat; i messaggi inviati da un altro agente compaiono nella chat del destinatario. A ogni nuovo Ciclo di analisi la cronologia viene compattata e la chat riparte dal timestamp di fine del ciclo precedente fino al timestamp attuale.
 _Avoid_: thread, canale
+
+**Messaggio di apertura**:
+Il messaggio che il PM invia a ogni Analyst quando apre un Ciclo di analisi.
+
+**Rimando**:
+Decisione del PM di non decidere e rianalizzare alla `next_check_date`. È l'esito deterministico di default quando il Ciclo di analisi raggiunge il numero massimo di messaggi.
+_Avoid_: skip, pending (come esito)
+
+## Ordini
+
+**Bracket order**:
+Ordine strutturato con entrata a prezzo limite, take profit e stop loss. Il prezzo di entrata lo propone il Risk Analyst; size, take profit e stop loss sono generati in modo deterministico secondo le regole; il PM valida l'ordine; il Risk Gate controlla i limiti rigidi.
+_Avoid_: ordine a mercato (non usato)
 
 ## Informazione
 

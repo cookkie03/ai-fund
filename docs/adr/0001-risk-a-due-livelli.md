@@ -1,5 +1,5 @@
-# Risk a due livelli: Risk Analyst pari + Risk Gate deterministico
+# Rischio: Risk Analyst pari, PM valida, Risk Gate deterministico
 
-Il rischio è presente due volte: un **Risk Analyst** (LLM) lavora alla pari degli altri Analyst e porta la tesi contraria prima della decisione del PM; un **Risk Gate** deterministico, che non è un agente, verifica i limiti dopo la decisione e può solo bloccare. Abbiamo scartato il Risk solo come analista (nessun veto affidabile, l'LLM potrebbe sbagliare i limiti) e il Risk solo come gate finale (si perde il contraddittorio durante l'analisi). Il veto resta fuori dall'LLM perché nessuna esecuzione deve dipendere da un ragionamento non deterministico.
+Il rischio è distribuito così: il **Risk Analyst** (LLM) lavora alla pari degli altri Analyst, porta la tesi contraria e propone il prezzo di entrata del Bracket order; size, take profit e stop loss sono generati in modo **deterministico** secondo le regole; il **PM valida** l'ordine; infine il **Risk Gate** deterministico, che non è un agente, controlla i limiti rigidi e può solo bloccare. Abbiamo scartato il Risk solo come analista (nessun veto affidabile, un LLM potrebbe sbagliare i limiti) e il Risk solo come gate finale (si perde il contraddittorio durante l'analisi). Nessun numero dell'ordine diverso dal prezzo di entrata è prodotto da un LLM, e il veto resta fuori dall'LLM perché nessuna esecuzione deve dipendere da un ragionamento non deterministico.
 
-Decisione di Luca, 2026-11-18. Wiki: `wiki/system/foundation/decision-log.md`.
+Decisione di Luca, 2026-11-18 (rivista nella stessa sessione: validazione degli ordini spostata dal Risk Analyst al PM). Wiki: `wiki/system/foundation/decision-log.md`.
