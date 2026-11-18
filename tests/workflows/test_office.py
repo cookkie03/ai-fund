@@ -942,3 +942,55 @@ def test_new_cycle_does_not_inherit_previous_decision(db, broker, env, order_flo
         for r in db.connection.execute("SELECT params_json FROM tool_calls WHERE tool = 'defer'")
     ]
     assert reasons == ["c0", "c1"]
+
+
+def test_analyst_reply_is_relayed_to_pm_when_not_addressed(db, broker, env, order_flow, fixed_now):
+    """Produzione: gli analisti rispondevano in chat propria o al market analyst e il PM non
+    riceveva nulla. La risposta finale arriva comunque al PM, che poi decide."""
+
+    def script(agent, chat_context, tools, turn):
+        if agent.name == "risk_analyst":
+            return StepResult(content="Rischio ok, size piccola", done=True)
+        if turn == 0:
+            return StepResult(
+                tool_calls=[
+                    ToolCall(
+                        id="m1",
+                        name="send_message",
+                        args={"to_agent": "risk_analyst", "ticker_or_theme": "AAPL", "text": "Valuta"},
+                    )
+                ],
+                done=True,
+            )
+        assert any("Rischio ok" in m.content for m in chat_context), "il PM non vede la risposta"
+        return StepResult(
+            tool_calls=[
+                ToolCall(
+                    id="s1",
+                    name="schedule_next_check",
+                    args={"ticker": "AAPL", "when": "2026-06-05T10:00:00Z", "note": "n"},
+                ),
+                ToolCall(id="d1", name="defer", args={"ticker": "AAPL", "reason": "ok"}),
+            ],
+            done=True,
+        )
+
+    office = Office(
+        db=db,
+        backend=ScriptedBackend(script),
+        env_factory=env,
+        order_flow=order_flow,
+        clock=lambda: fixed_now,
+        registry=RegistryWriter(db=db),
+        sleep_fn=lambda _: None,
+    )
+    outcome = office.deliver(
+        ScheduledTask(
+            agent="portfolio_manager",
+            chat="AAPL",
+            when=fixed_now,
+            source=TaskSource.MANUAL,
+            reason="relay",
+        )
+    )
+    assert outcome == "deferred"

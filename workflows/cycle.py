@@ -658,3 +658,23 @@ class CycleRunner:
                         cycle_id=self.cycle_id,
                         ts=self.get_now_iso(),
                     )
+
+                # An analyst's closing reply must reach the PM even if the model did not address
+                # it explicitly: relay the final content to the PM chat of this ticker.
+                if agent_name in _ANALYST_AGENTS and step_res.content:
+                    wrote_to_pm = any(
+                        k[0].lower() in ("pm", "portfolio_manager") for k in executed_send_keys
+                    ) or any(
+                        o.to_agent.lower() in ("pm", "portfolio_manager")
+                        for o in step_res.outgoing_messages
+                    )
+                    if not wrote_to_pm:
+                        self.db.append_message(
+                            chat_id=pm_chat_id,
+                            author=agent_name,
+                            text=step_res.content,
+                            kind="original",
+                            cycle_id=self.cycle_id,
+                            ts=self.get_now_iso(),
+                        )
+                        self._increment_budget("messages")
