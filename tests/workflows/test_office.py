@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -897,3 +898,47 @@ def test_pm_cannot_decide_in_same_step_it_consults_analysts(
         "SELECT COUNT(*) AS c FROM tool_calls WHERE tool = 'defer'"
     ).fetchone()["c"]
     assert errs == 1, "il primo defer doveva essere rifiutato"
+
+
+def test_new_cycle_does_not_inherit_previous_decision(db, broker, env, order_flow, fixed_now):
+    """Regressione in produzione: il secondo ciclo si chiudeva subito con la decisione del primo."""
+
+    def script(agent, chat_context, tools, turn):
+        return StepResult(
+            tool_calls=[
+                ToolCall(
+                    id=f"s{turn}",
+                    name="schedule_next_check",
+                    args={"ticker": "AAPL", "when": "2026-06-05T10:00:00Z", "note": "n"},
+                ),
+                ToolCall(id=f"d{turn}", name="defer", args={"ticker": "AAPL", "reason": f"c{turn}"}),
+            ],
+            done=True,
+        )
+
+    backend = ScriptedBackend(script)
+    office = Office(
+        db=db,
+        backend=backend,
+        env_factory=env,
+        order_flow=order_flow,
+        clock=lambda: fixed_now,
+        registry=RegistryWriter(db=db),
+        sleep_fn=lambda _: None,
+    )
+    for i in range(2):
+        office.deliver(
+            ScheduledTask(
+                agent="portfolio_manager",
+                chat="AAPL",
+                when=fixed_now + timedelta(hours=i),
+                source=TaskSource.MANUAL,
+                reason=f"ciclo {i}",
+            )
+        )
+    assert len([c for c in backend.calls if c.agent.name == "portfolio_manager"]) >= 2
+    reasons = [
+        json.loads(r["params_json"])["reason"]
+        for r in db.connection.execute("SELECT params_json FROM tool_calls WHERE tool = 'defer'")
+    ]
+    assert reasons == ["c0", "c1"]

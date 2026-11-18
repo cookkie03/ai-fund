@@ -176,6 +176,18 @@ class CycleRunner:
                 pending.append(agent)
         return pending
 
+    def _clear_previous_decision(self) -> None:
+        """A decision belongs to its cycle: a new cycle must not inherit the previous one."""
+        row = self.db.get_ticker_state(self.ticker)
+        if not row or not row.get("state_json"):
+            return
+        try:
+            state = json.loads(row["state_json"])
+        except Exception:
+            return
+        if isinstance(state, dict) and state.pop("decision", None) is not None:
+            self.db.set_ticker_state(self.ticker, state, updated_ts=self.get_now_iso())
+
     def _pm_has_decided(self) -> bool:
         row = self.db.get_ticker_state(self.ticker)
         if not row or not row.get("state_json"):
@@ -408,6 +420,7 @@ class CycleRunner:
     def run(self) -> str:
         """Run the cycle loop until PM decides or cycle budget is exhausted."""
         pm_chat_id = self.db.get_or_create_chat("portfolio_manager", self.ticker)
+        self._clear_previous_decision()
 
         while True:
             # 1. Check budget exhaustion
