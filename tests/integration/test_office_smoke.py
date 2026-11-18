@@ -75,5 +75,7 @@ def test_real_llm_cycle_on_fake_broker(tmp_path):
     assert messages
     for m in messages:
         print("MSG", m["author"], "|", (m["text"] or "")[:400].replace("\n", " "))
+    for t in db.connection.execute("SELECT tool, params_json, result_json FROM tool_calls"):
+        print("TOOL", t["tool"], t["params_json"][:250], "->", t["result_json"][:250])
     for r in db.connection.execute("SELECT agent, model, tokens_in, tokens_out FROM llm_calls"):
         print("LLM", dict(r))

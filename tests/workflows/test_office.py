@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -17,7 +16,6 @@ from storage.office_db import OfficeDB
 from storage.registry import RegistryWriter
 from tests.fakes.bracket_broker import FakeBracketBroker
 from tools.environment import AgentEnvironment
-from workflows.cycle import CycleRunner
 from workflows.office import Office
 from workflows.scheduling import ScheduledTask, TaskSource
 
@@ -835,3 +833,67 @@ def test_pm_sees_tool_results_on_next_step_within_same_turn(db, broker, env, ord
     assert outcome == "deferred"
     assert seen_tool_messages, "il PM non ha ricevuto il risultato dello strumento"
     assert seen_tool_messages[0].tool_call_id == "r1"
+
+
+def test_pm_cannot_decide_in_same_step_it_consults_analysts(
+    db, broker, env, order_flow, fixed_now
+):
+    """Il PM scrive all'analista e prova a rimandare subito: la decisione viene rifiutata,
+    l'analista risponde, il PM decide al turno dopo."""
+    analyst_turns = {"n": 0}
+
+    def script(agent, chat_context, tools, turn):
+        if agent.name == "risk_analyst":
+            analyst_turns["n"] += 1
+            return StepResult(
+                outgoing_messages=[
+                    OutgoingMessage(to_agent="portfolio_manager", chat="AAPL", text="Rischio ok")
+                ],
+                done=True,
+            )
+        if turn == 0:
+            return StepResult(
+                tool_calls=[
+                    ToolCall(
+                        id="m1",
+                        name="send_message",
+                        args={"to_agent": "risk_analyst", "ticker_or_theme": "AAPL", "text": "Valuta"},
+                    ),
+                    ToolCall(
+                        id="s1",
+                        name="schedule_next_check",
+                        args={"ticker": "AAPL", "when": "2026-06-05T10:00:00Z", "note": "n"},
+                    ),
+                    ToolCall(id="d1", name="defer", args={"ticker": "AAPL", "reason": "presto"}),
+                ],
+                done=True,
+            )
+        return StepResult(
+            tool_calls=[ToolCall(id="d2", name="defer", args={"ticker": "AAPL", "reason": "ok"})],
+            done=True,
+        )
+
+    office = Office(
+        db=db,
+        backend=ScriptedBackend(script),
+        env_factory=env,
+        order_flow=order_flow,
+        clock=lambda: fixed_now,
+        registry=RegistryWriter(db=db),
+        sleep_fn=lambda _: None,
+    )
+    outcome = office.deliver(
+        ScheduledTask(
+            agent="portfolio_manager",
+            chat="AAPL",
+            when=fixed_now,
+            source=TaskSource.MANUAL,
+            reason="test guardia",
+        )
+    )
+    assert analyst_turns["n"] >= 1, "l'analista non ha avuto il suo turno"
+    assert outcome == "deferred"
+    errs = db.connection.execute(
+        "SELECT COUNT(*) AS c FROM tool_calls WHERE tool = 'defer'"
+    ).fetchone()["c"]
+    assert errs == 1, "il primo defer doveva essere rifiutato"

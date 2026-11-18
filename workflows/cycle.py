@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -159,6 +159,22 @@ class CycleRunner:
                 role = "user"
             context.append(ChatMessage(role=role, content=text, name=author))
         return context
+
+    def _pending_analyst_replies(self, outgoing: Sequence[Any] = ()) -> list[str]:
+        """Analysts the PM has written to in this cycle that have not yet taken their turn."""
+        pending: list[str] = []
+        for agent in _ANALYST_AGENTS:
+            chat_id = self.db.get_or_create_chat(agent, self.ticker)
+            row = self.db.connection.execute(
+                "SELECT COALESCE(MAX(id), 0) AS m FROM messages "
+                "WHERE chat_id = ? AND cycle_id = ? AND author = 'portfolio_manager'",
+                (chat_id, self.cycle_id),
+            ).fetchone()
+            unread = int(row["m"]) > self._last_seen_message_id.get(chat_id, 0)
+            queued = any(getattr(o, "to_agent", None) == agent for o in outgoing)
+            if unread or queued:
+                pending.append(agent)
+        return pending
 
     def _pm_has_decided(self) -> bool:
         row = self.db.get_ticker_state(self.ticker)
@@ -542,6 +558,25 @@ class CycleRunner:
                                 )
                             )
                             continue
+                        if agent_name in ("pm", "portfolio_manager") and tc.name in (
+                            "accept_order",
+                            "defer",
+                        ):
+                            waiting = self._pending_analyst_replies(step_res.outgoing_messages)
+                            if waiting:
+                                tool_results.append(
+                                    ChatMessage(
+                                        role="tool",
+                                        tool_call_id=tc.id,
+                                        name=tc.name,
+                                        content=(
+                                            "Errore: decisione non registrata. Hai appena scritto a "
+                                            f"{', '.join(waiting)}: attendi i loro contributi e "
+                                            "decidi al turno successivo."
+                                        ),
+                                    )
+                                )
+                                continue
                         try:
                             result = tool_map[tc.name].execute(tc)
                             if tc.name == "send_message" and isinstance(tc.args, dict):
