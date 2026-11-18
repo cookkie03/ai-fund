@@ -239,17 +239,27 @@ class AlpacaBracketAdapter:
         res = self._client.submit_order(req)
         return str(res.id)
 
+    def _leg_id(self, parent_id: str, kind: str) -> str:
+        """Id of the stop-loss or take-profit leg of a bracket (the parent has neither)."""
+        parent = self._client.get_order_by_id(parent_id)
+        for leg in getattr(parent, "legs", None) or []:
+            order_type = str(getattr(leg, "order_type", getattr(leg, "type", ""))).lower()
+            is_stop = "stop" in order_type
+            if (kind == "stop") == is_stop:
+                return str(leg.id)
+        raise RuntimeError(f"gamba {kind} non trovata per l'ordine {parent_id}")
+
     def modify_stop(self, broker_order_id: str, stop: Decimal) -> None:
         from alpaca.trading.requests import ReplaceOrderRequest
 
         req = ReplaceOrderRequest(stop_price=float(stop))
-        self._client.replace_order_by_id(broker_order_id, req)
+        self._client.replace_order_by_id(self._leg_id(broker_order_id, "stop"), req)
 
     def modify_take_profit(self, broker_order_id: str, take_profit: Decimal) -> None:
         from alpaca.trading.requests import ReplaceOrderRequest
 
         req = ReplaceOrderRequest(limit_price=float(take_profit))
-        self._client.replace_order_by_id(broker_order_id, req)
+        self._client.replace_order_by_id(self._leg_id(broker_order_id, "tp"), req)
 
     def cancel(self, broker_order_id: str) -> None:
         self._client.cancel_order_by_id(broker_order_id)
