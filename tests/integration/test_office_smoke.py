@@ -13,7 +13,12 @@ from datetime import UTC, datetime
 import pytest
 
 from agents.backend import OpenAICompatibleBackend
-from bootstrap import RoutingBackend, build_test_office
+from bootstrap import (
+    CacheMarketDataAdapter,
+    RoutingBackend,
+    _lazy_init_data_cache,
+    build_test_office,
+)
 from config.office_settings import OfficeSettings
 from storage.office_db import OfficeDB
 from workflows.scheduling import ScheduledTask, TaskSource
@@ -38,8 +43,12 @@ def test_real_llm_cycle_on_fake_broker(tmp_path):
     backend = OpenAICompatibleBackend(api_key=api_key, timeout=180.0)
     db = OfficeDB(str(tmp_path / "smoke.db"))
     now = datetime.now(UTC)
+    market_data = None
+    if os.environ.get("OFFICE_SMOKE_LIVE_DATA") == "1":
+        market_data = CacheMarketDataAdapter(_lazy_init_data_cache(db))
     office = build_test_office(
         db=db,
+        market_data=market_data,
         backend=RoutingBackend({}, default_backend=backend),
         settings=settings,
         clock=lambda: now,
@@ -61,7 +70,7 @@ def test_real_llm_cycle_on_fake_broker(tmp_path):
     tools = db.connection.execute("SELECT agent, tool, error FROM tool_calls").fetchall()
     print("outcome:", outcome)
     print("cycle:", [dict(c) for c in cycles])
-    print("messages:", len(messages), "tool calls:", [(t["agent"], t["tool"], t["error"]) for t in tools])
+    print("messages:", len(messages), "tool calls:", [(t["agent"], t["tool"]) for t in tools])
     assert cycles and cycles[-1]["status"] == "closed"
     assert messages
     for m in messages:

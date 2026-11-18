@@ -36,3 +36,9 @@ def test_quote_without_data_raises_instead_of_inventing_a_price():
     adapter = CacheMarketDataAdapter(_Cache([]))
     with pytest.raises(RuntimeError):
         adapter.quote("AAPL")
+
+
+def test_news_limit_is_applied():
+    rows = [{"headline": str(i)} for i in range(16)]
+    adapter = CacheMarketDataAdapter(_Cache(rows))
+    assert len(adapter.news("AAPL", limit=3)) == 3

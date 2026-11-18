@@ -147,21 +147,24 @@ class CacheMarketDataAdapter:
     ) -> list[dict[str, Any]]:
         key = symbol.upper() if symbol else (theme or "macro")
         try:
-            items = self.cache.get("news", key=key, limit=limit)
-            return list(items)
-        except Exception:
+            items = self.cache.get("news", key=key)
+            return list(items)[:limit]
+        except Exception as exc:
+            logger.warning("dati non disponibili: %s", exc)
             return []
 
     def ratings(self, symbol: str) -> list[dict[str, Any]] | dict[str, Any]:
         try:
             return list(self.cache.get("ratings", key=symbol.upper()))
-        except Exception:
+        except Exception as exc:
+            logger.warning("dati non disponibili: %s", exc)
             return []
 
     def insiders(self, symbol: str, limit: int = 20) -> list[dict[str, Any]]:
         try:
-            return list(self.cache.get("insider", key=symbol.upper(), limit=limit))
-        except Exception:
+            return list(self.cache.get("insider", key=symbol.upper()))[:limit]
+        except Exception as exc:
+            logger.warning("dati non disponibili: %s", exc)
             return []
 
     def financials(self, symbol: str) -> dict[str, Any] | list[dict[str, Any]]:
@@ -170,25 +173,29 @@ class CacheMarketDataAdapter:
             if len(res) > 0 and isinstance(res[0], dict):
                 return res[0]
             return list(res)
-        except Exception:
+        except Exception as exc:
+            logger.warning("dati non disponibili: %s", exc)
             return {}
 
     def earnings_dates(self, symbol: str) -> list[dict[str, Any]] | dict[str, Any]:
         try:
             return list(self.cache.get("earnings", key=symbol.upper()))
-        except Exception:
+        except Exception as exc:
+            logger.warning("dati non disponibili: %s", exc)
             return []
 
     def macro(self, series_id: str) -> list[dict[str, Any]] | dict[str, Any]:
         try:
             return list(self.cache.get("macro_series", key=series_id))
-        except Exception:
+        except Exception as exc:
+            logger.warning("dati non disponibili: %s", exc)
             return []
 
     def econ_calendar(self, limit: int = 20) -> list[dict[str, Any]]:
         try:
-            return list(self.cache.get("econ_calendar", limit=limit))
-        except Exception:
+            return list(self.cache.get("econ_calendar"))[:limit]
+        except Exception as exc:
+            logger.warning("dati non disponibili: %s", exc)
             return []
 
     def sector_perf(self) -> list[dict[str, Any]] | dict[str, Any]:
