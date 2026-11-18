@@ -1,0 +1,5 @@
+# Nostro codice Python, non un fork di OpenAlice
+
+Abbiamo valutato di partire da un fork di OpenAlice (TraderAlice), che ha già approvazione umana degli ordini, guard al push, multi-broker, dati, UI e MCP. Restiamo sul nostro codice Python con LangGraph, perché ciò che ci serve di più è il processo di trading deterministico (ruoli fissi, Ciclo di analisi, Budget, state tipizzato, Bozza a coefficienti, Rimando), che OpenAlice lascia al giudizio dell'agente. Inoltre un fork significherebbe ~490k righe TypeScript in evoluzione quotidiana, con il trading ancora in beta. Le idee di OpenAlice si riprendono come forme: coda di approvazione legata all'hash, Risk Gate come lista di guard, kill switch, scheduler con cursore. Workspace per ticker e integrazione via MCP vengono dopo l'MVP; l'ambiente (tool, state, chat, ordini) resta uno strato separato proprio per poterlo esporre più avanti.
+
+Decisione di Luca, 2026-11-18. Wiki: `wiki/prior-art/openalice-vs-trading-agent.md`, `wiki/system/foundation/decision-log.md`.
