@@ -300,14 +300,26 @@ class AlpacaBracketAdapter:
 def _lazy_init_data_cache(db: OfficeDB, env: Mapping[str, str] | None = None) -> DataCache:
     """Lazily import real data providers from data.providers to populate DataCache."""
     providers: dict[str, Callable[..., Any]] = {}
-    try:
-        from data.providers.yahoo_finance import YahooFinanceProvider
-        from data.refresh import adapt_market_data_provider
+    env_map = os.environ if env is None else env
+    prices_choice = (env_map.get("DATA_PRICES_PROVIDER") or "yahoo").strip().lower()
+    prices_order = ["openbb", "yahoo"] if prices_choice == "openbb" else ["yahoo", "openbb"]
+    for name in prices_order:
+        try:
+            from data.refresh import adapt_market_data_provider
 
-        yf_prov = YahooFinanceProvider()
-        providers["prices_ohlcv"] = adapt_market_data_provider(yf_prov)
-    except Exception as exc:
-        logger.warning("provider prezzi non disponibile: %s", exc)
+            if name == "openbb":
+                from data.providers.openbb import OpenBBProvider
+
+                prov: Any = OpenBBProvider()
+            else:
+                from data.providers.yahoo_finance import YahooFinanceProvider
+
+                prov = YahooFinanceProvider()
+            providers["prices_ohlcv"] = adapt_market_data_provider(prov)
+            logger.info("provider prezzi: %s", name)
+            break
+        except Exception as exc:
+            logger.warning("provider prezzi '%s' non disponibile: %s", name, exc)
 
     try:
         from data.providers.yahoo_fundamentals import YahooFundamentalsProvider
@@ -322,7 +334,6 @@ def _lazy_init_data_cache(db: OfficeDB, env: Mapping[str, str] | None = None) ->
         from data.providers.alpaca_news import AlpacaNewsProvider
         from data.refresh import adapt_news_provider
 
-        env_map = os.environ if env is None else env
         api_key = env_map.get("ALPACA_API_KEY", "")
         secret_key = env_map.get("ALPACA_SECRET_KEY", "")
         if not (api_key and secret_key):
