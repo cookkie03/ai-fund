@@ -688,6 +688,82 @@ def test_market_analyst_activation_produces_scheduled_task_for_watchlist_ticker(
     assert cycle["outcome"] == "deferred"
 
 
+def test_market_analyst_send_message_tool_call_activates_watchlist_ticker(
+    db, broker, env, order_flow, fixed_now
+):
+    """A send_message tool call from the Market Analyst (not a plain outgoing message) activates the PM."""
+    # Add AAPL to watchlist
+    db.add_watchlist("AAPL", note="Key holding")
+
+    script = {
+        ("market_analyst", 0): StepResult(
+            tool_calls=[
+                ToolCall(
+                    id="tc_msg",
+                    name="send_message",
+                    args={
+                        "to_agent": "portfolio_manager",
+                        "ticker_or_theme": "AAPL",
+                        "text": "Catalizzatore: nuovo annuncio regolatorio favorevole per AAPL",
+                    },
+                )
+            ],
+            done=True,
+        ),
+        # When AAPL cycle opens as a result:
+        ("portfolio_manager", 0): StepResult(
+            tool_calls=[
+                ToolCall(
+                    id="tc_sched",
+                    name="schedule_next_check",
+                    args={"ticker": "AAPL", "when": "2026-06-03T10:00:00Z"},
+                ),
+                ToolCall(
+                    id="tc_def",
+                    name="defer",
+                    args={"ticker": "AAPL", "reason": "Catalyst assessed, defer to next session"},
+                ),
+            ],
+            done=True,
+        ),
+    }
+
+    backend = ScriptedBackend(script)
+    office = Office(
+        db=db,
+        backend=backend,
+        env_factory=env,
+        order_flow=order_flow,
+        clock=lambda: fixed_now,
+        sleep_fn=lambda _: None,
+    )
+
+    market_task = ScheduledTask(
+        agent="market_analyst",
+        chat="tech_macro",
+        when=fixed_now,
+        source=TaskSource.ALERT_CALENDAR,
+        reason="Scheduled macro review",
+    )
+
+    res = office.deliver(market_task)
+    assert res == "market_analyst_activated"
+
+    # Verify that scheduled task with source=market_message was created in DB
+    market_tasks = db.connection.execute(
+        "SELECT * FROM scheduled_tasks WHERE source = 'market_message'"
+    ).fetchall()
+    assert len(market_tasks) == 1
+    assert market_tasks[0]["chat"] == "AAPL"
+
+    # Verify cycle was opened for AAPL
+    cycle = db.connection.execute(
+        "SELECT * FROM cycles WHERE ticker = 'AAPL'"
+    ).fetchone()
+    assert cycle is not None
+    assert cycle["outcome"] == "deferred"
+
+
 def test_halt_stops_delivery(db, broker, env, order_flow, fixed_now):
     """Story 114: Halt stops delivery immediately."""
     halt = SystemHalt(db, broker)

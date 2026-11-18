@@ -167,7 +167,9 @@ class IndicatorsInput(BaseModel):
     ticker: str = Field(description="Ticker symbol")
     indicators: list[str] | None = Field(
         default=None,
-        description="Specific indicator names (e.g. ['SMA', 'RSI', 'MACD', 'ATR', 'pivot']), or all if None",
+        description=(
+            "Specific indicator names (e.g. ['SMA', 'RSI', 'MACD', 'ATR', 'pivot']), or all if None"
+        ),
     )
 
 
@@ -218,7 +220,9 @@ class AcceptOrderInput(BaseModel):
     """Input for Portfolio Manager to accept an order draft."""
 
     ticker: str = Field(description="Ticker symbol")
-    action: Literal["buy", "sell"] = Field(description="Order action: buy, or sell on an open position")
+    action: Literal["buy", "sell"] = Field(
+        description="Order action: buy, or sell on an open position"
+    )
     reason: str = Field(description="Detailed rationale for the decision")
 
 

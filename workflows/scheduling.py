@@ -11,11 +11,11 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal
 
 
-class TaskSource(str, Enum):
+class TaskSource(StrEnum):
     """Source of a scheduled task."""
 
     ALERT_PRICE = "alert_price"

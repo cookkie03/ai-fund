@@ -409,7 +409,8 @@ class OrderFlow:
 
         # 4. Handle Sell vs Buy
         if draft.side == "sell":
-            # "Sell on an open position: moves the TP of the open bracket to the sell limit price keeping SL."
+            # "Sell on an open position: moves the TP of the open bracket to the sell limit price
+            # keeping SL."
             open_broker_order_id = self._find_open_bracket_order_id(ticker)
             if open_broker_order_id:
                 self.broker.modify_take_profit(open_broker_order_id, draft.limit_price)
@@ -761,7 +762,10 @@ class OrderFlow:
                         )
                         status = getattr(broker_order, "status", "open")
 
-                    if status not in ("filled", "cancelled", "expired") and filled_qty == Decimal("0"):
+                    if (
+                        status not in ("filled", "cancelled", "expired")
+                        and filled_qty == Decimal("0")
+                    ):
                         try:
                             self.broker.cancel(b_id)
                         except Exception:
@@ -775,7 +779,10 @@ class OrderFlow:
                         )
                         self.db.add_inbox(
                             "order_expired",
-                            f"Unfilled entry order {cid} for {ticker} expired at next scheduled task",
+                            (
+                                f"Unfilled entry order {cid} for {ticker} "
+                                "expired at next scheduled task"
+                            ),
                             ts=ts,
                         )
                         cancelled_any = True

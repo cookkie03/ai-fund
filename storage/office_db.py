@@ -12,12 +12,12 @@ import json
 import sqlite3
 import threading
 import zlib
+from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Iterator, Self
+from typing import Any, Self
 
 
 def utc_now_iso() -> str:
@@ -70,7 +70,8 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
             source TEXT NOT NULL,
             reason TEXT NOT NULL,
             data_json TEXT NOT NULL DEFAULT '{}',
-            status TEXT NOT NULL CHECK (status IN ('pending', 'delivered', 'merged', 'failed', 'cancelled')),
+            status TEXT NOT NULL
+                CHECK (status IN ('pending', 'delivered', 'merged', 'failed', 'cancelled')),
             attempts INTEGER NOT NULL DEFAULT 0,
             next_attempt_ts TEXT,
             merged_into INTEGER,
@@ -108,7 +109,10 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
             side TEXT NOT NULL,
             draft_json TEXT NOT NULL,
             draft_hash TEXT NOT NULL,
-            approval_status TEXT NOT NULL CHECK (approval_status IN ('auto', 'pending', 'approved', 'rejected', 'expired')),
+            approval_status TEXT NOT NULL
+                CHECK (
+                    approval_status IN ('auto', 'pending', 'approved', 'rejected', 'expired')
+                ),
             client_order_id TEXT NOT NULL UNIQUE,
             broker_order_id TEXT,
             status TEXT NOT NULL,
@@ -131,7 +135,8 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
             entry_order_id INTEGER NOT NULL,
             opened_ts TEXT NOT NULL,
             closed_ts TEXT,
-            exit_reason TEXT CHECK (exit_reason IS NULL OR exit_reason IN ('tp', 'sl', 'pm_sell', 'expired')),
+            exit_reason TEXT
+                CHECK (exit_reason IS NULL OR exit_reason IN ('tp', 'sl', 'pm_sell', 'expired')),
             entry_price REAL NOT NULL,
             exit_price REAL,
             qty REAL NOT NULL,
@@ -555,7 +560,9 @@ class OfficeDB:
         data_json = data if isinstance(data, str) else json.dumps(data)
         cursor = self._connection.execute(
             """
-            INSERT INTO scheduled_tasks (agent, chat, when_ts, source, reason, data_json, status, attempts)
+            INSERT INTO scheduled_tasks (
+                agent, chat, when_ts, source, reason, data_json, status, attempts
+            )
             VALUES (?, ?, ?, ?, ?, ?, ?, 0)
             """,
             (agent, chat, when_ts, source, reason, data_json, status),

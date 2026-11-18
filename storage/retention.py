@@ -59,6 +59,9 @@ class RetentionPolicy:
     llm_content_days: int = 180
 
 
+DEFAULT_RETENTION_POLICY = RetentionPolicy()
+
+
 def _to_date(val: datetime | date) -> date:
     if isinstance(val, datetime):
         return val.date()
@@ -96,7 +99,7 @@ def _aggregate_bars(bars: list[Bar], group_ts: date | datetime) -> Bar:
 def downsample_daily_bars(
     bars: Sequence[Bar],
     today: date | datetime,
-    policy: RetentionPolicy = RetentionPolicy(),
+    policy: RetentionPolicy = DEFAULT_RETENTION_POLICY,
 ) -> list[Bar]:
     """Downsample daily bars according to retention policy.
 
@@ -120,7 +123,7 @@ def downsample_daily_bars(
 
     result: list[Bar] = []
 
-    for sym, sym_bars in by_symbol.items():
+    for sym_bars in by_symbol.values():
         monthly_buckets: dict[tuple[int, int], list[Bar]] = {}
         weekly_buckets: dict[date, list[Bar]] = {}
         kept_bars: list[Bar] = []
@@ -159,7 +162,7 @@ def downsample_daily_bars(
 def downsample_hourly(
     bars: Sequence[Bar],
     today: date | datetime,
-    policy: RetentionPolicy = RetentionPolicy(),
+    policy: RetentionPolicy = DEFAULT_RETENTION_POLICY,
 ) -> list[Bar]:
     """Downsample hourly bars older than policy.hourly_days to daily bars.
 
@@ -176,7 +179,7 @@ def downsample_hourly(
         by_symbol.setdefault(bar.symbol, []).append(bar)
 
     result: list[Bar] = []
-    for sym, sym_bars in by_symbol.items():
+    for sym_bars in by_symbol.values():
         daily_buckets: dict[date, list[Bar]] = {}
         kept_bars: list[Bar] = []
 
@@ -199,7 +202,7 @@ def downsample_hourly(
 def compact_news(
     items: Sequence[NewsItem],
     today: date | datetime,
-    policy: RetentionPolicy = RetentionPolicy(),
+    policy: RetentionPolicy = DEFAULT_RETENTION_POLICY,
 ) -> list[NewsItem]:
     """Drop full text (set to None) for news items older than cutoff days."""
     ref_date = _to_date(today)
@@ -221,7 +224,7 @@ def compact_news(
 def compact_llm_records(
     records: Sequence[LlmRecord],
     today: date | datetime,
-    policy: RetentionPolicy = RetentionPolicy(),
+    policy: RetentionPolicy = DEFAULT_RETENTION_POLICY,
 ) -> list[LlmRecord]:
     """Drop prompt and response (set to None) for records older than cutoff days."""
     ref_date = _to_date(today)

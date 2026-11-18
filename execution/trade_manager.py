@@ -1,4 +1,5 @@
-"""Trade manager: lifecycle of a Trade from entry to exit with events, exit reason, and trailing stop."""
+"""Trade manager: lifecycle of a Trade from entry to exit with events, exit reason, and trailing
+stop."""
 
 from __future__ import annotations
 
@@ -98,7 +99,8 @@ class TradeManager:
         stop_loss: Decimal | float | int | str | None = None,
         ts: str | None = None,
     ) -> int:
-        """Record entry fill for an order, opening a Trade and initiating trailing stop monitoring."""
+        """Record entry fill for an order, opening a Trade and initiating trailing stop
+        monitoring."""
         order = self.db.get_order(order_id)
         if not order:
             raise KeyError(f"Order {order_id} not found in database")
@@ -236,7 +238,8 @@ class TradeManager:
         price: Decimal | float | int | str,
         atr_at_entry: Decimal | float | int | str | None = None,
     ) -> TrailingResult | None:
-        """Process incoming price observation for a ticker and update trailing stop deterministically.
+        """Process incoming price observation for a ticker and update trailing stop
+        deterministically.
 
         When the stop changes, calls broker.modify_stop and records a trailing event.
         No LLM involved.

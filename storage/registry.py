@@ -11,7 +11,7 @@ import collections
 import threading
 from dataclasses import dataclass
 from types import TracebackType
-from typing import Self, Union
+from typing import Self
 
 from storage.office_db import OfficeDB
 
@@ -51,7 +51,7 @@ class CliCommandRecord:
     ts: str | None = None
 
 
-RegistryRecord = Union[LlmCallRecord, ToolCallRecord, CliCommandRecord]
+RegistryRecord = LlmCallRecord | ToolCallRecord | CliCommandRecord
 
 
 class RegistryWriter:
@@ -87,7 +87,9 @@ class RegistryWriter:
         self._wake_event = threading.Event()
         self._stopped = False
 
-        self._thread = threading.Thread(target=self._worker_loop, daemon=True, name="RegistryWriterThread")
+        self._thread = threading.Thread(
+            target=self._worker_loop, daemon=True, name="RegistryWriterThread"
+        )
         self._thread.start()
 
     @property

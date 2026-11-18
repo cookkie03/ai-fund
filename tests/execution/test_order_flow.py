@@ -7,7 +7,7 @@ from decimal import Decimal
 import pytest
 
 from execution.order_draft import OrderDraft, OrderDraftInputs, build_order_draft
-from execution.order_flow import BracketBroker, OrderFlow, Outcome, SystemHalt
+from execution.order_flow import BracketBroker, OrderFlow, SystemHalt
 from execution.risk_gate import RiskGateContext, RiskGateLimits
 from storage.office_db import OfficeDB
 from tests.fakes.bracket_broker import FakeBracketBroker
@@ -272,7 +272,11 @@ def test_idempotency_with_client_order_id(db, broker, valid_buy_draft, valid_gat
     initial_orders_count = len(broker.orders)
 
     outcome = flow.process_accepted_order(
-        ticker="AAPL", action="accept", draft=valid_buy_draft, ctx=valid_gate_ctx, client_order_id=cid
+        ticker="AAPL",
+        action="accept",
+        draft=valid_buy_draft,
+        ctx=valid_gate_ctx,
+        client_order_id=cid,
     )
 
     assert outcome.is_submitted
@@ -359,7 +363,7 @@ def test_system_halt_blocks_orders_and_cancels_open(db, broker, valid_buy_draft,
 
 
 def test_sell_on_open_position_moves_tp(db, broker, valid_buy_draft, valid_gate_ctx):
-    """Stories 68, 69: Sell on an open position moves the TP of the open bracket to sell limit price."""
+    """Stories 68, 69: Sell on open position moves TP of open bracket to sell limit price."""
     flow = OrderFlow(db=db, broker=broker, approval_mode="auto")
 
     # 1. Buy order executes

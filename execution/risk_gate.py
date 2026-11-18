@@ -248,7 +248,9 @@ def guard_risk_reward(order: GateOrder, ctx: RiskGateContext) -> GuardResult:
         if risk_per_share <= 0:
             return GuardResult(
                 ok=False,
-                reason=f"Invalid stop: stop {order.stop} must be strictly below entry {order.entry}",
+                reason=(
+                    f"Invalid stop: stop {order.stop} must be strictly below entry {order.entry}"
+                ),
             )
         reward_per_share = order.take_profit - order.entry
         if reward_per_share <= 0:

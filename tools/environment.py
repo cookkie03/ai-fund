@@ -112,7 +112,9 @@ class AgentEnvironment:
         broker_reader: BrokerReader,
         clock: Callable[[], datetime] | None = None,
         now: Callable[[], datetime] | datetime | None = None,
-        logger: Callable[[str, int | None, str, dict[str, Any], Any, str | None], Any] | None = None,
+        logger: (
+            Callable[[str, int | None, str, dict[str, Any], Any, str | None], Any] | None
+        ) = None,
         subagent_caller: Callable[[str], Any] | None = None,
         on_accept: Callable[[str, str, str], Any] | None = None,
         calendar: Any = None,
@@ -482,7 +484,10 @@ class AgentEnvironment:
         tools.append(
             self._make_tool(
                 name="read_state",
-                description="Read shared state for a ticker (analyses, suggestions, coefficients, draft, decision).",
+                description=(
+                    "Read shared state for a ticker (analyses, suggestions, coefficients, "
+                    "draft, decision)."
+                ),
                 input_model=schemas.ReadStateInput,
                 handler=handle_read_state,
                 agent_name=agent_name,
@@ -503,7 +508,9 @@ class AgentEnvironment:
         tools.append(
             self._make_tool(
                 name="read_portfolio",
-                description="Read portfolio account equity, cash, positions, and open/recent orders.",
+                description=(
+                    "Read portfolio account equity, cash, positions, and open/recent orders."
+                ),
                 input_model=schemas.ReadPortfolioInput,
                 handler=handle_read_portfolio,
                 agent_name=agent_name,
@@ -513,7 +520,9 @@ class AgentEnvironment:
 
         # Subagent tools can NEVER send messages or create orders
         if role != "subagent":
-            def handle_send_message(to_agent: str, ticker_or_theme: str, text: str) -> dict[str, Any]:
+            def handle_send_message(
+                to_agent: str, ticker_or_theme: str, text: str
+            ) -> dict[str, Any]:
                 target_role = self._normalize_role(to_agent.strip())
                 canonical = {"pm": "portfolio_manager"}.get(target_role, target_role)
                 if canonical not in _MESSAGEABLE_AGENTS:
@@ -524,7 +533,8 @@ class AgentEnvironment:
                 target_agent = canonical
                 topic = ticker_or_theme.strip()
 
-                # If request is to Market Analyst on a ticker, deliver into the chat of the ticker's SECTOR
+                # If request is to Market Analyst on a ticker, deliver into the chat of the
+                # ticker's SECTOR
                 if target_role == "market_analyst":
                     row = self.db.connection.execute(
                         "SELECT sector FROM securities WHERE UPPER(symbol) = UPPER(?)",
@@ -620,7 +630,9 @@ class AgentEnvironment:
                 sym = ticker.upper().strip()
                 dir_val = direction.lower().strip()
                 if dir_val not in ("buy", "sell", "hold"):
-                    raise ValueError(f"Invalid direction: {direction}. Must be 'buy', 'sell', or 'hold'")
+                    raise ValueError(
+                        f"Invalid direction: {direction}. Must be 'buy', 'sell', or 'hold'"
+                    )
                 if conviction < 0.0 or conviction > 1.0:
                     raise ValueError(f"Conviction must be between 0.0 and 1.0, got {conviction}")
 
@@ -822,7 +834,10 @@ class AgentEnvironment:
             tools.append(
                 self._make_tool(
                     name="schedule_task",
-                    description="Schedule a future task for Market Analyst with date clamped by trading calendar.",
+                    description=(
+                        "Schedule a future task for Market Analyst with date clamped by "
+                        "trading calendar."
+                    ),
                     input_model=schemas.ScheduleTaskInput,
                     handler=handle_schedule_task,
                     agent_name=agent_name,
@@ -910,7 +925,9 @@ class AgentEnvironment:
                 )
             )
 
-            def handle_indicators(ticker: str, indicators: list[str] | None = None) -> dict[str, Any]:
+            def handle_indicators(
+                ticker: str, indicators: list[str] | None = None
+            ) -> dict[str, Any]:
                 sym = ticker.upper().strip()
                 bars = self.market_data.ohlcv(sym, interval="1d", limit=150)
                 if not bars:
@@ -970,7 +987,9 @@ class AgentEnvironment:
             tools.append(
                 self._make_tool(
                     name="indicators",
-                    description="Compute technical indicators on the fly (SMA, EMA, RSI, MACD, ATR, pivot).",
+                    description=(
+                        "Compute technical indicators on the fly (SMA, EMA, RSI, MACD, ATR, pivot)."
+                    ),
                     input_model=schemas.IndicatorsInput,
                     handler=handle_indicators,
                     agent_name=agent_name,
@@ -1042,11 +1061,18 @@ class AgentEnvironment:
                 sector_exp: dict[str, float] = {}
 
                 for pos in positions:
-                    sym = getattr(pos, "symbol", "") if hasattr(pos, "symbol") else pos.get("symbol", "")
+                    sym = (
+                        getattr(pos, "symbol", "")
+                        if hasattr(pos, "symbol")
+                        else pos.get("symbol", "")
+                    )
                     mv = getattr(pos, "market_value", None)
                     if mv is None:
                         qty = float(getattr(pos, "quantity", 0))
-                        price = float(getattr(pos, "current_price", 0) or getattr(pos, "average_entry_price", 0))
+                        price = float(
+                            getattr(pos, "current_price", 0)
+                            or getattr(pos, "average_entry_price", 0)
+                        )
                         mv = qty * price
                     else:
                         mv = float(mv)
@@ -1080,7 +1106,9 @@ class AgentEnvironment:
             tools.append(
                 self._make_tool(
                     name="portfolio_risk",
-                    description="Analyze portfolio risks: exposures, concentration, and cash reserves.",
+                    description=(
+                        "Analyze portfolio risks: exposures, concentration, and cash reserves."
+                    ),
                     input_model=schemas.PortfolioRiskInput,
                     handler=handle_portfolio_risk,
                     agent_name=agent_name,
@@ -1126,7 +1154,9 @@ class AgentEnvironment:
                 )
             )
 
-            def handle_schedule_next_check(ticker: str, when: str, note: str = "") -> dict[str, Any]:
+            def handle_schedule_next_check(
+                ticker: str, when: str, note: str = ""
+            ) -> dict[str, Any]:
                 sym = ticker.upper().strip()
                 try:
                     requested_dt = datetime.fromisoformat(when.replace("Z", "+00:00"))
@@ -1163,7 +1193,9 @@ class AgentEnvironment:
             tools.append(
                 self._make_tool(
                     name="schedule_next_check",
-                    description="Schedule the mandatory future check task on a ticker before deciding.",
+                    description=(
+                        "Schedule the mandatory future check task on a ticker before deciding."
+                    ),
                     input_model=schemas.ScheduleNextCheckInput,
                     handler=handle_schedule_next_check,
                     agent_name=agent_name,
@@ -1180,13 +1212,18 @@ class AgentEnvironment:
                 # PM decision requires a future scheduled task
                 if not self._has_future_scheduled_task(sym):
                     raise ValueError(
-                        f"PM decision on {sym} requires a future scheduled task. Call schedule_next_check first."
+                        f"PM decision on {sym} requires a future scheduled task. "
+                        "Call schedule_next_check first."
                     )
 
                 if act == "sell":
                     positions = self.broker_reader.get_positions()
                     matching = any(
-                        (getattr(p, "symbol", "") if hasattr(p, "symbol") else p.get("symbol", "")).upper()
+                        (
+                            getattr(p, "symbol", "")
+                            if hasattr(p, "symbol")
+                            else p.get("symbol", "")
+                        ).upper()
                         == sym
                         for p in positions
                     )
@@ -1236,7 +1273,8 @@ class AgentEnvironment:
                 # PM decision requires a future scheduled task
                 if not self._has_future_scheduled_task(sym):
                     raise ValueError(
-                        f"PM decision on {sym} requires a future scheduled task. Call schedule_next_check first."
+                        f"PM decision on {sym} requires a future scheduled task. "
+                        "Call schedule_next_check first."
                     )
 
                 state = self._get_or_create_ticker_state(sym)

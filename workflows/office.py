@@ -3,20 +3,19 @@
 from __future__ import annotations
 
 import concurrent.futures
-import inspect
 import json
 import logging
 import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-from agents.backend import AgentBackend, AgentSpec, ChatMessage, StepResult
+from agents.backend import AgentBackend, AgentSpec, ChatMessage, OutgoingMessage, StepResult
 from config.office_settings import OfficeSettings
 from execution.order_flow import OrderFlow, SystemHalt
-from storage.office_db import OfficeDB, utc_now_iso
-from storage.registry import LlmCallRecord, RegistryWriter
+from storage.office_db import OfficeDB
+from storage.registry import RegistryWriter
 from tools.environment import AgentEnvironment
 from workflows.cycle import CycleRunner
 from workflows.scheduling import (
@@ -185,7 +184,8 @@ class Office:
         sector_view = st_data.get("sector_view")
         if not sector_view and sector:
             perf_row = self.db.connection.execute(
-                "SELECT perf_json FROM sector_performance WHERE sector = ? ORDER BY ts DESC LIMIT 1",
+                "SELECT perf_json FROM sector_performance WHERE sector = ? "
+                "ORDER BY ts DESC LIMIT 1",
                 (sector,),
             ).fetchone()
             if perf_row:

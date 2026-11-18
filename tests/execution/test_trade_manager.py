@@ -54,7 +54,7 @@ def submitted_buy_order_id(db, broker) -> int:
 
 
 def test_record_entry_fill_creates_trade_and_trailing_state(db, broker, submitted_buy_order_id):
-    """Stories 70, 72: On entry fill, records Trade from entry with initial events and trailing state."""
+    """Stories 70, 72: On entry fill, records Trade with initial events and trailing state."""
     tm = TradeManager(db=db, broker=broker)
 
     trade_id = tm.record_entry_fill(
@@ -107,7 +107,7 @@ def test_record_entry_fill_creates_trade_and_trailing_state(db, broker, submitte
 
 
 def test_trailing_stop_activation_and_modification(db, broker, submitted_buy_order_id):
-    """Stories 72-74: on_price updates trailing stop, calls broker.modify_stop, appends event (no LLM)."""
+    """Stories 72-74: on_price updates trailing stop, calls modify_stop, appends event (no LLM)."""
     tm = TradeManager(db=db, broker=broker)
 
     # Entry = 50, ATR = 3, k_trail_act = 1.5, k_trail = 1.0, stop = 44
@@ -211,7 +211,7 @@ def test_trade_manager_state_reconstruction_on_restart(db, broker, submitted_buy
     """Story 70: State recovery after restart from persistent database."""
     tm1 = TradeManager(db=db, broker=broker)
 
-    trade_id = tm1.record_entry_fill(
+    tm1.record_entry_fill(
         order_id=submitted_buy_order_id,
         fill_price=Decimal("200.0"),
         qty=Decimal("100"),
