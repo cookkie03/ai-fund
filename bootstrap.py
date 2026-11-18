@@ -25,6 +25,7 @@ from config.office_settings import (
 from data.cache import DataCache
 from execution.order_flow import BracketBroker, OrderFlow
 from execution.trade_manager import TradeManager
+from prompts.loader import load_prompt
 from storage.office_db import OfficeDB
 from storage.registry import RegistryWriter
 from tools.environment import AgentEnvironment, BrokerReader, MarketData
@@ -335,6 +336,24 @@ def _lazy_init_alpaca_broker(env: Mapping[str, str]) -> tuple[BracketBroker, Bro
     return AlpacaBracketAdapter(client), SafeBrokerReader(AlpacaBroker(client))
 
 
+def build_agent_spec(agent_name: str, settings: OfficeSettings) -> AgentSpec:
+    """Build a fully-populated AgentSpec for an agent using load_prompt."""
+    cfg = settings.get_agent(agent_name)
+    try:
+        prompt_text, prompt_hash = load_prompt(agent_name)
+    except FileNotFoundError:
+        prompt_text, prompt_hash = "", ""
+    return AgentSpec(
+        name=agent_name,
+        role=agent_name,
+        model=cfg.model,
+        endpoint=cfg.endpoint,
+        effort=cfg.effort,
+        system_prompt=prompt_text,
+        prompt_hash=prompt_hash,
+    )
+
+
 def build_office(
     settings: OfficeSettings | None = None,
     env: Mapping[str, str] | None = None,
@@ -366,9 +385,19 @@ def build_office(
         api_key=settings.resolve_api_key("portfolio_manager", env_map)
     )
 
+    agent_specs: dict[str, AgentSpec] = {}
     for agent_name in settings.agents:
         api_key = settings.resolve_api_key(agent_name, env_map)
         agent_backends[agent_name] = OpenAICompatibleBackend(api_key=api_key)
+        spec = build_agent_spec(agent_name, settings)
+        agent_specs[agent_name] = spec
+        cfg = settings.get_agent(agent_name)
+        db.register_agent(
+            name=agent_name,
+            role=agent_name,
+            config={"model": cfg.model, "endpoint": cfg.endpoint, "effort": cfg.effort},
+            prompt_hash=spec.prompt_hash,
+        )
 
     backend = RoutingBackend(agent_backends, default_backend=default_backend)
 
@@ -411,6 +440,7 @@ def build_office(
     office.data_cache = data_cache  # type: ignore[attr-defined]
     office.broker_reader = broker_reader  # type: ignore[attr-defined]
     office.bracket_broker = bracket_broker  # type: ignore[attr-defined]
+    office.agent_specs = agent_specs  # type: ignore[attr-defined]
 
     return office
 

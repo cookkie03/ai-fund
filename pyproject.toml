@@ -24,7 +24,7 @@ py-modules = ["bootstrap"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["agents*", "analysis*", "brokers*", "config*", "data*", "execution*", "interface*", "storage*", "telegram_claude*", "tools*", "workflows*"]
+include = ["agents*", "analysis*", "brokers*", "config*", "data*", "execution*", "interface*", "prompts*", "storage*", "telegram_claude*", "tools*", "workflows*"]
 
 [project.optional-dependencies]
 openbb = ["openbb>=4,<5"]
