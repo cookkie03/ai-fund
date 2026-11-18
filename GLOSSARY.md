@@ -13,7 +13,7 @@ Uno dei cinque agenti specialisti (Market, Sentiment, Technical, Fundamental, Ri
 _Avoid_: desk, desk analyst
 
 **Portfolio Manager (PM)**:
-L'agente che riceve gli Alert, apre il Ciclo di analisi, orchestra il lavoro degli Analyst, valida gli ordini e prende la decisione.
+L'agente che riceve gli Scheduled task sui ticker, apre il Ciclo di analisi, orchestra il lavoro degli Analyst, valida gli ordini e prende la decisione.
 _Avoid_: CEO, PM reviewer
 
 **Risk Analyst**:
@@ -36,15 +36,18 @@ Un aiutante generico che un agente può invocare con un tool per un compito circ
 
 ## Lavoro
 
+**Scheduled task**:
+L'unico modo in cui un agente viene richiamato: il PM su un ticker o il Market Analyst su un tema. Porta solo i parametri necessari (agente, chat, quando, fonte, motivo, dati). Nasce da un Alert, da un controllo che un agente si è programmato in precedenza, da un messaggio del Market Analyst al PM o da una richiesta manuale. Un traduttore deterministico, uno per fonte, lo trasforma nel prompt di apertura. Se il ticker è già in analisi entra come messaggio nel ciclo aperto; due Scheduled task in coda sulla stessa chat si fondono.
+_Avoid_: next check date, controllo programmato, trigger
+
 **Alert**:
-Evento che arriva al Portfolio Manager e fa partire un Ciclo di analisi (prezzo, calendario, Controllo programmato, messaggio del Market Analyst, richiesta manuale). Un Alert su un ticker già in analisi entra come messaggio nel ciclo aperto; due Alert sullo stesso ticker in coda si fondono in un Alert composto.
-_Avoid_: trigger (per l'evento)
+Evento di una fonte esterna (prezzo, calendario, trimestrale) che viene incapsulato in uno Scheduled task immediato.
 
 **Trigger engine**:
-La parte del sistema che genera gli Alert.
+La parte del sistema che crea gli Scheduled task dalle fonti e li consegna quando scadono.
 
 **Ciclo di analisi**:
-Tutto il lavoro che va da un Alert a una decisione del Portfolio Manager. Lo chiude solo il PM, quando il quadro basta o quando si raggiunge il tetto del ciclo; il Rimando è una decisione valida.
+Tutto il lavoro che va da uno Scheduled task del PM a una sua decisione del Portfolio Manager. Lo chiude solo il PM, quando il quadro basta o quando si raggiunge il tetto del ciclo; il Rimando è una decisione valida.
 _Avoid_: research cycle, run
 
 **Chat**:
@@ -55,12 +58,8 @@ _Avoid_: thread, canale
 Il messaggio che il PM invia a ogni Analyst quando apre un Ciclo di analisi.
 
 **Rimando**:
-Decisione del PM di non decidere e rianalizzare al Controllo programmato. È anche l'esito deterministico quando il Ciclo di analisi esaurisce il Budget del ciclo, quando il Risk Gate blocca l'ordine o quando l'utente lo rifiuta.
+Decisione del PM di non decidere e rianalizzare a uno Scheduled task futuro. È anche l'esito deterministico quando il Ciclo di analisi esaurisce il Budget del ciclo, quando il Risk Gate blocca l'ordine o quando l'utente lo rifiuta.
 _Avoid_: skip, pending (come esito)
-
-**Controllo programmato**:
-Il momento futuro, con una nota su cosa verificare, in cui un agente fa ripartire il lavoro su un ticker o un tema. Il PM ne fissa uno a ogni decisione; il Market Analyst può fissarne sui suoi temi. Sostituisce la «next check date».
-_Avoid_: next check date
 
 **Budget del ciclo**:
 Numero massimo, generoso, di messaggi e chiamate a subagent di tutti gli agenti in un Ciclo di analisi. Serve solo a fermare i loop: se viene raggiunto scatta il Rimando, con un avviso.
@@ -68,7 +67,7 @@ Numero massimo, generoso, di messaggi e chiamate a subagent di tutti gli agenti 
 ## Ordini
 
 **Bracket order**:
-Ordine strutturato con entrata a prezzo limite, take profit e stop loss. Scade al Controllo programmato se non eseguito.
+Ordine strutturato con entrata a prezzo limite, take profit e stop loss. Scade allo Scheduled task successivo sul ticker se non eseguito.
 _Avoid_: ordine a mercato (non usato)
 
 **Bozza dell'ordine**:
@@ -83,6 +82,9 @@ Dove attendono gli ordini che hanno superato il Risk Gate. Un ordine parte verso
 
 **Trailing stop**:
 Spostamento automatico e deterministico dello stop loss quando il prezzo supera una soglia di guadagno calcolata da formula. Nessun LLM interviene.
+
+**Trade**:
+La vita di una posizione dall'entrata all'uscita, con ogni evento registrato: esecuzione, spostamenti dello stop, uscita per take profit, stop loss, vendita del PM o scadenza.
 
 **Arresto (halt)**:
 Interruttore d'emergenza dell'utente: ferma il Trigger engine e blocca l'invio di nuovi ordini finché non viene ripreso.
