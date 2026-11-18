@@ -20,7 +20,7 @@ Il motore sostituisce la review PM sperimentale via OmniRoute (rimossa, ADR 0002
 - `storage/office_db.py` (SQLite WAL, migrazioni), `storage/registry.py` (registro asincrono), `storage/retention.py` (downsampling); `data/cache.py` e `data/refresh.py` (dati DB-first).
 - `interface/cli.py` (`trading-agent`) e `bootstrap.py` (cablaggio); `config/office.toml` e `config/office_settings.py`.
 
-Il vecchio grafo agentico del prototipo (`agents/desks`, `graph`, `portfolio_manager*`, `research`, `risk*`, `workflows/langgraph_workflow`, `paper_runtime`, `trade_cycle`, `triggers`, `analysis/strategy_state`) è stato rimosso il 2026-11-18 con i relativi test. Il 2026-11-18 sono stati rimossi anche `execution/paper.py` e `execution/risk.py` (sostituiti da `order_flow`, `order_draft` e `risk_gate`). Restano, in attesa del cockpit o della migrazione, `storage/sqlite.py` (store dati e indicatori usato da ingestione, worker indicatori e dashboard) e la dashboard.
+Il vecchio grafo agentico del prototipo (`agents/desks`, `graph`, `portfolio_manager*`, `research`, `risk*`, `workflows/langgraph_workflow`, `paper_runtime`, `trade_cycle`, `triggers`, `analysis/strategy_state`) è stato rimosso il 2026-11-18 con i relativi test. Il 2026-11-18 sono stati rimossi anche `execution/paper.py` e `execution/risk.py` (sostituiti da `order_flow`, `order_draft` e `risk_gate`). Anche il prototipo legacy (`storage/sqlite.py`, `portfolio.py`, `data/ingestion.py`, `analysis/indicator_worker.py`, `interface/dashboard.py`, `interface/server.py`, la directory `scripts/`, `compose.yaml` e `Dockerfile`) è stato rimosso.
 
 ## Obiettivo
 

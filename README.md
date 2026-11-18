@@ -18,47 +18,31 @@ La review PM è sperimentale: un reviewer iniettato può approvare l'esecuzione 
 
 ## Development locale
 
-Usa `.env` solo esplicitamente per i comandi che richiedono credenziali:
+Per eseguire i comandi del motore in locale:
 
 ```bash
-uv run --env-file .env python -m scripts.sync_portfolio \
-  --database data/trading-agent.db
+uv run trading-agent <cmd>
 ```
 
-Dopo l'ingestion, materializza gli indicatori dalla outbox:
-
-```bash
-uv run --env-file .env python -m scripts.materialize_indicators \
-  --database data/trading-agent.db \
-  --window 20
-```
-
-Il worker è idempotente: ripetere il comando non duplica gli indicatori già materializzati. La dashboard legge solo derivati `ready` dal database; non calcola indicatori on-the-fly.
-
-Le formule pure disponibili in `analysis/indicators.py` sono SMA, EMA, RSI Wilder, MACD, ATR Wilder e Pivot Points classici. Sono funzioni deterministiche testate, ma la pipeline di persistenza materializza attualmente solo SMA v1: l'estensione agli altri indicatori richiede la chiusura dei parametri MVP e delle relative versioni di formula.
+Le formule pure disponibili in `analysis/indicators.py` sono SMA, EMA, RSI Wilder, MACD, ATR Wilder e Pivot Points classici. Sono funzioni deterministiche testate.
 
 ## Ricerca tecnica
 
 Il confronto datato con TradingAgents, Qlib, QuantLab e vectorbt è in [`docs/research/prior-art-benchmark.md`](docs/research/prior-art-benchmark.md). Le repository esterne sono riferimenti selettivi: non sostituiscono i contratti locali, la provenance SQLite o il replay canonico.
 
-## Dashboard locale
+## Esecuzione con Docker
 
-Avvia frontend React/Vite e backend Python read-only insieme dalla root del repository:
-
-```bash
-./scripts/run_dashboard_dev.sh
-```
-
-Apri `http://localhost:5173`. Il backend è disponibile su `http://localhost:8000`.
-Il launcher non avvia `openbb-ui`; per fermare entrambi i processi usa `Ctrl+C`.
-
-Se è la prima esecuzione, installa prima le dipendenze frontend:
+In produzione o sul server:
 
 ```bash
-npm install --prefix frontend
+docker compose -f compose.engine.yaml up -d --build
 ```
 
-Il frontend aggiorna il codice tramite Vite HMR e interroga il backend ogni 15 secondi. Questo refresh non implica che siano disponibili dati finanziari real-time.
+Per interagire con la CLI del container in esecuzione:
+
+```bash
+docker compose -f compose.engine.yaml exec -T engine uv run --no-sync trading-agent <cmd>
+```
 
 ## Ricerca semantica con MemPalace
 
