@@ -20,6 +20,7 @@ COPY config ./config
 COPY data ./data
 COPY execution ./execution
 COPY interface ./interface
+COPY prompts ./prompts
 COPY storage ./storage
 COPY tools ./tools
 COPY workflows ./workflows
