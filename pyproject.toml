@@ -16,6 +16,12 @@ dependencies = [
     "yfinance>=0.2.63,<0.3",
 ]
 
+[project.scripts]
+trading-agent = "interface.cli:main"
+
+[tool.setuptools]
+py-modules = ["bootstrap"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["agents*", "analysis*", "brokers*", "config*", "data*", "execution*", "interface*", "storage*", "telegram_claude*", "tools*", "workflows*"]

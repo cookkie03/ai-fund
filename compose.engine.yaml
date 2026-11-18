@@ -1,0 +1,15 @@
+services:
+  engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.engine
+    env_file:
+      - .env
+    environment:
+      TRADING_AGENT_DB: /app/data/trading-agent.db
+    volumes:
+      - trading-agent-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  trading-agent-data:

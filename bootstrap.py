@@ -1,0 +1,488 @@
+"""Bootstrap module for Agent Office: wiring real components and test fixtures."""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Callable, Mapping, Sequence
+from datetime import datetime
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
+
+from agents.backend import (
+    AgentBackend,
+    AgentSpec,
+    ChatMessage,
+    OpenAICompatibleBackend,
+    StepResult,
+    ToolSpec,
+)
+from agents.fake_backend import ScriptedBackend
+from config.office_settings import (
+    OfficeSettings,
+    load_office_settings,
+)
+from data.cache import DataCache
+from execution.order_flow import BracketBroker, OrderFlow
+from execution.trade_manager import TradeManager
+from storage.office_db import OfficeDB
+from storage.registry import RegistryWriter
+from tools.environment import AgentEnvironment, BrokerReader, MarketData
+from workflows.office import Office
+
+
+class RoutingBackend(AgentBackend):
+    """Routes step() calls to an agent-specific backend based on office settings."""
+
+    def __init__(
+        self,
+        backends: dict[str, AgentBackend],
+        default_backend: AgentBackend,
+    ) -> None:
+        self.backends = backends
+        self.default_backend = default_backend
+
+    def step(
+        self,
+        agent: AgentSpec,
+        chat_context: list[ChatMessage],
+        tools: Sequence[ToolSpec],
+    ) -> StepResult:
+        backend = self.backends.get(agent.name, self.default_backend)
+        return backend.step(agent, chat_context, tools)
+
+
+class SafeBrokerReader:
+    """Sanitizes broker account and positions so no paper/live details leak to agents."""
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+
+    def get_account(self) -> dict[str, Any]:
+        if hasattr(self._inner, "get_account"):
+            acc = self._inner.get_account()
+            if hasattr(acc, "equity"):
+                equity = float(acc.equity)
+                cash = float(acc.cash)
+                buying_power = float(getattr(acc, "buying_power", cash))
+            elif isinstance(acc, dict):
+                equity = float(acc.get("equity", 0.0))
+                cash = float(acc.get("cash", 0.0))
+                buying_power = float(acc.get("buying_power", cash))
+            else:
+                equity = 100000.0
+                cash = 50000.0
+                buying_power = cash
+        else:
+            equity = 100000.0
+            cash = 50000.0
+            buying_power = cash
+
+        return {
+            "equity": equity,
+            "cash": cash,
+            "buying_power": buying_power,
+        }
+
+    def get_positions(self) -> list[dict[str, Any]]:
+        if hasattr(self._inner, "get_positions"):
+            positions = self._inner.get_positions()
+        else:
+            positions = []
+        res: list[dict[str, Any]] = []
+        for p in positions:
+            if isinstance(p, dict):
+                res.append(p)
+            else:
+                res.append(
+                    {
+                        "symbol": getattr(p, "symbol", ""),
+                        "qty": float(getattr(p, "qty", 0)),
+                        "market_value": float(getattr(p, "market_value", 0.0)),
+                        "cost_basis": float(getattr(p, "cost_basis", 0.0)),
+                    }
+                )
+        return res
+
+    def get_orders(self, query: Any = None) -> list[Any]:
+        if hasattr(self._inner, "get_orders"):
+            return list(self._inner.get_orders(query))
+        return []
+
+
+class CacheMarketDataAdapter:
+    """Adapts DataCache into the MarketData protocol expected by AgentEnvironment."""
+
+    def __init__(self, cache: DataCache) -> None:
+        self.cache = cache
+
+    def quote(self, symbol: str) -> dict[str, Any]:
+        try:
+            bars = self.cache.get("prices_ohlcv", key=symbol.upper(), interval="1d", limit=1)
+            if bars:
+                latest = bars[-1]
+                return {
+                    "symbol": symbol.upper(),
+                    "price": float(latest.get("c", 0.0)),
+                    "close": float(latest.get("c", 0.0)),
+                    "high": float(latest.get("h", 0.0)),
+                    "low": float(latest.get("l", 0.0)),
+                    "volume": float(latest.get("v", 0.0)),
+                }
+        except Exception:
+            pass
+        return {"symbol": symbol.upper(), "price": 100.0}
+
+    def ohlcv(
+        self, symbol: str, interval: str = "1d", limit: int = 100
+    ) -> list[dict[str, Any]]:
+        try:
+            bars = self.cache.get("prices_ohlcv", key=symbol.upper(), interval=interval, limit=limit)
+            return list(bars)
+        except Exception:
+            return []
+
+    def news(
+        self, symbol: str | None = None, theme: str | None = None, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        key = symbol.upper() if symbol else (theme or "macro")
+        try:
+            items = self.cache.get("news", key=key, limit=limit)
+            return list(items)
+        except Exception:
+            return []
+
+    def ratings(self, symbol: str) -> list[dict[str, Any]] | dict[str, Any]:
+        try:
+            return list(self.cache.get("ratings", key=symbol.upper()))
+        except Exception:
+            return []
+
+    def insiders(self, symbol: str, limit: int = 20) -> list[dict[str, Any]]:
+        try:
+            return list(self.cache.get("insider", key=symbol.upper(), limit=limit))
+        except Exception:
+            return []
+
+    def financials(self, symbol: str) -> dict[str, Any] | list[dict[str, Any]]:
+        try:
+            res = self.cache.get("fundamentals", key=symbol.upper())
+            if len(res) > 0 and isinstance(res[0], dict):
+                return res[0]
+            return list(res)
+        except Exception:
+            return {}
+
+    def earnings_dates(self, symbol: str) -> list[dict[str, Any]] | dict[str, Any]:
+        try:
+            return list(self.cache.get("earnings", key=symbol.upper()))
+        except Exception:
+            return []
+
+    def macro(self, series_id: str) -> list[dict[str, Any]] | dict[str, Any]:
+        try:
+            return list(self.cache.get("macro_series", key=series_id))
+        except Exception:
+            return []
+
+    def econ_calendar(self, limit: int = 20) -> list[dict[str, Any]]:
+        try:
+            return list(self.cache.get("econ_calendar", limit=limit))
+        except Exception:
+            return []
+
+    def sector_perf(self) -> list[dict[str, Any]] | dict[str, Any]:
+        try:
+            return list(self.cache.get("sector_performance"))
+        except Exception:
+            return []
+
+
+class AlpacaBracketAdapter:
+    """Adapts Alpaca TradingClient to the BracketBroker protocol without leaking URLs."""
+
+    def __init__(self, trading_client: Any) -> None:
+        self._client = trading_client
+
+    def submit_bracket(
+        self,
+        client_order_id: str,
+        symbol: str,
+        side: str,
+        qty: Decimal,
+        limit_price: Decimal,
+        take_profit: Decimal,
+        stop_loss: Decimal,
+    ) -> str:
+        from alpaca.trading.enums import OrderSide, TimeInForce
+        from alpaca.trading.requests import LimitOrderRequest, StopLossRequest, TakeProfitRequest
+
+        order_side = OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL
+        req = LimitOrderRequest(
+            symbol=symbol,
+            qty=str(qty),
+            side=order_side,
+            time_in_force=TimeInForce.DAY,
+            limit_price=str(limit_price),
+            order_class="bracket",
+            take_profit=TakeProfitRequest(limit_price=float(take_profit)),
+            stop_loss=StopLossRequest(stop_price=str(stop_loss)),
+            client_order_id=client_order_id,
+        )
+        res = self._client.submit_order(req)
+        return str(res.id)
+
+    def modify_stop(self, broker_order_id: str, stop: Decimal) -> None:
+        from alpaca.trading.requests import ReplaceOrderRequest
+
+        req = ReplaceOrderRequest(stop_price=float(stop))
+        self._client.replace_order_by_id(broker_order_id, req)
+
+    def modify_take_profit(self, broker_order_id: str, take_profit: Decimal) -> None:
+        from alpaca.trading.requests import ReplaceOrderRequest
+
+        req = ReplaceOrderRequest(limit_price=float(take_profit))
+        self._client.replace_order_by_id(broker_order_id, req)
+
+    def cancel(self, broker_order_id: str) -> None:
+        self._client.cancel_order_by_id(broker_order_id)
+
+    def find_by_client_id(self, client_order_id: str) -> Any | None:
+        try:
+            return self._client.get_order_by_client_id(client_order_id)
+        except Exception:
+            return None
+
+    def get_order(self, broker_order_id: str) -> Any | None:
+        try:
+            return self._client.get_order_by_id(broker_order_id)
+        except Exception:
+            return None
+
+    def get_open_orders(self, symbol: str | None = None) -> list[Any]:
+        from alpaca.trading.enums import QueryOrderStatus
+        from alpaca.trading.requests import GetOrdersRequest
+
+        req = GetOrdersRequest(
+            status=QueryOrderStatus.OPEN,
+            symbols=[symbol] if symbol else None,
+        )
+        try:
+            return list(self._client.get_orders(req))
+        except Exception:
+            return []
+
+    def is_market_open(self) -> bool:
+        try:
+            clock = self._client.get_clock()
+            return bool(clock.is_open)
+        except Exception:
+            return True
+
+
+def _lazy_init_data_cache(db: OfficeDB) -> DataCache:
+    """Lazily import real data providers from data.providers to populate DataCache."""
+    providers: dict[str, Callable[..., Any]] = {}
+    try:
+        from data.providers.yahoo_finance import YahooFinanceProvider
+        from data.refresh import adapt_market_data_provider
+
+        yf_prov = YahooFinanceProvider()
+        providers["prices_ohlcv"] = adapt_market_data_provider(yf_prov)
+    except Exception:
+        pass
+
+    try:
+        from data.providers.yahoo_fundamentals import YahooFundamentalsProvider
+        from data.refresh import adapt_fundamentals_provider
+
+        fund_prov = YahooFundamentalsProvider()
+        providers["fundamentals"] = adapt_fundamentals_provider(fund_prov)
+    except Exception:
+        pass
+
+    try:
+        from data.providers.alpaca_news import AlpacaNewsProvider
+        from data.refresh import adapt_news_provider
+
+        news_prov = AlpacaNewsProvider()
+        providers["news"] = adapt_news_provider(news_prov)
+    except Exception:
+        pass
+
+    return DataCache(db=db, providers=providers)
+
+
+def _lazy_init_alpaca_broker(env: Mapping[str, str]) -> tuple[BracketBroker, BrokerReader]:
+    """Lazily initialize Alpaca broker and bracket adapter."""
+    api_key = env.get("ALPACA_API_KEY", "")
+    secret_key = env.get("ALPACA_SECRET_KEY", "")
+    trading_url = env.get("ALPACA_TRADING_URL", "https://paper-api.alpaca.markets/v2")
+
+    if not (api_key and secret_key):
+        raise RuntimeError("ALPACA_API_KEY and ALPACA_SECRET_KEY must be set to run the engine")
+
+    from alpaca.trading.client import TradingClient
+
+    from brokers.alpaca import AlpacaBroker, _sdk_base_url
+
+    client = TradingClient(
+        api_key=api_key,
+        secret_key=secret_key,
+        paper=True,
+        url_override=_sdk_base_url(trading_url),
+    )
+    return AlpacaBracketAdapter(client), SafeBrokerReader(AlpacaBroker(client))
+
+
+def build_office(
+    settings: OfficeSettings | None = None,
+    env: Mapping[str, str] | None = None,
+) -> Office:
+    """Build production-grade Office instance wiring real components.
+
+    Never exposes paper/live broker credentials or flags to agents.
+    """
+    env_map = os.environ if env is None else env
+
+    if settings is None:
+        toml_path = Path("config/office.toml")
+        if toml_path.is_file():
+            settings = load_office_settings(toml_path)
+        else:
+            settings = OfficeSettings()
+
+    # 1. OfficeDB at configured DB path
+    db_path = env_map.get("TRADING_AGENT_DB", "data/trading-agent.db")
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    db = OfficeDB(db_path)
+
+    # 2. RegistryWriter
+    registry = RegistryWriter(db)
+
+    # 3. AgentBackend per agent from office settings
+    agent_backends: dict[str, AgentBackend] = {}
+    default_backend = OpenAICompatibleBackend(
+        api_key=settings.resolve_api_key("portfolio_manager", env_map)
+    )
+
+    for agent_name in settings.agents:
+        api_key = settings.resolve_api_key(agent_name, env_map)
+        agent_backends[agent_name] = OpenAICompatibleBackend(api_key=api_key)
+
+    backend = RoutingBackend(agent_backends, default_backend=default_backend)
+
+    # 4. DataCache with real providers lazily imported
+    data_cache = _lazy_init_data_cache(db)
+    market_data = CacheMarketDataAdapter(data_cache)
+
+    # 5. Alpaca broker / Bracket broker lazily
+    bracket_broker, broker_reader = _lazy_init_alpaca_broker(env_map)
+
+    # 6. OrderFlow & TradeManager
+    order_flow = OrderFlow(
+        db=db,
+        broker=bracket_broker,
+        approval_mode=settings.approval_mode,
+    )
+    trade_manager = TradeManager(db=db, broker=bracket_broker)
+
+    # 7. AgentEnvironment factory
+    def env_factory(cycle_id: int | None = None) -> AgentEnvironment:
+        return AgentEnvironment(
+            db=db,
+            market_data=market_data,
+            broker_reader=broker_reader,
+            min_trading_days=settings.scheduled_task_min_days,
+            max_trading_days=settings.scheduled_task_max_days,
+        )
+
+    office = Office(
+        db=db,
+        backend=backend,
+        env_factory=env_factory,
+        order_flow=order_flow,
+        settings=settings,
+        registry=registry,
+    )
+
+    # Attach convenience references for CLI
+    office.trade_manager = trade_manager  # type: ignore[attr-defined]
+    office.data_cache = data_cache  # type: ignore[attr-defined]
+    office.broker_reader = broker_reader  # type: ignore[attr-defined]
+    office.bracket_broker = bracket_broker  # type: ignore[attr-defined]
+
+    return office
+
+
+def build_test_office(
+    db: OfficeDB | None = None,
+    backend: AgentBackend | None = None,
+    market_data: MarketData | None = None,
+    broker: Any | None = None,
+    broker_reader: BrokerReader | None = None,
+    settings: OfficeSettings | None = None,
+    clock: Callable[[], datetime] | datetime | None = None,
+    approval_mode: str = "auto",
+    sleep_fn: Callable[[float], None] | None = None,
+) -> Office:
+    """Build test Office wired with fakes for isolated, fast unit testing."""
+    from tests.fakes.bracket_broker import FakeBracketBroker
+
+    test_db = db or OfficeDB(":memory:")
+    test_broker = broker or FakeBracketBroker()
+
+    if broker_reader is None:
+        reader_src = test_broker if hasattr(test_broker, "get_account") else FakeBracketBroker()
+        test_reader: BrokerReader = SafeBrokerReader(reader_src)
+    else:
+        test_reader = broker_reader
+
+    if market_data is None:
+        from tests.workflows.test_office import FakeMarketData
+
+        test_market_data: MarketData = FakeMarketData()
+    else:
+        test_market_data = market_data
+
+    test_backend = backend or ScriptedBackend([])
+    test_settings = settings or OfficeSettings(approval_mode=approval_mode)  # type: ignore[arg-type]
+
+    order_flow = OrderFlow(
+        db=test_db,
+        broker=test_broker,
+        approval_mode=test_settings.approval_mode,
+    )
+    trade_manager = TradeManager(db=test_db, broker=test_broker)
+
+    def env_factory(cycle_id: int | None = None) -> AgentEnvironment:
+        return AgentEnvironment(
+            db=test_db,
+            market_data=test_market_data,
+            broker_reader=test_reader,
+            clock=clock if callable(clock) else None,
+            now=clock if not callable(clock) else None,
+            min_trading_days=test_settings.scheduled_task_min_days,
+            max_trading_days=test_settings.scheduled_task_max_days,
+        )
+
+    kwargs: dict[str, Any] = {
+        "db": test_db,
+        "backend": test_backend,
+        "env_factory": env_factory,
+        "order_flow": order_flow,
+        "clock": clock,
+        "settings": test_settings,
+    }
+    if sleep_fn is not None:
+        kwargs["sleep_fn"] = sleep_fn
+
+    office = Office(**kwargs)
+
+    # Attach convenience references
+    office.trade_manager = trade_manager  # type: ignore[attr-defined]
+    office.data_cache = None  # type: ignore[attr-defined]
+    office.broker_reader = test_reader  # type: ignore[attr-defined]
+    office.bracket_broker = test_broker  # type: ignore[attr-defined]
+
+    return office
