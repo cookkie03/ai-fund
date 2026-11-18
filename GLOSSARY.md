@@ -37,7 +37,7 @@ Un aiutante generico che un agente può invocare con un tool per un compito circ
 ## Lavoro
 
 **Alert**:
-Evento che arriva al Portfolio Manager e fa partire un Ciclo di analisi (prezzo, calendario, `next_check_date`, richiesta manuale). Un Alert su un ticker già in analisi entra come messaggio nel ciclo aperto; due Alert sullo stesso ticker in coda si fondono in un Alert composto.
+Evento che arriva al Portfolio Manager e fa partire un Ciclo di analisi (prezzo, calendario, Controllo programmato, messaggio del Market Analyst, richiesta manuale). Un Alert su un ticker già in analisi entra come messaggio nel ciclo aperto; due Alert sullo stesso ticker in coda si fondono in un Alert composto.
 _Avoid_: trigger (per l'evento)
 
 **Trigger engine**:
@@ -55,8 +55,12 @@ _Avoid_: thread, canale
 Il messaggio che il PM invia a ogni Analyst quando apre un Ciclo di analisi.
 
 **Rimando**:
-Decisione del PM di non decidere e rianalizzare alla `next_check_date`. È anche l'esito deterministico quando il Ciclo di analisi esaurisce il Budget del ciclo.
+Decisione del PM di non decidere e rianalizzare al Controllo programmato. È anche l'esito deterministico quando il Ciclo di analisi esaurisce il Budget del ciclo, quando il Risk Gate blocca l'ordine o quando l'utente lo rifiuta.
 _Avoid_: skip, pending (come esito)
+
+**Controllo programmato**:
+Il momento futuro, con una nota su cosa verificare, in cui un agente fa ripartire il lavoro su un ticker o un tema. Il PM ne fissa uno a ogni decisione; il Market Analyst può fissarne sui suoi temi. Sostituisce la «next check date».
+_Avoid_: next check date
 
 **Budget del ciclo**:
 Numero massimo, generoso, di messaggi e chiamate a subagent di tutti gli agenti in un Ciclo di analisi. Serve solo a fermare i loop: se viene raggiunto scatta il Rimando, con un avviso.
@@ -64,7 +68,7 @@ Numero massimo, generoso, di messaggi e chiamate a subagent di tutti gli agenti 
 ## Ordini
 
 **Bracket order**:
-Ordine strutturato con entrata a prezzo limite, take profit e stop loss. Scade alla `next_check_date` se non eseguito.
+Ordine strutturato con entrata a prezzo limite, take profit e stop loss. Scade al Controllo programmato se non eseguito.
 _Avoid_: ordine a mercato (non usato)
 
 **Bozza dell'ordine**:
@@ -75,7 +79,7 @@ I parametri in unità di ATR da cui derivano i prezzi: `k_entry` e percentuale d
 _Avoid_: prezzo deciso dall'LLM
 
 **Coda di approvazione**:
-Dove attendono gli ordini che hanno superato il Risk Gate. Un ordine parte verso il broker solo dopo l'approvazione dell'utente; se la Bozza cambia, l'approvazione decade.
+Dove attendono gli ordini che hanno superato il Risk Gate. Un ordine parte verso il broker solo dopo l'approvazione dell'utente; se la Bozza cambia, l'approvazione decade. Un'impostazione permette di saltare l'approvazione e inviare subito.
 
 **Trailing stop**:
 Spostamento automatico e deterministico dello stop loss quando il prezzo supera una soglia di guadagno calcolata da formula. Nessun LLM interviene.
