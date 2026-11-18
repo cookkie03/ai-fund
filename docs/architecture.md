@@ -8,9 +8,19 @@ Stato: alberatura approvata da Luca il 2026-10-30; creato lo scheletro dei packa
 
 Le sezioni storiche successive, inclusa l'attribuzione della topologia agentica a `workflows`, non prevalgono sulla decisione corrente: il grafo agentico sta sotto `agents`.
 
-## Review PM sperimentale
+## Motore dell'ufficio di agenti (MVP)
 
-`agents/pm_omniroute.py` offre un reviewer OmniRoute locale; il grafo valida identità, campi e citazioni prima del risk gate. La validazione non certifica la qualità della tesi. Il runtime persiste la review e rifiuta conflitti; dopo un submit incerto occorre riconciliare esplicitamente prima di riprendere. Verificato OmniRoute reale con provider e broker simulati e decisione pending; non è una verifica operativa con broker.
+Il motore sostituisce la review PM sperimentale via OmniRoute (rimossa, ADR 0002). Spec: `.scratch/agent-mvp/spec.md`; guida operativa: `docs/office-engine.md`.
+
+- `workflows/office.py` (Office: scheduler, `deliver`, `run`) e `workflows/cycle.py` (CycleRunner: un Ciclo di analisi).
+- `workflows/scheduling.py`: Scheduled task, fusione, limiti di data, traduttori (funzioni pure).
+- `agents/backend.py`: interfaccia `AgentBackend` sostituibile; `agents/fake_backend.py` per i test; `prompts/` con i system prompt (bozze da rivedere).
+- `tools/environment.py`: tool degli agenti per ruolo; nessun tool invia ordini al broker.
+- `execution/order_draft.py`, `risk_gate.py`, `trailing.py`: Bozza dell'ordine, Risk Gate (solo blocca), trailing stop deterministici. `execution/order_flow.py` e `trade_manager.py`: coda di approvazione, invio seriale idempotente, Trade.
+- `storage/office_db.py` (SQLite WAL, migrazioni), `storage/registry.py` (registro asincrono), `storage/retention.py` (downsampling); `data/cache.py` e `data/refresh.py` (dati DB-first).
+- `interface/cli.py` (`trading-agent`) e `bootstrap.py` (cablaggio); `config/office.toml` e `config/office_settings.py`.
+
+Il codice prototipo restante (`agents/desks.py`, `graph.py`, `portfolio_manager*.py`, `storage/sqlite.py`, `workflows/langgraph_workflow.py`, dashboard) resta finché non viene migrato o eliminato esplicitamente; le sue regole fisse diventano fake per i test.
 
 ## Obiettivo
 
