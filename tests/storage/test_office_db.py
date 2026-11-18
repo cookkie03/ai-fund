@@ -1,6 +1,5 @@
 """Tests for OfficeDB repository and SQLite migrations."""
 
-import sqlite3
 from pathlib import Path
 
 import pytest

@@ -627,90 +627,6 @@ class OutboxRepository:
         )
 
 
-class PaperOrderRepository:
-    """Persist attempts before submission; uncertain attempts require reconciliation."""
-
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self._connection = connection
-
-    def reserve(self, order):
-        if self._connection.in_transaction:
-            raise RuntimeError("paper order reservation cannot use an open transaction")
-        cursor = self._connection.execute(
-            """INSERT OR IGNORE INTO paper_orders
-                (client_order_id, symbol, quantity, limit_price, take_profit_price, stop_price)
-                VALUES (?, ?, ?, ?, ?, ?)""",
-            (
-                order.client_order_id,
-                order.symbol,
-                str(order.quantity),
-                str(order.limit_price),
-                str(order.take_profit_price),
-                str(order.stop_price),
-            ),
-        )
-        row = self._connection.execute(
-            "SELECT * FROM paper_orders WHERE client_order_id = ?", (order.client_order_id,)
-        ).fetchone()
-        fields = (row[1], Decimal(row[2]), Decimal(row[3]), Decimal(row[4]), Decimal(row[5]))
-        if fields != (
-            order.symbol,
-            order.quantity,
-            order.limit_price,
-            order.take_profit_price,
-            order.stop_price,
-        ):
-            raise ValueError("client order ID was used for a different order")
-        return cursor.rowcount == 1, row[6]
-
-    def existing(self, order):
-        row = self._connection.execute(
-            "SELECT * FROM paper_orders WHERE client_order_id = ?", (order.client_order_id,)
-        ).fetchone()
-        if row is None:
-            raise ValueError("paper order reservation not found")
-        fields = (row[1], Decimal(row[2]), Decimal(row[3]), Decimal(row[4]), Decimal(row[5]))
-        if fields != (
-            order.symbol,
-            order.quantity,
-            order.limit_price,
-            order.take_profit_price,
-            order.stop_price,
-        ):
-            raise ValueError("client order ID was used for a different order")
-        return row[6]
-
-    def status(self, client_order_id: str) -> str:
-        row = self._connection.execute(
-            "SELECT status FROM paper_orders WHERE client_order_id = ?", (client_order_id,)
-        ).fetchone()
-        if row is None:
-            raise ValueError("paper order reservation not found")
-        return row[0]
-
-    def complete(
-        self, client_order_id: str, broker_order_id: str, status: str = "SUBMITTED"
-    ) -> None:
-        if self._connection.in_transaction:
-            raise RuntimeError("paper order completion cannot use an open transaction")
-        if not broker_order_id.strip() or status not in {
-            "SUBMITTED",
-            "FILLED",
-            "REJECTED",
-            "CANCELLED",
-        }:
-            raise ValueError("invalid broker order identity or status")
-        cursor = self._connection.execute(
-            """UPDATE paper_orders SET broker_order_id = ?, status = ?
-               WHERE client_order_id = ?
-                 AND (broker_order_id IS NULL OR broker_order_id = ?)
-                 AND (status IN ('RESERVED', 'SUBMITTED') OR status = ?)""",
-            (broker_order_id, status, client_order_id, broker_order_id, status),
-        )
-        if cursor.rowcount != 1:
-            raise ValueError("invalid paper order identity or lifecycle transition")
-
-
 class DecisionRepository:
     """Idempotent audit log for research/risk decisions."""
 
@@ -826,7 +742,6 @@ class SQLiteDatabase:
         self.outbox = OutboxRepository(self._connection)
         self.broker_snapshots = BrokerSnapshotRepository(self._connection)
         self.decisions = DecisionRepository(self._connection)
-        self.paper_orders = PaperOrderRepository(self._connection)
 
     @property
     def schema_version(self) -> int:

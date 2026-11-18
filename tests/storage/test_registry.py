@@ -1,7 +1,6 @@
 """Tests for asynchronous batched RegistryWriter."""
 
 import concurrent.futures
-import time
 from pathlib import Path
 
 import pytest
