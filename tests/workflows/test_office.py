@@ -994,3 +994,12 @@ def test_analyst_reply_is_relayed_to_pm_when_not_addressed(db, broker, env, orde
         )
     )
     assert outcome == "deferred"
+
+
+def test_stored_legacy_draft_prices_are_rounded_to_cents():
+    from decimal import Decimal
+
+    from workflows.cycle import _cents
+
+    assert _cents(350.03732650705064) == Decimal("350.04")
+    assert _cents("338.505") == Decimal("338.51")

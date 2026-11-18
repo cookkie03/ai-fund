@@ -7,7 +7,7 @@ import logging
 import time
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from agents.backend import (
@@ -35,6 +35,11 @@ _ANALYST_AGENTS = (
     "fundamental_analyst",
     "risk_analyst",
 )
+
+
+def _cents(value: Any) -> Decimal:
+    """Stored drafts may predate cent rounding: brokers reject sub-penny prices."""
+    return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 class CycleRunner:
@@ -254,10 +259,10 @@ class CycleRunner:
         draft = OrderDraft(
             symbol=draft_dict["symbol"],
             side=draft_dict["side"],
-            entry=Decimal(str(draft_dict["entry"])),
-            stop=Decimal(str(draft_dict["stop"])) if draft_dict.get("stop") is not None else None,
+            entry=_cents(draft_dict["entry"]),
+            stop=_cents(draft_dict["stop"]) if draft_dict.get("stop") is not None else None,
             take_profit=(
-                Decimal(str(draft_dict["take_profit"]))
+                _cents(draft_dict["take_profit"])
                 if draft_dict.get("take_profit") is not None
                 else None
             ),
