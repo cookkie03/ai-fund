@@ -17,7 +17,7 @@ L'agente che riceve gli Alert, apre il Ciclo di analisi, orchestra il lavoro deg
 _Avoid_: CEO, PM reviewer
 
 **Risk Analyst**:
-L'Analyst che porta la tesi contraria (bear) e i dubbi di rischio prima della decisione del PM, e propone il prezzo di entrata dell'ordine. Non ha potere di veto e non valida gli ordini.
+L'Analyst che porta la tesi contraria (bear) e i dubbi di rischio prima della decisione del PM, e sceglie il coefficiente di entrata e la percentuale di rischio dell'ordine. Non ha potere di veto e non valida gli ordini.
 _Avoid_: Risk Gate, risk desk
 
 **Risk Gate**:
@@ -28,13 +28,16 @@ _Avoid_: Risk Analyst, risk agent
 Il contributo strutturato di un Analyst in un processo di analisi, con istante di osservazione.
 _Avoid_: DeskOpinion, desk opinion
 
+**Valutatore**:
+Livello tra PM e Analyst che coordina l'analisi di più ticker insieme (es. trimestrali di molti titoli, analisi comparate). Previsto dopo l'MVP.
+
 **Subagent**:
 Un aiutante generico che un agente può invocare con un tool per un compito circoscritto. Non è un Agente e non ha chat proprie.
 
 ## Lavoro
 
 **Alert**:
-Evento che arriva al Portfolio Manager e fa partire un Ciclo di analisi (prezzo, calendario, `next_check_date`, richiesta manuale).
+Evento che arriva al Portfolio Manager e fa partire un Ciclo di analisi (prezzo, calendario, `next_check_date`, richiesta manuale). Un Alert su un ticker già in analisi entra come messaggio nel ciclo aperto; due Alert sullo stesso ticker in coda si fondono in un Alert composto.
 _Avoid_: trigger (per l'evento)
 
 **Trigger engine**:
@@ -70,6 +73,16 @@ Il Bracket order completo calcolato in modo deterministico appena nello state ci
 **Coefficienti dell'ordine**:
 I parametri in unità di ATR da cui derivano i prezzi: `k_entry` e percentuale di rischio (responsabilità del Risk Analyst), `k_stop` e `k_tp` (responsabilità del Technical Analyst). Gli agenti scelgono coefficienti, mai prezzi.
 _Avoid_: prezzo deciso dall'LLM
+
+**Coda di approvazione**:
+Dove attendono gli ordini che hanno superato il Risk Gate. Un ordine parte verso il broker solo dopo l'approvazione dell'utente; se la Bozza cambia, l'approvazione decade.
+
+**Trailing stop**:
+Spostamento automatico e deterministico dello stop loss quando il prezzo supera una soglia di guadagno calcolata da formula. Nessun LLM interviene.
+
+**Arresto (halt)**:
+Interruttore d'emergenza dell'utente: ferma il Trigger engine e blocca l'invio di nuovi ordini finché non viene ripreso.
+_Avoid_: pausa
 
 ## Informazione
 
