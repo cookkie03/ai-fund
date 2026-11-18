@@ -17,7 +17,7 @@ ApprovalMode = Literal["auto", "manual"]
 class AgentConfig(BaseModel):
     """Configuration for a single agent runtime."""
 
-    endpoint: str = "http://100.74.207.0:20128/v1"
+    endpoint: str = "http://localhost:20128/v1"
     model: str = "my-combo"
     effort: EffortLevel = "medium"
     api_key_env: str | None = "OMNIROUTE_API_KEY"

@@ -98,7 +98,8 @@ class CycleRunner:
         ).fetchone()
         self._last_seen_message_id[pm_chat_id] = int(prev_pm_msgs["max_id"]) if prev_pm_msgs else 0
 
-        # For analysts, set to current max message ID so only new messages in this cycle trigger them
+        # For analysts, set to current max message ID so only new messages in this cycle
+        # trigger them
         for agent in _ANALYST_AGENTS:
             chat_id = self.db.get_or_create_chat(agent, self.ticker)
             row = self.db.connection.execute(
@@ -131,7 +132,7 @@ class CycleRunner:
         except KeyError:
             prompt_hash = ""
             model = "my-combo"
-            endpoint = "http://100.74.207.0:20128/v1"
+            endpoint = "http://localhost:20128/v1"
             effort = "medium"
             prompt = ""
 
@@ -410,7 +411,8 @@ class CycleRunner:
                         self._last_seen_message_id.get(chat_id, 0), err_msg_id
                     )
 
-                    # Notify PM chat so PM knows specialist encountered an error and cycle can continue
+                    # Notify PM chat so PM knows specialist encountered an error and cycle can
+                    # continue
                     pm_chat_id = self.db.get_or_create_chat("portfolio_manager", self.ticker)
                     self.db.append_message(
                         chat_id=pm_chat_id,
@@ -439,7 +441,10 @@ class CycleRunner:
                 self.db.append_message(
                     chat_id=pm_chat_id,
                     author="system",
-                    text=f"Rimando deterministico: budget del ciclo ({self.settings.budgets.cycle_budget}) esaurito.",
+                    text=(
+                        f"Rimando deterministico: budget del ciclo "
+                        f"({self.settings.budgets.cycle_budget}) esaurito."
+                    ),
                     kind="original",
                     cycle_id=self.cycle_id,
                     ts=self.get_now_iso(),
@@ -588,9 +593,10 @@ class CycleRunner:
                                         tool_call_id=tc.id,
                                         name=tc.name,
                                         content=(
-                                            "Errore: decisione non registrata. Hai appena scritto a "
-                                            f"{', '.join(waiting)}: attendi i loro contributi e "
-                                            "decidi al turno successivo."
+                                            "Errore: decisione non registrata. "
+                                            "Hai appena scritto a "
+                                            f"{', '.join(waiting)}: attendi i loro "
+                                            "contributi e decidi al turno successivo."
                                         ),
                                     )
                                 )

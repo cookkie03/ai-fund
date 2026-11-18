@@ -100,6 +100,7 @@ class Office:
         self.backend = backend
         self.env_factory = env_factory
         self.order_flow = order_flow
+        self.order_sync_interval = 30.0
         self.clock = clock
         self.settings = settings or OfficeSettings()
         self.registry = registry
@@ -492,11 +493,18 @@ class Office:
     def run(self, poll_interval: float = 0.5) -> None:
         """Start scheduler polling loop until stop() is called."""
         self._stop_event.clear()
+        last_sync = 0.0
         while not self._stop_event.is_set():
             try:
                 self.run_once()
             except Exception as e:
                 logger.error(f"Error in scheduler loop: {e}")
+            if time.monotonic() - last_sync >= self.order_sync_interval:
+                last_sync = time.monotonic()
+                try:
+                    self.order_flow.sync_broker_orders()
+                except Exception as e:
+                    logger.error(f"Error syncing broker orders: {e}")
             self._stop_event.wait(timeout=poll_interval)
 
     def stop(self) -> None:

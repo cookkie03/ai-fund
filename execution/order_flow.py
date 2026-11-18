@@ -485,6 +485,53 @@ class OrderFlow:
             action=action,
         )
 
+    _BROKER_STATUS_MAP = {
+        "new": "submitted",
+        "accepted": "submitted",
+        "pending_new": "submitted",
+        "submitted": "submitted",
+        "open": "submitted",
+        "partially_filled": "submitted",
+        "filled": "filled",
+        "canceled": "cancelled",
+        "cancelled": "cancelled",
+        "expired": "expired",
+        "rejected": "rejected",
+        "done_for_day": "cancelled",
+    }
+
+    def sync_broker_orders(self) -> list[int]:
+        """Align local orders still marked submitted with the broker's current state.
+
+        Returns the ids of orders whose status changed.
+        """
+        rows = self.db.connection.execute(
+            "SELECT id, status, broker_order_id FROM orders "
+            "WHERE status = 'submitted' AND broker_order_id IS NOT NULL"
+        ).fetchall()
+        changed: list[int] = []
+        for row in rows:
+            try:
+                broker_order = self.broker.get_order(row["broker_order_id"])
+            except Exception as exc:
+                logger.warning("Order sync failed for %s: %s", row["broker_order_id"], exc)
+                continue
+            if broker_order is None:
+                continue
+            raw = getattr(broker_order, "status", None)
+            raw = str(getattr(raw, "value", raw)).split(".")[-1].lower()
+            new_status = self._BROKER_STATUS_MAP.get(raw)
+            if new_status is None or new_status == row["status"]:
+                continue
+            self.db.update_order_status(row["id"], status=new_status)
+            self.db.insert_order_event(
+                row["id"],
+                "reconciled",
+                {"broker_order_id": row["broker_order_id"], "broker_status": raw},
+            )
+            changed.append(int(row["id"]))
+        return changed
+
     def _find_open_bracket_order_id(self, ticker: str) -> str | None:
         """Find the broker order ID of the active bracket order for a ticker."""
         row = self.db.connection.execute(

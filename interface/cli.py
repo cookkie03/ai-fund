@@ -318,6 +318,12 @@ def _cmd_orders_reject(office: Office, args: argparse.Namespace, out: TextIO) ->
     return 0
 
 
+def _cmd_orders_sync(office: Office, args: argparse.Namespace, out: TextIO) -> int:
+    changed = office.order_flow.sync_broker_orders()
+    out.write(f"Synced with broker: {len(changed)} order(s) updated {changed}\n")
+    return 0
+
+
 def _cmd_trades_list(office: Office, args: argparse.Namespace, out: TextIO) -> int:
     ticker = args.ticker.upper().strip() if args.ticker else None
     open_only = getattr(args, "open_only", False)
@@ -574,6 +580,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp_o_rej.add_argument("order_id", type=int, help="Order ID to reject")
     sp_o_rej.add_argument("--reason", default="User rejected via CLI", help="Rejection reason")
     sp_o_rej.set_defaults(handler=_cmd_orders_reject)
+
+    sp_o_sync = sp_orders.add_parser("sync", help="Align submitted orders with broker state")
+    sp_o_sync.set_defaults(handler=_cmd_orders_sync)
 
     # 9. trades
     p_trades = subparsers.add_parser("trades", help="Inspect trades")

@@ -455,3 +455,18 @@ def test_broker_error_rejects_order_instead_of_leaving_it_pending(
     assert db.get_order(outcome.order_id)["status"] == "rejected"
     events = [e["event"] for e in db.list_order_events(outcome.order_id)]
     assert "broker_error" in events
+
+
+def test_sync_broker_orders_marks_cancelled_and_filled(db, broker, valid_buy_draft, valid_gate_ctx):
+    """Orders cancelled/filled at the broker are reflected locally."""
+    flow = OrderFlow(db=db, broker=broker, approval_mode="auto")
+    out = flow.process_accepted_order(
+        ticker="AAPL", action="accept", draft=valid_buy_draft, ctx=valid_gate_ctx
+    )
+    assert flow.sync_broker_orders() == []  # still submitted at the broker
+
+    broker.orders[out.broker_order_id].status = "canceled"
+    assert flow.sync_broker_orders() == [out.order_id]
+    assert db.get_order(out.order_id)["status"] == "cancelled"
+    assert "reconciled" in [e["event"] for e in db.list_order_events(out.order_id)]
+    assert flow.sync_broker_orders() == []  # idempotent
