@@ -787,3 +787,51 @@ def test_run_once_merges_tasks_delivers_and_advances_cursor(
     # Second run_once with same time should deliver nothing (cursor advanced)
     second_outcomes = office.run_once(now=fixed_now + timedelta(minutes=5))
     assert len(second_outcomes) == 0
+
+
+def test_pm_sees_tool_results_on_next_step_within_same_turn(db, broker, env, order_flow, fixed_now):
+    """Regressione: il PM legge uno strumento, riceve il risultato e decide nello stesso ciclo."""
+    seen_tool_messages: list[ChatMessage] = []
+
+    def script(agent, chat_context, tools, turn):
+        if agent.name != "portfolio_manager":
+            return StepResult(done=True)
+        if turn == 0:
+            return StepResult(
+                tool_calls=[ToolCall(id="r1", name="read_state", args={"ticker": "AAPL"})],
+                done=False,
+            )
+        seen_tool_messages.extend(m for m in chat_context if m.role == "tool")
+        return StepResult(
+            tool_calls=[
+                ToolCall(
+                    id="s1",
+                    name="schedule_next_check",
+                    args={"ticker": "AAPL", "when": "2026-06-05T10:00:00Z", "note": "ricontrollo"},
+                ),
+                ToolCall(id="d1", name="defer", args={"ticker": "AAPL", "reason": "nessun setup"}),
+            ],
+            done=True,
+        )
+
+    office = Office(
+        db=db,
+        backend=ScriptedBackend(script),
+        env_factory=env,
+        order_flow=order_flow,
+        clock=lambda: fixed_now,
+        registry=RegistryWriter(db=db),
+        sleep_fn=lambda _: None,
+    )
+    outcome = office.deliver(
+        ScheduledTask(
+            agent="portfolio_manager",
+            chat="AAPL",
+            when=fixed_now,
+            source=TaskSource.MANUAL,
+            reason="test loop",
+        )
+    )
+    assert outcome == "deferred"
+    assert seen_tool_messages, "il PM non ha ricevuto il risultato dello strumento"
+    assert seen_tool_messages[0].tool_call_id == "r1"
