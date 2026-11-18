@@ -136,7 +136,19 @@ def load_office_settings(path: str | Path = "config/office.toml") -> OfficeSetti
     if not p.is_file():
         raise FileNotFoundError(f"Office settings file not found: {p}")
     data = tomllib.loads(p.read_text(encoding="utf-8"))
-    return OfficeSettings.model_validate(data)
+    settings = OfficeSettings.model_validate(data)
+    override = os.environ.get("OFFICE_LLM_ENDPOINT", "").strip()
+    if override:
+        # Deploy-time override (e.g. the OmniRoute service name on the Docker network).
+        settings = settings.model_copy(
+            update={
+                "agents": {
+                    name: cfg.model_copy(update={"endpoint": override})
+                    for name, cfg in settings.agents.items()
+                }
+            }
+        )
+    return settings
 
 
 def check_config(

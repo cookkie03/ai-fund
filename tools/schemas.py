@@ -20,7 +20,10 @@ class ReadPortfolioInput(BaseModel):
 class SendMessageInput(BaseModel):
     """Input for sending a message to another agent."""
 
-    to_agent: str = Field(description="Recipient agent name (e.g. market_analyst, pm)")
+    to_agent: str = Field(description=(
+            "Recipient agent name, one of: portfolio_manager, sentiment_analyst, "
+            "technical_analyst, fundamental_analyst, risk_analyst, market_analyst"
+        ))
     ticker_or_theme: str = Field(
         description="Ticker symbol or macro/sector theme the message pertains to"
     )

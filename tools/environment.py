@@ -22,8 +22,6 @@ from analysis.indicators import (
 from execution.order_draft import (
     DEFAULT_K_STOP,
     DEFAULT_K_TP,
-    DEFAULT_K_TRAIL,
-    DEFAULT_K_TRAIL_ACT,
     DraftNotViable,
     OrderDraftInputs,
     build_order_draft,
@@ -94,6 +92,15 @@ def _serialize(obj: Any) -> Any:
         return {k: _serialize(v) for k, v in obj.items()}
     return obj
 
+
+_MESSAGEABLE_AGENTS = (
+    "portfolio_manager",
+    "sentiment_analyst",
+    "technical_analyst",
+    "fundamental_analyst",
+    "risk_analyst",
+    "market_analyst",
+)
 
 class AgentEnvironment:
     """Agent tool environment providing role-scoped, validated tools."""
@@ -507,8 +514,14 @@ class AgentEnvironment:
         # Subagent tools can NEVER send messages or create orders
         if role != "subagent":
             def handle_send_message(to_agent: str, ticker_or_theme: str, text: str) -> dict[str, Any]:
-                target_agent = to_agent.strip()
-                target_role = self._normalize_role(target_agent)
+                target_role = self._normalize_role(to_agent.strip())
+                canonical = {"pm": "portfolio_manager"}.get(target_role, target_role)
+                if canonical not in _MESSAGEABLE_AGENTS:
+                    raise ValueError(
+                        f"destinatario sconosciuto '{to_agent}'. Validi: "
+                        f"{', '.join(_MESSAGEABLE_AGENTS)}"
+                    )
+                target_agent = canonical
                 topic = ticker_or_theme.strip()
 
                 # If request is to Market Analyst on a ticker, deliver into the chat of the ticker's SECTOR

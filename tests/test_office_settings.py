@@ -139,3 +139,12 @@ def test_check_config_out_of_range_budgets_and_scheduler() -> None:
     assert any("max_parallel" in p for p in problems)
     assert any("db_size_alert_mb" in p for p in problems)
     assert any("scheduled_task_max_days must be >= scheduled_task_min_days" in p for p in problems)
+
+
+def test_llm_endpoint_env_override(monkeypatch):
+    from config.office_settings import load_office_settings
+
+    monkeypatch.setenv("OFFICE_LLM_ENDPOINT", "http://omniroute:20128/v1")
+    settings = load_office_settings("config/office.toml")
+    assert settings.agents
+    assert all(a.endpoint == "http://omniroute:20128/v1" for a in settings.agents.values())

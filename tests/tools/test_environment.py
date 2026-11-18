@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -659,3 +658,27 @@ def test_logging_to_injected_logger_and_db(test_setup):
     assert row["agent"] == "technical_analyst"
     assert row["chat_id"] == 42
     assert json.loads(row["params_json"]) == {"ticker": "AAPL"}
+
+
+def test_send_message_canonicalizes_pm_and_rejects_unknown_recipient(test_setup):
+    env: AgentEnvironment = test_setup["env"]
+    db: OfficeDB = test_setup["db"]
+    tools = _get_tool_map(env.tools_for("technical_analyst", chat_id=1))
+
+    res = tools["send_message"].execute(
+        ToolCall(
+            id="1",
+            name="send_message",
+            args={"to_agent": "pm", "ticker_or_theme": "AAPL", "text": "Setup pronto"},
+        )
+    )
+    assert db.get_chat(res["chat_id"])["agent"] == "portfolio_manager"
+
+    with pytest.raises(ValueError, match="destinatario sconosciuto"):
+        tools["send_message"].execute(
+            ToolCall(
+                id="2",
+                name="send_message",
+                args={"to_agent": "banana_agent", "ticker_or_theme": "AAPL", "text": "x"},
+            )
+        )

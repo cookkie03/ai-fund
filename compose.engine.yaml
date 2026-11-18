@@ -7,9 +7,19 @@ services:
       - .env
     environment:
       TRADING_AGENT_DB: /app/data/trading-agent.db
+      # OmniRoute gira sullo stesso host, in un container sulla rete omniroute_default.
+      OFFICE_LLM_ENDPOINT: http://omniroute:20128/v1
     volumes:
       - trading-agent-data:/app/data
+    networks:
+      - default
+      - omniroute
     restart: unless-stopped
+
+networks:
+  omniroute:
+    name: omniroute_default
+    external: true
 
 volumes:
   trading-agent-data:
