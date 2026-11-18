@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
@@ -31,6 +32,7 @@ from storage.registry import RegistryWriter
 from tools.environment import AgentEnvironment, BrokerReader, MarketData
 from workflows.office import Office
 
+logger = logging.getLogger(__name__)
 
 class RoutingBackend(AgentBackend):
     """Routes step() calls to an agent-specific backend based on office settings."""
@@ -118,30 +120,27 @@ class CacheMarketDataAdapter:
         self.cache = cache
 
     def quote(self, symbol: str) -> dict[str, Any]:
-        try:
-            bars = self.cache.get("prices_ohlcv", key=symbol.upper(), interval="1d", limit=1)
-            if bars:
-                latest = bars[-1]
-                return {
-                    "symbol": symbol.upper(),
-                    "price": float(latest.get("c", 0.0)),
-                    "close": float(latest.get("c", 0.0)),
-                    "high": float(latest.get("h", 0.0)),
-                    "low": float(latest.get("l", 0.0)),
-                    "volume": float(latest.get("v", 0.0)),
-                }
-        except Exception:
-            pass
-        return {"symbol": symbol.upper(), "price": 100.0}
+        """Latest daily bar as a quote. Raises if no real data exists: never invents a price."""
+        bars = self.cache.get("prices_ohlcv", key=symbol.upper(), interval="1d")
+        if not bars:
+            raise RuntimeError(f"nessun dato di prezzo disponibile per {symbol.upper()}")
+        latest = bars[-1]
+        return {
+            "symbol": symbol.upper(),
+            "price": float(latest["c"]),
+            "close": float(latest["c"]),
+            "high": float(latest["h"]),
+            "low": float(latest["l"]),
+            "volume": float(latest["v"]),
+            "ts": latest.get("ts"),
+        }
 
     def ohlcv(
         self, symbol: str, interval: str = "1d", limit: int = 100
     ) -> list[dict[str, Any]]:
-        try:
-            bars = self.cache.get("prices_ohlcv", key=symbol.upper(), interval=interval, limit=limit)
-            return list(bars)
-        except Exception:
-            return []
+        """Most recent `limit` bars in ascending time order."""
+        bars = list(self.cache.get("prices_ohlcv", key=symbol.upper(), interval=interval))
+        return bars[-limit:] if limit > 0 else bars
 
     def news(
         self, symbol: str | None = None, theme: str | None = None, limit: int = 10
@@ -281,7 +280,7 @@ class AlpacaBracketAdapter:
             return True
 
 
-def _lazy_init_data_cache(db: OfficeDB) -> DataCache:
+def _lazy_init_data_cache(db: OfficeDB, env: Mapping[str, str] | None = None) -> DataCache:
     """Lazily import real data providers from data.providers to populate DataCache."""
     providers: dict[str, Callable[..., Any]] = {}
     try:
@@ -290,8 +289,8 @@ def _lazy_init_data_cache(db: OfficeDB) -> DataCache:
 
         yf_prov = YahooFinanceProvider()
         providers["prices_ohlcv"] = adapt_market_data_provider(yf_prov)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("provider prezzi non disponibile: %s", exc)
 
     try:
         from data.providers.yahoo_fundamentals import YahooFundamentalsProvider
@@ -299,17 +298,24 @@ def _lazy_init_data_cache(db: OfficeDB) -> DataCache:
 
         fund_prov = YahooFundamentalsProvider()
         providers["fundamentals"] = adapt_fundamentals_provider(fund_prov)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("provider fondamentali non disponibile: %s", exc)
 
     try:
         from data.providers.alpaca_news import AlpacaNewsProvider
         from data.refresh import adapt_news_provider
 
-        news_prov = AlpacaNewsProvider()
+        env_map = os.environ if env is None else env
+        api_key = env_map.get("ALPACA_API_KEY", "")
+        secret_key = env_map.get("ALPACA_SECRET_KEY", "")
+        if not (api_key and secret_key):
+            raise RuntimeError("ALPACA_API_KEY/ALPACA_SECRET_KEY mancanti")
+        from alpaca.data.historical.news import NewsClient
+
+        news_prov = AlpacaNewsProvider(NewsClient(api_key=api_key, secret_key=secret_key))
         providers["news"] = adapt_news_provider(news_prov)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("provider news non disponibile: %s", exc)
 
     return DataCache(db=db, providers=providers)
 
@@ -402,7 +408,7 @@ def build_office(
     backend = RoutingBackend(agent_backends, default_backend=default_backend)
 
     # 4. DataCache with real providers lazily imported
-    data_cache = _lazy_init_data_cache(db)
+    data_cache = _lazy_init_data_cache(db, env_map)
     market_data = CacheMarketDataAdapter(data_cache)
 
     # 5. Alpaca broker / Bracket broker lazily
