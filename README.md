@@ -78,4 +78,3 @@ rimuovere dati usare sempre `sync --dry-run` e verificare il report.
 
 ## Strategy state
 
-Il primo contratto generico per le valutazioni strategiche è in [`analysis/strategy_state.py`](analysis/strategy_state.py), con test in [`tests/analysis/test_strategy_state.py`](tests/analysis/test_strategy_state.py). Supporta strategie diverse tramite definizione versionata, parametri e feature estensibili senza fissare gli indicatori nel modello comune. La strategia MVP corrente usa barre hourly. Dettagli: [`docs/strategy-state.md`](docs/strategy-state.md).

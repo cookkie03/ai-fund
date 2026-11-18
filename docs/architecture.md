@@ -20,7 +20,7 @@ Il motore sostituisce la review PM sperimentale via OmniRoute (rimossa, ADR 0002
 - `storage/office_db.py` (SQLite WAL, migrazioni), `storage/registry.py` (registro asincrono), `storage/retention.py` (downsampling); `data/cache.py` e `data/refresh.py` (dati DB-first).
 - `interface/cli.py` (`trading-agent`) e `bootstrap.py` (cablaggio); `config/office.toml` e `config/office_settings.py`.
 
-Il codice prototipo restante (`agents/desks.py`, `graph.py`, `portfolio_manager*.py`, `storage/sqlite.py`, `workflows/langgraph_workflow.py`, dashboard) resta finché non viene migrato o eliminato esplicitamente; le sue regole fisse diventano fake per i test.
+Il vecchio grafo agentico del prototipo (`agents/desks`, `graph`, `portfolio_manager*`, `research`, `risk*`, `workflows/langgraph_workflow`, `paper_runtime`, `trade_cycle`, `triggers`, `analysis/strategy_state`) è stato rimosso il 2026-11-18 con i relativi test. Restano, in attesa del cockpit o della migrazione, `storage/sqlite.py` (schema prototipo), `execution/paper.py`, `execution/risk.py` (base di sizing e limiti riusata) e la dashboard.
 
 ## Obiettivo
 
@@ -88,7 +88,6 @@ trading-agent/
 - `brokers` parla con il broker; `execution` decide come eseguire un intento già validato, conserva l'intent e riconcilia gli esiti. Il broker non sceglie investimenti.
 - `data` acquisisce e normalizza, con storico DB-first e live decision-critical con write-through secondo la wiki. `data/providers` confina gli SDK esterni: `YahooFinanceProvider` è l'adapter diretto e `OpenBBProvider` è l'adapter OpenBB; entrambi implementano `MarketDataProvider` e normalizzano OHLCV in `PriceBar`. OpenBB può delegare a un provider sottostante, ma la selezione e la provenance restano nostre. Gli agenti non chiamano vendor direttamente. `storage` persiste; non chiama vendor o LLM.
 - `analysis` contiene la complessità di un'analisi; `tools` presenta agli agenti un'interfaccia piccola. Un tool complesso può usare un intero package analitico.
-- `analysis.strategy_state` espone lo state comune delle valutazioni strategiche; parametri e feature restano estensibili, mentre le regole specifiche vengono validate dalla strategia concreta.
 - `agents` definisce comportamenti riutilizzabili; `workflows` decide chi chiama chi, sequenza, parallelismo e state isolato per ticker/run.
 - `bootstrap.py` è il punto di composizione: sceglie adapter e strumenti e li passa ai chiamanti. I moduli ricevono dipendenze invece di creare client esterni nascosti.
 - Eventuali funzioni numeriche pure rimangono funzioni. Protocollo astratto soltanto dove serve sostituire un'implementazione reale, ad esempio Alpaca e fake offline.
@@ -159,7 +158,6 @@ Il grafo di ricerca lascia `pending` la decisione quando mancano evidenze dei de
 
 ## Composizione paper — 2026-11-02
 
-`workflows.paper_runtime` collega trade cycle, adapter Alpaca e repository SQLite per ordini e decisioni. La factory Alpaca usa `paper=True`, non accetta override URL e rifiuta configurazioni diverse dall'endpoint paper. È una composizione invocabile, non ancora un runtime automatico provider→agenti; persistenza e riconciliazione sono verificate offline con client simulato. Il 2026-11-02 è stato verificato anche un bracket AAPL non marketable attraverso `TradeCycle` e questa factory sul conto paper: cancellazione confermata dal broker, quantità eseguita 0, riconciliazione SQLite `CANCELLED`. Lo state e il portfolio del test erano fixture controllate, non dati di ricerca o portfolio reali; non è un E2E provider→decisione.
 
 ## Rischio condiviso — 2026-11-02
 
