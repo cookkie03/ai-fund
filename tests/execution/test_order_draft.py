@@ -242,3 +242,22 @@ def test_build_order_draft_defaults() -> None:
     )
     assert inputs.k_stop == DEFAULT_K_STOP
     assert inputs.k_tp == DEFAULT_K_TP
+
+
+def test_build_order_draft_buy_prices_are_rounded_to_cents() -> None:
+    """Brokers reject sub-penny prices: every draft price has at most 2 decimals."""
+    inputs = OrderDraftInputs(
+        symbol="AAPL",
+        side="buy",
+        current_price=Decimal("350.4137"),
+        atr=Decimal("3.1273"),
+        equity=Decimal("100000"),
+        risk_fraction=Decimal("0.005"),
+        k_entry=Decimal("0.6"),
+        k_stop=Decimal("1.5"),
+        k_tp=Decimal("3.0"),
+    )
+    draft = build_order_draft(inputs)
+    for price in (draft.entry, draft.stop, draft.take_profit, draft.limit_price):
+        assert price == price.quantize(Decimal("0.01"))
+    assert draft.stop < draft.entry < draft.take_profit

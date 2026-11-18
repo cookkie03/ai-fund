@@ -432,3 +432,26 @@ def test_cancel_entry_if_unfilled(db, broker, valid_buy_draft, valid_gate_ctx):
     assert any(
         item["kind"] == "order_expired" and "AAPL" in item["text"] for item in inbox_items
     )
+
+
+class _RejectingBroker(FakeBracketBroker):
+    def submit_bracket(self, *args, **kwargs) -> str:
+        raise RuntimeError('{"code":42210000,"message":"sub-penny increment"}')
+
+
+def test_broker_error_rejects_order_instead_of_leaving_it_pending(
+    db, valid_buy_draft, valid_gate_ctx
+):
+    """A broker failure must not leave the order pending nor raise out of the flow."""
+    flow = OrderFlow(db=db, broker=_RejectingBroker(), approval_mode="auto")
+
+    outcome = flow.process_accepted_order(
+        ticker="AAPL", action="accept", draft=valid_buy_draft, ctx=valid_gate_ctx
+    )
+
+    assert outcome.status == "rejected"
+    assert outcome.order_id is not None
+    assert any("sub-penny" in reason for reason in outcome.reasons)
+    assert db.get_order(outcome.order_id)["status"] == "rejected"
+    events = [e["event"] for e in db.list_order_events(outcome.order_id)]
+    assert "broker_error" in events

@@ -143,18 +143,32 @@ class OrderDraft:
         return hashlib.sha256(encoded).hexdigest()
 
 
+_CENT = Decimal("0.01")
+
+
+def _to_cents(value: Decimal) -> Decimal:
+    """Round a price to the cent: brokers reject sub-penny increments."""
+    return value.quantize(_CENT, rounding=decimal.ROUND_HALF_UP)
+
+
 def build_order_draft(inputs: OrderDraftInputs) -> OrderDraft:
-    """Construct a deterministic OrderDraft from inputs."""
+    """Construct a deterministic OrderDraft from inputs (prices rounded to the cent)."""
     if inputs.side == "buy":
-        entry = inputs.current_price - (inputs.k_entry * inputs.atr)
+        entry = _to_cents(inputs.current_price - (inputs.k_entry * inputs.atr))
         if entry <= Decimal("0"):
             raise DraftNotViable(f"Calculated entry price must be positive, got {entry}")
 
-        stop = entry - (inputs.k_stop * inputs.atr)
+        stop = _to_cents(entry - (inputs.k_stop * inputs.atr))
         if stop <= Decimal("0"):
             raise DraftNotViable(f"Calculated stop price must be positive, got {stop}")
+        if stop >= entry:
+            raise DraftNotViable(f"Stop {stop} is not below entry {entry} after rounding")
 
-        take_profit = entry + (inputs.k_tp * inputs.atr)
+        take_profit = _to_cents(entry + (inputs.k_tp * inputs.atr))
+        if take_profit <= entry:
+            raise DraftNotViable(
+                f"Take profit {take_profit} is not above entry {entry} after rounding"
+            )
 
         risk_per_share = entry - stop
         risk_budget = inputs.equity * inputs.risk_fraction
@@ -187,7 +201,7 @@ def build_order_draft(inputs: OrderDraftInputs) -> OrderDraft:
         if inputs.position_quantity is None or inputs.position_quantity <= Decimal("0"):
             raise ValueError("Cannot build sell order draft without an open position quantity")
 
-        entry = inputs.current_price + (inputs.k_entry * inputs.atr)
+        entry = _to_cents(inputs.current_price + (inputs.k_entry * inputs.atr))
         quantity = inputs.position_quantity
         notional = quantity * entry
 

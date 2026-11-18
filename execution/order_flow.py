@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import uuid
 from collections.abc import Callable
@@ -18,6 +19,8 @@ from execution.risk_gate import (
     run_risk_gate,
 )
 from storage.office_db import OfficeDB, utc_now_iso
+
+logger = logging.getLogger(__name__)
 
 
 @runtime_checkable
@@ -447,15 +450,27 @@ class OrderFlow:
         if draft.stop is None or draft.take_profit is None:
             raise ValueError("Buy bracket order requires non-null stop and take_profit")
 
-        broker_order_id = self.broker.submit_bracket(
-            client_order_id=client_order_id,
-            symbol=draft.symbol,
-            side=draft.side,
-            qty=draft.quantity,
-            limit_price=draft.limit_price,
-            take_profit=draft.take_profit,
-            stop_loss=draft.stop,
-        )
+        try:
+            broker_order_id = self.broker.submit_bracket(
+                client_order_id=client_order_id,
+                symbol=draft.symbol,
+                side=draft.side,
+                qty=draft.quantity,
+                limit_price=draft.limit_price,
+                take_profit=draft.take_profit,
+                stop_loss=draft.stop,
+            )
+        except Exception as exc:  # broker refused or unreachable: never leave the order pending
+            logger.error("Broker rejected bracket order %s: %s", client_order_id, exc)
+            self.db.update_order_status(order_id, status="rejected")
+            self.db.insert_order_event(order_id, "broker_error", {"error": str(exc)})
+            return Outcome(
+                status="rejected",
+                order_id=order_id,
+                client_order_id=client_order_id,
+                reasons=(f"Broker error: {exc}",),
+                action=action,
+            )
         self.db.update_order_status(
             order_id, status="submitted", broker_order_id=broker_order_id
         )
