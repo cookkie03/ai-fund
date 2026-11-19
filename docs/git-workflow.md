@@ -12,7 +12,7 @@ Regole operative minime condivise per il progetto.
 
 - Commit brevi e leggibili, preferibilmente in formato Conventional Commits: `tipo(scope): descrizione`.
 - Prima del commit si eseguono i controlli pertinenti e se ne riportano i risultati.
-- Il lavoro completato viene sempre pushato su GitHub.
+- Il lavoro completato viene sempre pushato su GitHub: a fine di ogni task entrambi i repository (codice e wiki) devono risultare allineati con `origin`, senza `ahead` né `behind` (procedura in `AGENTS.md`).
 - Il merge su `main` lo esegue Luca.
 - Quando il lavoro è su un branch separato, l'agente apre autonomamente una Pull Request dopo il push, senza eseguire il merge.
 

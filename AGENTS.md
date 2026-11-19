@@ -23,6 +23,16 @@ Quando lavori con sub-agent, assegna a un consulente dedicato le domande sulla w
 
 A ogni modifica rilevante aggiorna insieme al codice i documenti interessati: README per avvio/stato, `docs/architecture.md` per struttura e dipendenze, ricerca tecnica per vincoli dei servizi, wiki per requisiti/decisioni/board/log/hot-cache. Distingui proposte, implementazioni e verifiche eseguite. Usa un sub-agent dedicato alla documentazione quando disponibile; le istruzioni di manutenzione sono in `docs/documentation.md`.
 
+## Allineamento con GitHub — ogni task
+
+Vale per **qualsiasi** task, anche solo documentale, e per **entrambi** i repository: `trading-agent` e `trading-agent-wiki`.
+
+1. All'inizio: `git fetch` e `git pull --rebase` sul branch corrente di ciascun repository.
+2. Alla fine: committa le modifiche del task, rifai `git pull --rebase` e pusha. Non committare mai i file esclusi (DB locali, `.env`, `.serena/`, `graphify-out/`, `nohup.out`).
+3. Il task è finito solo quando `git status -sb` mostra il branch senza `ahead` né `behind` in entrambi i repository.
+
+Se trovi modifiche locali che non sono tue, non scartarle: salvale su un branch `backup/<macchina>-<data>`, pushalo e segnalalo a Luca.
+
 ## Convenzione Git e workspace
 
 Per commit, push, merge, Pull Request e uso dei worktree, segui `docs/git-workflow.md`.

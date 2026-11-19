@@ -134,7 +134,7 @@ I link alla wiki richiedono entrambe le repository affiancate. L'alberatura è a
 
 Luca richiede che il progetto sia distribuibile in produzione con Docker. Il package Python deve essere installabile nell'immagine e avviabile senza dipendenze dal percorso del Mac o dalla wiki locale.
 
-Il rilascio dovrà includere Dockerfile e procedura di build riproducibile con dipendenze bloccate; configurazione e segreti forniti a runtime; dati persistenti esterni al filesystem effimero del container; log su stdout/stderr; processo senza privilegi e gestione SIGTERM con riconciliazione degli ordini. La modalità paper/live dovrà essere esplicita. Il database può essere un servizio separato pur mantenendo l'applicazione come monolite modulare.
+Il rilascio dovrà includere Dockerfile e procedura di build riproducibile con dipendenze bloccate; configurazione e segreti forniti a runtime; dati persistenti esterni al filesystem effimero del container; log su stdout/stderr; processo senza privilegi e gestione SIGTERM con riconciliazione degli ordini. Paper o live dipende solo dalle credenziali dell'account configurato (un Runtime per account), non da una modalità separata. Il database può essere un servizio separato pur mantenendo l'applicazione come monolite modulare.
 
 Stato di questo step: packaging `src/` e `.dockerignore` presenti. Dockerfile, comando applicativo, lock delle dipendenze e validazione container arriveranno con il primo flusso eseguibile. Nessuna immagine o distribuzione produzione è attestata da questo scaffolding.
 

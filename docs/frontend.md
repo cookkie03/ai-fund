@@ -18,7 +18,9 @@
 - Avoid generic SaaS dashboard aesthetics.
 
 ## Trading-specific UX
-- Clearly distinguish paper and live trading.
+- Always show the active broker account; accounts are selectable.
+- Never expose a paper/live mode: an account is paper or live only by its
+  credentials (see PRODUCT.md).
 - Display connection and market-data freshness.
 - Handle loading, empty, error and stale-data states.
 - Make order execution and risk controls explicit.
