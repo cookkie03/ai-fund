@@ -90,6 +90,10 @@ La vita di una posizione dall'entrata all'uscita, con ogni evento registrato: es
 Interruttore d'emergenza dell'utente: ferma il Trigger engine e blocca l'invio di nuovi ordini finché non viene ripreso.
 _Avoid_: pausa
 
+**Timeframe globale**:
+La durata della barra operativa di tutto il progetto (`bar_timeframe`, default 1h, configurabile). Governa le barre lette da agenti e tool, l'ATR di ordini e trailing, e la cadenza con cui il Runtime valuta trailing stop e Alert di prezzo alla chiusura di ogni barra.
+_Avoid_: intervallo, granularità
+
 ## Informazione
 
 **Catalizzatore**:

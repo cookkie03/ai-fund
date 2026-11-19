@@ -174,7 +174,7 @@ loop:
 
 ## 11. Fuori perimetro
 
-Frontend, migrazione del bridge Telegram, stream prezzi e trailing stop (`on_price` resta non collegato: serve una decisione su stream dati contro job sulle barre), fonti di Alert reali, Runtime multi-account, PostgreSQL, Redis.
+Frontend, migrazione del bridge Telegram, Runtime multi-account, PostgreSQL, Redis. Trailing stop e Alert di prezzo/trimestrali sono decisi (2026-11-20) ma formano la fetta **S9** (§14): un goal successivo, da avviare dopo la review di S1–S8.
 
 ## 12. Piano di migrazione (fette)
 
@@ -197,3 +197,62 @@ Ogni fetta parte test-first (skill `tdd`), lascia la suite verde e ha un commit 
 - `grep` conferma che fuori da `runtime/` e dai test nessun modulo crea `OfficeDB` o chiama `build_office`, e che `poll_interval`, `order_sync_interval` e `sync_broker_orders` compaiono solo nella riconciliazione.
 - Smoke locale con broker fake o paper: `trading-agent run` in un terminale; `curl -N localhost:8765/v1/events` in un altro; `trading-agent say portfolio_manager AAPL "ciao"` produce `command.accepted`, `message.appended` e `task.enqueued` sullo stream, e il task parte senza attesa.
 - Documentazione e wiki aggiornate come in S8, con la distinzione tra cosa è implementato e cosa è verificato.
+
+## 14. S9 — Barre a scadenza: trailing stop e Alert (goal successivo)
+
+Decisioni di Luca, 2026-11-20. **Non fanno parte del goal S1–S8.** Questa fetta parte dopo la review e dipende da S1, S3 e S7.
+
+### Timeframe globale
+
+- Nuovo campo `bar_timeframe` in `OfficeSettings`, sezione `[market]` di `config/office.toml`. Default `"1h"`, valori ammessi: quelli di `data/providers/alpaca_market_data.py::_INTERVALS` (`1m`, `5m`, `15m`, `1h`, `1d`). La validazione all'avvio rifiuta qualsiasi altro valore.
+- **Vale per tutto il progetto**: sostituisce ogni default `interval="1d"` che oggi indica la barra operativa:
+  - default del tool `ohlcv` (`tools/schemas.py`, `tools/environment.py`);
+  - refresh dei dati (`data/refresh.py`);
+  - letture della cache in `bootstrap.py`;
+  - barre usate da trailing e Alert;
+  - **ATR14 della Bozza dell'ordine e del trailing** (`tools/environment.py:984` e simili), per decisione esplicita di Luca.
+- Restano giornalieri solo i riferimenti che per definizione lo sono: close della seduta precedente, gap di apertura, downsampling e retention.
+- **Conseguenza da gestire**: con `1h` l'ATR è circa 1/3–1/4 di quello giornaliero, quindi stop e TP si stringono e la size cresce a parità di rischio (1%). I coefficienti di default (`k_stop`, `k_tp`, `k_entry`, `k_trail_act` = 1,5, `k_trail` = 1,0) vanno **ritarati prima di usare ordini reali**. Nel frattempo restano invariati e il report deve segnalarlo come rischio aperto. La ritaratura è una decisione di strategia (Luca/Salvatore, backtest), non dell'implementazione.
+
+### Job `bar_close` (nessuno stream)
+
+- Job a scadenza nel registro di S3. `next_run` è la prossima chiusura di barra `bar_timeframe` durante la seduta regolare, più un piccolo margine configurabile (`bar_close_delay_s`, default 60) per la disponibilità del dato. Usa il calendario del broker (`workflows/market_calendar.py`). Fuori seduta non gira.
+- A ogni esecuzione scarica con **una chiamata REST multi-simbolo** le barre chiuse di **posizioni aperte e watchlist** (Alpaca Basic: 200 chiamate al minuto, nessun limite di 30 simboli perché non è uno stream), le salva in cache come oggi, poi:
+  1. **trailing**: per ogni Trade aperto chiama `TradeManager.on_price(ticker, close, atr)`, con ATR14 su `bar_timeframe`. Se lo stop cambia, `modify_stop` al broker ed evento `trade.stop_moved`. Lo SL del bracket resta la protezione in tempo reale lato broker;
+  2. **Alert di prezzo**: valuta le condizioni sotto e, per ogni Alert, esegue il comando `IngestAlert` con actor `scheduler`. Se il ticker è già in analisi, l'Alert entra come messaggio nel ciclo (regola Q31 già in vigore).
+- Evento `bars.closed` con l'elenco dei simboli e il timestamp della barra.
+
+### Condizioni di Alert di prezzo (tutte attive, soglie in `[alerts]` di `office.toml`)
+
+| Condizione | Regola | Default |
+|---|---|---|
+| Movimento | \|close barra − close seduta precedente\| ≥ `k_move`·ATR14 | `k_move = 2.0` |
+| Volume anomalo | volume barra ≥ `k_volume` × media del volume della stessa fascia oraria nelle ultime `volume_lookback` sedute | `k_volume = 2.0`, `volume_lookback = 20` |
+| Livelli della tesi | close che tocca l'entrata proposta in un Rimando ancora valido, oppure entro `k_level`·ATR14 da SL o TP di una posizione aperta | `k_level = 0.5` |
+| Gap in apertura | prima barra della seduta: \|open − close seduta precedente\| ≥ `k_gap`·ATR14 | `k_gap = 1.0` |
+
+Il payload dell'Alert contiene condizione, valori misurati, soglia e barra, e il traduttore della fonte `price_alert` lo trasforma nel prompt di apertura. Più condizioni sulla stessa barra e sullo stesso ticker producono **un solo** Alert composto.
+
+### Cooldown
+
+Dopo un Alert, lo stesso ticker non ne genera altri per `alert_cooldown_hours` (default **3**, configurabile), contate in ore di calendario. Si legge dall'Event log (ultimo `IngestAlert` accettato per il ticker), senza stato in memoria che si perda al riavvio.
+
+### Alert sulle trimestrali
+
+- Solo per i **titoli in posizione**. Alert al PM `earnings_alert_days` giorni di borsa prima della trimestrale (default **3**), una volta per evento.
+- Job giornaliero `earnings_alerts` in pre-market (`premarket_open`); fonte delle date: i dati fondamentali/calendario già in cache.
+- Il calendario macro resta al Market Analyst con le attivazioni fisse esistenti; il Risk Gate continua a bloccare le nuove entrate entro `earnings_embargo_days`.
+
+### Accettazione S9
+
+Tutti i test usano clock, calendario e fornitore di barre fake:
+
+- **scadenze del job**: alla chiusura di ogni barra, mai fuori seduta; cambiando `bar_timeframe` cambiano cadenza e ATR;
+- **valore non valido**: rifiutato all'avvio;
+- **trailing**: si attiva a `entry + k_trail_act·ATR`, sposta lo stop solo verso l'alto ed emette `trade.stop_moved`;
+- **condizioni di Alert**: ciascuna scatta al confine della soglia e non sotto; più condizioni ⇒ un solo Alert;
+- **cooldown**: rispettato anche dopo un riavvio del Runtime;
+- **trimestrali**: Alert solo per le posizioni, a 3 giorni di borsa, una sola volta;
+- **ticker in analisi**: l'Alert diventa un messaggio del ciclo;
+- **grep**: nessun `interval="1d"` residuo come default della barra operativa.
+

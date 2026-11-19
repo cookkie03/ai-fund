@@ -4,6 +4,8 @@
 
 > Implementa il Runtime unico del trading-agent seguendo `.scratch/core-runtime/spec.md`, fette S1–S8 in ordine, test-first. Ogni fetta lascia la suite verde e ha un commit proprio. Hai finito quando la «Definizione di fatto» (§13 della spec) è verificata, la documentazione e la wiki sono aggiornate, codice e wiki sono pushati, e `.scratch/core-runtime/report.md` è scritto.
 
+> La §14 della spec (S9: timeframe globale, trailing e Alert) è un goal **successivo**. Non implementarla qui: se ti serve un punto di aggancio, lascia solo le interfacce previste (registro job, `IngestAlert`).
+
 ## Contesto in tre righe
 
 Oggi ogni comando CLI costruisce un Office completo e scrive nel DB, e il motore controlla il DB ogni 0,5 s e Alpaca ogni 30 s. Luca ha deciso (2026-11-20) un **Runtime**: processo unico, unico writer del DB, comandi, letture ed eventi via HTTP + SSE, client sottili, nessun polling. La progettazione è chiusa: **non riaprire le decisioni**, implementale.
