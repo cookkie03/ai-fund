@@ -57,7 +57,7 @@ uv run trading-agent trades list                # trade aperti/chiusi (trailing 
 uv run trading-agent portfolio sync             # equity, cassa, posizioni da Alpaca
 uv run trading-agent watchlist --help           # gestione della watchlist
 uv run trading-agent inbox                      # avvisi: rischio, budget, errori, dimensione DB
-uv run trading-agent say <agente> <messaggio>   # scrivi tu a un agente
+uv run trading-agent say portfolio_manager AAPL "testo"   # scrivi tu a un agente
 uv run trading-agent halt                       # ferma tutto e cancella gli ordini aperti
 uv run trading-agent resume
 ```
