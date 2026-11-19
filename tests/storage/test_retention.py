@@ -253,3 +253,78 @@ def test_compact_llm_records():
 
     # Idempotent
     assert compact_llm_records(res, today) == res
+
+
+def test_run_retention_job_on_db(tmp_path):
+    """Stories 96-101: Test run_retention_job on OfficeDB."""
+    from storage.office_db import OfficeDB
+    from storage.retention import run_retention_job
+
+    db = OfficeDB(tmp_path / "retention_test.db")
+    today = date(2026, 11, 18)
+
+    # 1. News
+    old_news_date = (today - timedelta(days=100)).isoformat()
+    recent_news_date = (today - timedelta(days=10)).isoformat()
+    db.connection.execute(
+        """
+        INSERT INTO news (symbol, headline, summary, full_text, published_at, source, fetched_at)
+        VALUES ('AAPL', 'Old News', 'Summary', 'Full content that should be cleared', ?, 'test', '2026-11-18')
+        """,
+        (old_news_date,),
+    )
+    db.connection.execute(
+        """
+        INSERT INTO news (symbol, headline, summary, full_text, published_at, source, fetched_at)
+        VALUES ('AAPL', 'Recent News', 'Summary', 'Keep this content', ?, 'test', '2026-11-18')
+        """,
+        (recent_news_date,),
+    )
+
+    # 2. LLM call
+    old_llm_ts = (today - timedelta(days=200)).isoformat() + "T10:00:00Z"
+    h1 = db.put_blob("old prompt")
+    h2 = db.put_blob("old response")
+    db.connection.execute(
+        """
+        INSERT INTO llm_calls (ts, agent, model, tokens_in, tokens_out, cost, duration_ms, prompt_blob, response_blob)
+        VALUES (?, 'pm', 'my-combo', 10, 10, 0.01, 100, ?, ?)
+        """,
+        (old_llm_ts, h1, h2),
+    )
+
+    # 3. Hourly bars
+    old_hour_ts = (today - timedelta(days=100)).isoformat() + "T14:00:00Z"
+    db.connection.execute(
+        """
+        INSERT INTO prices_ohlcv (symbol, ts, interval, o, h, l, c, v, source, fetched_at)
+        VALUES ('AAPL', ?, '1h', 100.0, 105.0, 99.0, 103.0, 500, 'test', '2026-11-18')
+        """,
+        (old_hour_ts,),
+    )
+
+    # Run retention job
+    stats = run_retention_job(db, today=today)
+    assert stats["compacted_news"] == 1
+    assert stats["compacted_llm"] == 1
+    assert stats["downsampled_hourly"] == 1
+
+    # Verify old news has full_text=None, recent news kept full_text
+    row_old_news = db.connection.execute("SELECT full_text FROM news WHERE headline = 'Old News'").fetchone()
+    assert row_old_news["full_text"] is None
+    row_recent_news = db.connection.execute("SELECT full_text FROM news WHERE headline = 'Recent News'").fetchone()
+    assert row_recent_news["full_text"] == "Keep this content"
+
+    # Verify LLM call has prompt_blob=None, response_blob=None
+    row_llm = db.connection.execute("SELECT prompt_blob, response_blob FROM llm_calls").fetchone()
+    assert row_llm["prompt_blob"] is None
+    assert row_llm["response_blob"] is None
+
+    # Verify hourly bar downsampled to 1d
+    hourly_remaining = db.connection.execute("SELECT * FROM prices_ohlcv WHERE interval = '1h'").fetchall()
+    assert len(hourly_remaining) == 0
+    daily_created = db.connection.execute("SELECT * FROM prices_ohlcv WHERE interval = '1d' AND source = 'downsampled'").fetchall()
+    assert len(daily_created) == 1
+    assert daily_created[0]["c"] == 103.0
+
+    db.close()

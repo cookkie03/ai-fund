@@ -374,3 +374,25 @@ def test_record_task_failure_backoff():
     failed_capped = record_task_failure(high_attempt_task, now=now)
     assert failed_capped.attempts == 11
     assert failed_capped.next_attempt_not_before == now + timedelta(seconds=3600)
+
+
+def test_make_external_alert_task():
+    """Story 12: Transform external alerts (price, calendar, earnings) into immediate Scheduled tasks."""
+    from workflows.scheduling import make_external_alert_task
+
+    now = datetime(2026, 11, 18, 14, 0, tzinfo=UTC)
+
+    # Price alert
+    t_price = make_external_alert_task("price", "AAPL", "Breakout above 180", now=now)
+    assert t_price.agent == "portfolio_manager"
+    assert t_price.chat == "AAPL"
+    assert t_price.source == TaskSource.ALERT_PRICE
+    assert t_price.when == now
+
+    # Calendar alert
+    t_cal = make_external_alert_task("calendar", "SPY", "FOMC Rate Decision", now=now)
+    assert t_cal.source == TaskSource.ALERT_CALENDAR
+
+    # Earnings alert
+    t_earn = make_external_alert_task("earnings", "NVDA", "Q3 Earnings Announcement", now=now)
+    assert t_earn.source == TaskSource.ALERT_EARNINGS

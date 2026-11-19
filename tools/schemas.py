@@ -113,6 +113,13 @@ class SectorPerfInput(BaseModel):
     """Input for fetching sector performance."""
 
 
+class SetSectorViewInput(BaseModel):
+    """Input for Market Analyst to update the market outlook for a sector (US 77)."""
+
+    sector: str = Field(description="Sector name (e.g. Technology, Healthcare)")
+    view: str = Field(description="Market and sector outlook analysis text")
+
+
 class ScheduleTaskInput(BaseModel):
     """Input for scheduling a future task."""
 

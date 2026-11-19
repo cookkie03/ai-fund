@@ -799,6 +799,58 @@ class AgentEnvironment:
                 )
             )
 
+            def handle_set_sector_view(sector: str, view: str) -> dict[str, Any]:
+                sec_clean = sector.strip()
+                v_clean = view.strip()
+                now_iso = self._now_iso()
+
+                # 1. Record in sector_performance
+                self.db.connection.execute(
+                    """
+                    INSERT INTO sector_performance (sector, ts, perf_json, source, fetched_at)
+                    VALUES (?, ?, ?, 'market_analyst', ?)
+                    ON CONFLICT(sector, ts, source) DO UPDATE SET
+                        perf_json = excluded.perf_json,
+                        fetched_at = excluded.fetched_at
+                    """,
+                    (sec_clean, now_iso[:10], v_clean, now_iso),
+                )
+
+                # 2. Update ticker_state for all securities belonging to this sector
+                sec_rows = self.db.connection.execute(
+                    "SELECT symbol FROM securities WHERE UPPER(sector) = UPPER(?)",
+                    (sec_clean,),
+                ).fetchall()
+                updated_tickers = []
+                for row in sec_rows:
+                    sym = row["symbol"].upper()
+                    st = self._get_or_create_ticker_state(sym)
+                    st["sector_view"] = v_clean
+                    self.db.set_ticker_state(sym, st, updated_ts=now_iso)
+                    updated_tickers.append(sym)
+
+                return {
+                    "status": "updated",
+                    "sector": sec_clean,
+                    "view": v_clean,
+                    "securities_updated": len(updated_tickers),
+                    "tickers": updated_tickers,
+                }
+
+            tools.append(
+                self._make_tool(
+                    name="set_sector_view",
+                    description=(
+                        "Update the market outlook for a sector so cycles on tickers "
+                        "in that sector receive it (US 77)."
+                    ),
+                    input_model=schemas.SetSectorViewInput,
+                    handler=handle_set_sector_view,
+                    agent_name=agent_name,
+                    chat_id=chat_id,
+                )
+            )
+
             def handle_schedule_task(chat: str, when: str, reason: str) -> dict[str, Any]:
                 try:
                     requested_dt = datetime.fromisoformat(when.replace("Z", "+00:00"))
@@ -1093,21 +1145,97 @@ class AgentEnvironment:
                         "sector": sec,
                     })
 
+                # US 85: Open risk & portfolio correlation
+                symbols = [p["symbol"] for p in pos_summaries if p.get("symbol")]
+                open_risk = 0.0
+                for pos in positions:
+                    psym = (
+                        getattr(pos, "symbol", "")
+                        if hasattr(pos, "symbol")
+                        else pos.get("symbol", "")
+                    )
+                    pqty = float(getattr(pos, "quantity", 0) or getattr(pos, "qty", 0))
+                    pentry = float(
+                        getattr(pos, "average_entry_price", 0)
+                        or getattr(pos, "entry_price", 0)
+                    )
+                    order_row = self.db.connection.execute(
+                        "SELECT draft_json FROM orders WHERE ticker = ? AND side = 'buy' "
+                        "AND status IN ('submitted', 'approved', 'open') "
+                        "ORDER BY id DESC LIMIT 1",
+                        (psym,),
+                    ).fetchone()
+                    if order_row and order_row["draft_json"]:
+                        try:
+                            dj = json.loads(order_row["draft_json"])
+                            if dj.get("stop"):
+                                spx = float(dj["stop"])
+                                if pentry > spx:
+                                    open_risk += (pentry - spx) * pqty
+                        except Exception:
+                            pass
+
+                # Compute pairwise correlation between returns of open position symbols
+                corrs: dict[str, dict[str, float]] = {s: {} for s in symbols}
+                returns_by_sym: dict[str, list[float]] = {}
+                for s in symbols:
+                    try:
+                        bars = self.market_data.ohlcv(s, interval="1d", limit=30)
+                        if bars and len(bars) >= 2:
+                            closes = [float(b.get("c", b.get("close", 0))) for b in bars]
+                            rets = [
+                                (closes[i] - closes[i - 1]) / closes[i - 1]
+                                for i in range(1, len(closes))
+                                if closes[i - 1] > 0
+                            ]
+                            returns_by_sym[s] = rets
+                    except Exception:
+                        pass
+
+                for s1 in symbols:
+                    for s2 in symbols:
+                        if s1 == s2:
+                            corrs[s1][s2] = 1.0
+                        elif s2 in corrs and s1 in corrs[s2]:
+                            corrs[s1][s2] = corrs[s2][s1]
+                        else:
+                            r1 = returns_by_sym.get(s1, [])
+                            r2 = returns_by_sym.get(s2, [])
+                            n = min(len(r1), len(r2))
+                            if n >= 2:
+                                x = r1[-n:]
+                                y = r2[-n:]
+                                mx = sum(x) / n
+                                my = sum(y) / n
+                                num = sum(
+                                    (xi - mx) * (yi - my)
+                                    for xi, yi in zip(x, y, strict=False)
+                                )
+                                dx = sum((xi - mx) ** 2 for xi in x)
+                                dy = sum((yi - my) ** 2 for yi in y)
+                                val = num / ((dx * dy) ** 0.5) if dx > 0 and dy > 0 else 0.0
+                                corrs[s1][s2] = round(max(-1.0, min(1.0, val)), 4)
+                            else:
+                                corrs[s1][s2] = 0.0
+
                 return {
                     "equity": equity,
                     "cash": cash,
                     "cash_reserve_fraction": (cash / equity) if equity > 0 else 0.0,
                     "total_exposure": total_market_val,
                     "open_positions_count": len(positions),
+                    "open_risk": round(open_risk, 2),
                     "positions": pos_summaries,
                     "sector_exposures": sector_exp,
+                    "correlations": corrs,
                 }
 
             tools.append(
                 self._make_tool(
                     name="portfolio_risk",
                     description=(
-                        "Analyze portfolio risks: exposures, concentration, and cash reserves."
+                        "Analyze portfolio risks: exposures, concentration, "
+                        "open risk, and correlations (US 85)."
                     ),
                     input_model=schemas.PortfolioRiskInput,
                     handler=handle_portfolio_risk,

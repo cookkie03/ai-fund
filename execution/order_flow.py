@@ -657,14 +657,25 @@ class OrderFlow:
                     status="deferred", reasons=(f"Order {order_id} not found",)
                 )
 
+            ts = utc_now_iso()
             rej_reason = reason or "User rejected order"
             self.db.update_order_status(
                 order_id, status="rejected", approval_status="rejected"
             )
-            self.db.insert_order_event(order_id, "rejected", {"reason": rej_reason})
+            self.db.insert_order_event(order_id, "rejected", {"reason": rej_reason}, ts=ts)
             self.db.add_inbox(
                 "order_rejected",
                 f"Order {order['client_order_id']} rejected: {rej_reason}",
+                ts=ts,
+            )
+            # US 62: Write Rimando with reason to PM chat so PM takes it into account
+            pm_chat_id = self.db.get_or_create_chat("portfolio_manager", order["ticker"])
+            self.db.append_message(
+                chat_id=pm_chat_id,
+                author="system",
+                text=f"Rimando: ordine rifiutato. Motivo: {rej_reason}",
+                kind="original",
+                ts=ts,
             )
             return Outcome(
                 status="deferred",

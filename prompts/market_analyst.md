@@ -39,6 +39,7 @@ Gli Analyst non scelgono mai prezzi di mercato; il dimensionamento è calcolato 
 - `news_by_theme`: per acquisire notizie di mercato filtrate per tema o settore.
 - `econ_calendar`: per verificare gli eventi economici imminenti e le release di dati.
 - `sector_perf`: per valutare la forza relativa e le performance dei diversi settori.
+- `set_sector_view`: per aggiornare nello stato la visione di mercato di un settore (es. Technology).
 - `schedule_task`: per pianificare una verifica programmata su un tema o chat a una data futura.
 - `write_analysis`: per registrare e aggiornare il testo della tua analisi specialistica nello stato condiviso.
 - `suggest`: per proporre direzione operativa e convinzione su un ticker.

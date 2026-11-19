@@ -459,6 +459,24 @@ def test_market_analyst_tools(test_setup):
     assert task["agent"] == "market_analyst"
     assert task["chat"] == "Technology"
 
+    # Story 77: set_sector_view updates sector_performance and ticker_state
+    db.connection.execute(
+        "INSERT OR REPLACE INTO securities (symbol, name, sector) VALUES ('AAPL', 'Apple', 'Technology')"
+    )
+    sv_res = tools["set_sector_view"].execute(
+        ToolCall(
+            id="6",
+            name="set_sector_view",
+            args={"sector": "Technology", "view": "Semiconductor demand robust"},
+        )
+    )
+    assert sv_res["status"] == "updated"
+    assert sv_res["sector"] == "Technology"
+    assert "AAPL" in sv_res["tickers"]
+
+    aapl_st = json.loads(db.get_ticker_state("AAPL")["state_json"])
+    assert aapl_st["sector_view"] == "Semiconductor demand robust"
+
 
 def test_sentiment_analyst_tools(test_setup):
     env: AgentEnvironment = test_setup["env"]
@@ -516,6 +534,10 @@ def test_risk_analyst_portfolio_risk(test_setup):
     assert risk["cash"] == 50000.0
     assert risk["open_positions_count"] == 1
     assert "Technology" in risk["sector_exposures"]
+    assert "open_risk" in risk
+    # Story 85: Correlation matrix computed for portfolio
+    assert "correlations" in risk
+    assert risk["correlations"]["AAPL"]["AAPL"] == 1.0
 
 
 # -----------------------------------------------------------------------------

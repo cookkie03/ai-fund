@@ -229,6 +229,11 @@ def test_reject_order(db, broker, valid_buy_draft, valid_gate_ctx):
     events = db.list_order_events(order_id)
     assert any(e["event"] == "rejected" for e in events)
 
+    # Story 62: PM chat receives Rimando with rejection reason
+    pm_chat_id = db.get_or_create_chat("portfolio_manager", "AAPL")
+    msgs = db.list_messages(pm_chat_id)
+    assert any("Rimando:" in m["text"] and "Too volatile" in m["text"] for m in msgs)
+
 
 def test_expire_pending_at_end_of_session(db, broker, valid_buy_draft, valid_gate_ctx):
     """Stories 61, 117: Pending orders expire at end of session and add inbox entry."""

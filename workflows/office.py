@@ -22,7 +22,9 @@ from workflows.scheduling import (
     DueCursor,
     ScheduledTask,
     TaskSource,
+    _add_trading_days,
     due_tasks,
+    make_external_alert_task,
     merge_tasks,
     record_task_failure,
     translate_task,
@@ -100,6 +102,8 @@ class Office:
         self.env_factory = env_factory
         self.order_flow = order_flow
         self.order_sync_interval = 30.0
+        self.retention_interval = 7 * 86400.0  # 7 days (weekly)
+        self.data_refresh_interval = 3600.0  # 1 hour
         self.clock = clock
         self.settings = settings or OfficeSettings()
         self.registry = registry
@@ -321,6 +325,32 @@ class Office:
             if res.done or (not res.tool_calls and not res.outgoing_messages):
                 break
 
+    def ingest_external_alert(
+        self,
+        alert_type: str | TaskSource,
+        ticker: str,
+        reason: str,
+        data: dict[str, Any] | None = None,
+    ) -> int:
+        """Transform external alert into an immediate ScheduledTask and enqueue into DB (US 12)."""
+        now = self.get_now()
+        task = make_external_alert_task(
+            alert_type=alert_type,
+            ticker=ticker,
+            reason=reason,
+            now=now,
+            data=data,
+        )
+        task_id = self.db.enqueue_scheduled_task(
+            agent=task.agent,
+            chat=task.chat,
+            when_ts=self.get_now_iso(),
+            source=task.source.value,
+            reason=task.reason,
+            data=task.data,
+        )
+        return task_id
+
     def deliver(self, scheduled_task: Any) -> Any:
         """Deliver a scheduled task. Opens a cycle or appends to an active cycle."""
         if self.halt.is_halted():
@@ -397,13 +427,111 @@ class Office:
             with self._lock:
                 self._active_cycles_by_ticker.pop(ticker, None)
 
+    def check_db_size(self) -> bool:
+        """Check DB size against configured db_size_alert_mb and raise inbox alert if exceeded."""
+        threshold = getattr(self.settings, "db_size_alert_mb", 500)
+        return self.db.check_db_size_alert(threshold, ts=self.get_now_iso())
+
+    def ensure_fixed_market_analyst_activations(
+        self, now: datetime | None = None
+    ) -> list[int]:
+        """Generate fixed activations for Market Analyst (pre-market and macro events) (US 16)."""
+        now_dt = now or self.get_now()
+        today = now_dt.date()
+        created_ids: list[int] = []
+
+        # 1. Pre-market activation on trading days
+        premkt_str = getattr(self.settings.schedule, "premarket_open", "09:00")
+        try:
+            hour_str, min_str = premkt_str.split(":")
+            premkt_hour, premkt_min = int(hour_str), int(min_str)
+        except Exception:
+            premkt_hour, premkt_min = 9, 0
+
+        today_premkt = datetime.combine(today, datetime.min.time(), tzinfo=UTC).replace(
+            hour=premkt_hour, minute=premkt_min
+        )
+        if now_dt <= today_premkt and today.weekday() < 5:
+            target_premkt = today_premkt
+        else:
+            env = self.get_env()
+            cal = getattr(env, "calendar", None)
+            next_tday = _add_trading_days(today, 1, cal)
+            target_premkt = datetime.combine(next_tday, datetime.min.time(), tzinfo=UTC).replace(
+                hour=premkt_hour, minute=premkt_min
+            )
+
+        target_str = target_premkt.date().isoformat()
+        row = self.db.connection.execute(
+            """
+            SELECT id FROM scheduled_tasks
+            WHERE agent = 'market_analyst'
+              AND source = ?
+              AND SUBSTR(when_ts, 1, 10) = ?
+              AND (reason LIKE '%pre-market%' OR data_json LIKE '%"type": "pre_market"%')
+            LIMIT 1
+            """,
+            (TaskSource.FIXED_BASE.value, target_str),
+        ).fetchone()
+        if not row:
+            tid = self.db.enqueue_scheduled_task(
+                agent="market_analyst",
+                chat="Macro",
+                when_ts=target_premkt.isoformat().replace("+00:00", "Z"),
+                source=TaskSource.FIXED_BASE.value,
+                reason="Attivazione fissa pre-market",
+                data={"type": "pre_market"},
+            )
+            created_ids.append(tid)
+
+        # 2. Upcoming macro events from econ_calendar
+        now_iso = now_dt.isoformat().replace("+00:00", "Z")
+        econ_rows = self.db.connection.execute(
+            """
+            SELECT event_id, event_name, event_ts FROM econ_calendar
+            WHERE event_ts >= ?
+            ORDER BY event_ts ASC LIMIT 20
+            """,
+            (now_iso,),
+        ).fetchall()
+        for erow in econ_rows:
+            eid = erow["event_id"]
+            ename = erow["event_name"]
+            ets = erow["event_ts"]
+            check_row = self.db.connection.execute(
+                """
+                SELECT id FROM scheduled_tasks
+                WHERE agent = 'market_analyst'
+                  AND source = ?
+                  AND (data_json LIKE ? OR reason LIKE ?)
+                LIMIT 1
+                """,
+                (TaskSource.FIXED_BASE.value, f'%"{eid}"%', f"%{ename}%"),
+            ).fetchone()
+            if not check_row:
+                tid = self.db.enqueue_scheduled_task(
+                    agent="market_analyst",
+                    chat="Macro",
+                    when_ts=ets,
+                    source=TaskSource.FIXED_BASE.value,
+                    reason=f"Evento macro calendario: {ename}",
+                    data={"type": "econ_calendar", "event_id": eid, "event_name": ename},
+                )
+                created_ids.append(tid)
+
+        return created_ids
+
     def run_once(self, now: datetime | None = None) -> list[str]:
         """Perform a single scheduler pass: fetch due tasks, merge, deliver up to max_parallel."""
         if self.halt.is_halted():
             return []
 
+        self.check_db_size()
+
         now_dt = now or self.get_now()
         now_iso = now_dt.isoformat().replace("+00:00", "Z")
+
+        self.ensure_fixed_market_analyst_activations(now_dt)
 
         # 1. Fetch pending due tasks
         rows = self.db.due_scheduled_tasks(now_ts=now_iso)
@@ -490,21 +618,61 @@ class Office:
 
         return outcomes
 
+    def run_retention(self, today: datetime | None = None) -> dict[str, int]:
+        """Apply retention policies and incremental vacuum to OfficeDB (US 101)."""
+        from storage.retention import RetentionPolicy, run_retention_job
+
+        t = today or self.get_now()
+        policy = RetentionPolicy(
+            daily_years=self.settings.retention.daily_prices_days // 365,
+            weekly_years=self.settings.retention.weekly_prices_days // 365,
+            hourly_days=self.settings.retention.hourly_bars_days,
+            news_full_text_days=self.settings.retention.full_news_days,
+            llm_content_days=self.settings.retention.llm_logs_days,
+        )
+        return run_retention_job(self.db, today=t, policy=policy)
+
+    def refresh_data(
+        self, force: bool = False, kinds: list[str] | None = None
+    ) -> dict[str, Any] | None:
+        """Execute periodic pre-fetch of watchlist and portfolio data (US 89)."""
+        from data.refresh import refresh_watchlist_and_portfolio
+
+        cache = getattr(self, "data_cache", None)
+        if cache is None:
+            return None
+        return refresh_watchlist_and_portfolio(cache=cache, force=force, kinds=kinds)
+
     def run(self, poll_interval: float = 0.5) -> None:
         """Start scheduler polling loop until stop() is called."""
         self._stop_event.clear()
         last_sync = 0.0
+        last_retention = 0.0
+        last_data_refresh = 0.0
         while not self._stop_event.is_set():
             try:
                 self.run_once()
             except Exception as e:
                 logger.error(f"Error in scheduler loop: {e}")
-            if time.monotonic() - last_sync >= self.order_sync_interval:
-                last_sync = time.monotonic()
+            now_mono = time.monotonic()
+            if now_mono - last_sync >= self.order_sync_interval:
+                last_sync = now_mono
                 try:
                     self.order_flow.sync_broker_orders()
                 except Exception as e:
                     logger.error(f"Error syncing broker orders: {e}")
+            if now_mono - last_retention >= self.retention_interval:
+                last_retention = now_mono
+                try:
+                    self.run_retention()
+                except Exception as e:
+                    logger.error(f"Error running retention job: {e}")
+            if now_mono - last_data_refresh >= self.data_refresh_interval:
+                last_data_refresh = now_mono
+                try:
+                    self.refresh_data()
+                except Exception as e:
+                    logger.error(f"Error refreshing data: {e}")
             self._stop_event.wait(timeout=poll_interval)
 
     def stop(self) -> None:

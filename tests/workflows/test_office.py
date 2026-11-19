@@ -1079,3 +1079,135 @@ def test_stored_legacy_draft_prices_are_rounded_to_cents():
 
     assert _cents(350.03732650705064) == Decimal("350.04")
     assert _cents("338.505") == Decimal("338.51")
+
+
+def test_office_db_size_alert_inbox(db, broker, env, order_flow, fixed_now):
+    """Stories 102, 117: Office checks db size on run_once and records inbox alert."""
+    settings = OfficeSettings(db_size_alert_mb=1)
+    office = Office(
+        db=db,
+        backend=ScriptedBackend({}),
+        env_factory=env,
+        order_flow=order_flow,
+        clock=lambda: fixed_now,
+        settings=settings,
+        sleep_fn=lambda _: None,
+    )
+    # Under limit
+    office.run_once()
+    assert len(db.list_inbox(unread_only=True)) == 0
+
+    # Exceed limit
+    dummy = "x" * (1024 * 1024 + 500)
+    db.connection.execute("INSERT INTO blobs (hash, compressed) VALUES ('big_blob', ?)", (dummy.encode(),))
+    office.run_once()
+
+    inbox = db.list_inbox(unread_only=True)
+    assert any(i["kind"] == "db_size" and "Allarme dimensione DB" in i["text"] for i in inbox)
+
+
+def test_office_run_retention(db, broker, env, order_flow, fixed_now):
+    """Story 101: Office runs retention job."""
+    office = Office(
+        db=db,
+        backend=ScriptedBackend({}),
+        env_factory=env,
+        order_flow=order_flow,
+        clock=lambda: fixed_now,
+        sleep_fn=lambda _: None,
+    )
+    res = office.run_retention()
+    assert isinstance(res, dict)
+    assert "compacted_news" in res
+    assert "downsampled_hourly" in res
+
+
+def test_office_periodic_data_refresh(db, broker, env, order_flow, fixed_now):
+    """Story 89: Pre-fetch watchlist and portfolio data periodically."""
+    from data.cache import DataCache
+
+    db.add_watchlist("AAPL")
+    cache = DataCache(db=db, providers={"prices_ohlcv": lambda s, **kw: [{"symbol": s, "ts": "2026-11-18T10:00:00Z", "interval": "1d", "o": 100.0, "h": 105.0, "l": 99.0, "c": 104.0, "v": 1000.0, "source": "test"}]})
+
+    office = Office(
+        db=db,
+        backend=ScriptedBackend({}),
+        env_factory=env,
+        order_flow=order_flow,
+        clock=lambda: fixed_now,
+        sleep_fn=lambda _: None,
+    )
+    office.data_cache = cache
+    report = office.refresh_data()
+    assert report is not None
+    assert "AAPL" in report["tickers"]
+    assert report["refreshed"] >= 1
+
+
+def test_office_ingest_external_alert(db, broker, env, order_flow, fixed_now):
+    """Story 12: Ingest external alert transforms to immediate scheduled task and delivers."""
+    office = Office(
+        db=db,
+        backend=ScriptedBackend({}),
+        env_factory=env,
+        order_flow=order_flow,
+        clock=lambda: fixed_now,
+        sleep_fn=lambda _: None,
+    )
+    task_id = office.ingest_external_alert(
+        alert_type="price",
+        ticker="AAPL",
+        reason="Breakout above 180",
+        data={"price": 182.5},
+    )
+    assert task_id > 0
+
+    task_row = db.get_scheduled_task(task_id)
+    assert task_row["agent"] == "portfolio_manager"
+    assert task_row["chat"] == "AAPL"
+    assert task_row["source"] == "alert_price"
+    assert "Breakout above 180" in task_row["reason"]
+
+
+def test_office_fixed_market_analyst_activations(db, broker, env, order_flow, fixed_now):
+    """Story 16: Fixed activations for Market Analyst (pre-market and macro events)."""
+    # fixed_now is 2026-06-02 (Tuesday, trading day)
+    office = Office(
+        db=db,
+        backend=ScriptedBackend({}),
+        env_factory=env,
+        order_flow=order_flow,
+        clock=lambda: fixed_now,
+        sleep_fn=lambda _: None,
+    )
+
+    # Insert an upcoming econ calendar event
+    evt_ts = (fixed_now + timedelta(hours=2)).isoformat().replace("+00:00", "Z")
+    db.connection.execute(
+        """
+        INSERT INTO econ_calendar (event_id, event_name, event_ts, impact, source, fetched_at)
+        VALUES ('fomc-1', 'FOMC Rate Decision', ?, 'high', 'test', '2026-06-02')
+        """,
+        (evt_ts,),
+    )
+
+    created_ids = office.ensure_fixed_market_analyst_activations(fixed_now)
+    assert len(created_ids) == 2  # 1 pre-market + 1 econ calendar
+
+    tasks = db.connection.execute(
+        "SELECT * FROM scheduled_tasks WHERE agent = 'market_analyst' AND source = 'fixed_base'"
+    ).fetchall()
+    assert len(tasks) == 2
+
+    # Check pre-market task
+    premkt = next(t for t in tasks if t["data_json"] and '"pre_market"' in t["data_json"])
+    assert "pre-market" in premkt["reason"]
+    assert premkt["chat"] == "Macro"
+
+    # Check econ calendar task
+    macro_evt = next(t for t in tasks if t["data_json"] and '"fomc-1"' in t["data_json"])
+    assert "FOMC Rate Decision" in macro_evt["reason"]
+
+    # Calling again does not duplicate tasks
+    second_run = office.ensure_fixed_market_analyst_activations(fixed_now)
+    assert len(second_run) == 0

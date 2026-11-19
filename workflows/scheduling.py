@@ -98,6 +98,42 @@ def clamp_schedule_date(
     return requested
 
 
+def make_external_alert_task(
+    alert_type: str | TaskSource,
+    ticker: str,
+    reason: str,
+    now: datetime,
+    data: dict[str, Any] | None = None,
+) -> ScheduledTask:
+    """Transform an external alert (price, calendar, earnings) into an immediate task (US 12)."""
+    if isinstance(alert_type, str):
+        norm = alert_type.lower().strip()
+        if "price" in norm or "prezzo" in norm:
+            source = TaskSource.ALERT_PRICE
+        elif "calendar" in norm or "calendario" in norm:
+            source = TaskSource.ALERT_CALENDAR
+        elif "earning" in norm or "utili" in norm or "trimestrale" in norm:
+            source = TaskSource.ALERT_EARNINGS
+        else:
+            try:
+                source = TaskSource(norm)
+            except ValueError:
+                source = TaskSource.ALERT_PRICE
+    else:
+        source = alert_type
+
+    utc_now = now if now.tzinfo is not None else now.replace(tzinfo=UTC)
+
+    return ScheduledTask(
+        agent="portfolio_manager",
+        chat=ticker.upper().strip(),
+        when=utc_now,
+        source=source,
+        reason=reason.strip(),
+        data=data or {},
+    )
+
+
 def merge_tasks(tasks: Sequence[ScheduledTask]) -> tuple[ScheduledTask, ...]:
     """Fuse queued tasks for the same agent+chat into one composite task.
 

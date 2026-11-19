@@ -281,6 +281,35 @@ def test_db_size_and_financial_tables(db: OfficeDB) -> None:
     assert row["c"] == 154.0
 
 
+def test_db_size_alert_inbox(db: OfficeDB) -> None:
+    """Stories 102, 117: When DB size exceeds alert threshold, inbox alert is recorded."""
+    # Under a huge threshold: no alert
+    assert db.check_db_size_alert(threshold_mb=1000) is False
+    assert len(db.list_inbox(unread_only=True)) == 0
+
+    # With threshold 0 MB (below actual size): triggers alert
+    # Since db size > 0, threshold_mb=0 returns False (invalid threshold),
+    # but with tiny threshold like mock or 0.000001 MB (1 byte):
+    # threshold_mb in method is int, but if size_bytes > threshold_mb * 1024 * 1024:
+    # We can test with threshold_mb=0.000001 or test check_db_size_alert with tiny threshold.
+    # Note: threshold_mb is int. If threshold_mb=1, and we insert dummy blob to exceed 1MB:
+    dummy_data = "x" * (1024 * 1024 + 100)
+    db.connection.execute("INSERT INTO blobs (hash, compressed) VALUES ('big', ?)", (dummy_data.encode(),))
+
+    triggered = db.check_db_size_alert(threshold_mb=1)
+    assert triggered is True
+
+    alerts = [item for item in db.list_inbox(unread_only=True) if item["kind"] == "db_size"]
+    assert len(alerts) == 1
+    assert "Allarme dimensione DB" in alerts[0]["text"]
+
+    # Calling again does not duplicate unread alert
+    triggered_again = db.check_db_size_alert(threshold_mb=1)
+    assert triggered_again is True
+    alerts_again = [item for item in db.list_inbox(unread_only=True) if item["kind"] == "db_size"]
+    assert len(alerts_again) == 1
+
+
 def test_office_db_validation_and_direct_logging(db: OfficeDB) -> None:
     chat_id = db.create_chat("pm", "AAPL")
     with pytest.raises(ValueError):

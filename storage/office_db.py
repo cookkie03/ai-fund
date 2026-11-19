@@ -423,9 +423,42 @@ class OfficeDB:
             page_size = self._connection.execute("PRAGMA page_size").fetchone()[0]
             return int(page_count * page_size)
         try:
-            return self.path.stat().st_size
+            total = self.path.stat().st_size
+            wal = self.path.with_name(self.path.name + "-wal")
+            if wal.is_file():
+                total += wal.stat().st_size
+            shm = self.path.with_name(self.path.name + "-shm")
+            if shm.is_file():
+                total += shm.stat().st_size
+            return total
         except OSError:
             return 0
+
+    def check_db_size_alert(self, threshold_mb: int, ts: str | None = None) -> bool:
+        """Check if DB size exceeds threshold_mb.
+
+        If so, creates an unread inbox alert if one doesn't already exist (US 102, 117).
+        """
+        if threshold_mb <= 0:
+            return False
+        size_bytes = self.db_size_bytes()
+        threshold_bytes = threshold_mb * 1024 * 1024
+        if size_bytes > threshold_bytes:
+            row = self._connection.execute(
+                "SELECT id FROM inbox WHERE kind = 'db_size' AND read = 0 LIMIT 1"
+            ).fetchone()
+            if not row:
+                size_mb = size_bytes / (1024 * 1024)
+                self.add_inbox(
+                    kind="db_size",
+                    text=(
+                        f"Allarme dimensione DB: {size_mb:.2f} MB supera la soglia configurata "
+                        f"di {threshold_mb} MB"
+                    ),
+                    ts=ts,
+                )
+            return True
+        return False
 
     # --- Agent registration ---
 

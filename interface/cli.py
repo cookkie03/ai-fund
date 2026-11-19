@@ -41,7 +41,9 @@ def _format_table(headers: Sequence[str], rows: Sequence[Sequence[Any]]) -> str:
 
 def _cmd_run(office: Office, args: argparse.Namespace, out: TextIO) -> int:
     poll_interval = getattr(args, "poll_interval", 0.5)
-    out.write(f"Starting Agent Office loop (poll interval: {poll_interval}s)... Press Ctrl+C to stop.\n")
+    out.write(
+        f"Starting Agent Office loop (poll interval: {poll_interval}s)... Press Ctrl+C to stop.\n"
+    )
     out.flush()
     try:
         office.run(poll_interval=poll_interval)
@@ -302,7 +304,8 @@ def _cmd_orders_approve(office: Office, args: argparse.Namespace, out: TextIO) -
         return 0
     else:
         out.write(
-            f"Order #{order_id} approval failed / deferred: status={outcome.status}, reasons={outcome.reasons}\n"
+            f"Order #{order_id} approval failed / deferred: "
+            f"status={outcome.status}, reasons={outcome.reasons}\n"
         )
         return 1
 
@@ -528,7 +531,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp_ch_show.add_argument("agent", help="Agent name")
     sp_ch_show.add_argument("topic", help="Topic or ticker")
     sp_ch_show.add_argument("--limit", type=int, default=50, help="Max messages")
-    sp_ch_show.add_argument("--kind", default=None, help="Filter by message kind (original/summary)")
+    sp_ch_show.add_argument(
+        "--kind", default=None, help="Filter by message kind (original/summary)"
+    )
     sp_ch_show.add_argument("--json", action="store_true", help="Output JSON")
     sp_ch_show.set_defaults(handler=_cmd_chat_show)
 
@@ -652,10 +657,11 @@ def main(
     raw_args = list(argv if argv is not None else sys.argv[1:])
     parser = build_parser()
 
-    if any(a in ("-h", "--help") for a in raw_args) and not any(
-        a in ("run", "task", "say", "cycles", "chat", "state", "watchlist", "orders", "trades", "portfolio", "data", "inbox", "halt", "resume", "config")
-        for a in raw_args
-    ):
+    subcmds = (
+        "run", "task", "say", "cycles", "chat", "state", "watchlist",
+        "orders", "trades", "portfolio", "data", "inbox", "halt", "resume", "config",
+    )
+    if any(a in ("-h", "--help") for a in raw_args) and not any(a in subcmds for a in raw_args):
         parser.print_help(out)
         return 0
 
@@ -692,7 +698,9 @@ def main(
     cmd_name = getattr(args, "command", "")
     sub_name = getattr(args, "subcommand", None)
     full_cmd = f"{cmd_name} {sub_name}".strip() if sub_name else cmd_name
-    cmd_args = {k: v for k, v in vars(args).items() if k not in ("handler", "command", "subcommand")}
+    cmd_args = {
+        k: v for k, v in vars(args).items() if k not in ("handler", "command", "subcommand")
+    }
 
     try:
         office.db.log_cli_command(full_cmd, cmd_args)

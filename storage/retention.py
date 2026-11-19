@@ -15,6 +15,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -241,3 +242,154 @@ def compact_llm_records(
         else:
             result.append(r)
     return result
+
+
+def run_retention_job(
+    db: Any,
+    today: date | datetime,
+    policy: RetentionPolicy = DEFAULT_RETENTION_POLICY,
+) -> dict[str, int]:
+    """Execute retention and downsampling job on OfficeDB (spec US 96-101).
+
+    1. Compact news older than policy.news_full_text_days: set full_text = NULL.
+    2. Compact llm_calls older than policy.llm_content_days:
+       set prompt_blob = NULL, response_blob = NULL.
+    3. Downsample hourly bars older than policy.hourly_days into daily bars (1d).
+    4. Downsample daily bars older than policy.daily_years (weekly)
+       and policy.weekly_years (monthly).
+    5. Execute PRAGMA incremental_vacuum to reclaim freed database pages.
+    """
+    ref_date = _to_date(today)
+    today_iso = ref_date.isoformat()
+
+    # 1. Compact news
+    cutoff_news = (ref_date - timedelta(days=policy.news_full_text_days)).isoformat()
+    cur_news = db.connection.execute(
+        "UPDATE news SET full_text = NULL "
+        "WHERE SUBSTR(published_at, 1, 10) <= ? AND full_text IS NOT NULL",
+        (cutoff_news,),
+    )
+    compacted_news = cur_news.rowcount
+
+    # 2. Compact LLM calls
+    cutoff_llm = (ref_date - timedelta(days=policy.llm_content_days)).isoformat()
+    cur_llm = db.connection.execute(
+        "UPDATE llm_calls SET prompt_blob = NULL, response_blob = NULL "
+        "WHERE SUBSTR(ts, 1, 10) <= ? AND (prompt_blob IS NOT NULL OR response_blob IS NOT NULL)",
+        (cutoff_llm,),
+    )
+    compacted_llm = cur_llm.rowcount
+
+    # 3. Downsample hourly bars
+    cutoff_hourly = (ref_date - timedelta(days=policy.hourly_days)).isoformat()
+    hourly_rows = db.connection.execute(
+        "SELECT id, symbol, ts, o, h, l, c, v FROM prices_ohlcv "
+        "WHERE interval IN ('1h', '60m') AND SUBSTR(ts, 1, 10) <= ?",
+        (cutoff_hourly,),
+    ).fetchall()
+
+    downsampled_hourly = len(hourly_rows)
+    if hourly_rows:
+        bars_to_ds = [
+            Bar(
+                symbol=r["symbol"],
+                ts=datetime.fromisoformat(r["ts"].replace("Z", "+00:00")),
+                open=Decimal(str(r["o"])),
+                high=Decimal(str(r["h"])),
+                low=Decimal(str(r["l"])),
+                close=Decimal(str(r["c"])),
+                volume=Decimal(str(r["v"])),
+            )
+            for r in hourly_rows
+        ]
+        aggregated_daily = downsample_hourly(bars_to_ds, today=ref_date, policy=policy)
+        for b in aggregated_daily:
+            b_ts = b.ts.isoformat() if isinstance(b.ts, date) else b.ts.date().isoformat()
+            db.connection.execute(
+                """
+                INSERT INTO prices_ohlcv (symbol, ts, interval, o, h, l, c, v, source, fetched_at)
+                VALUES (?, ?, '1d', ?, ?, ?, ?, ?, 'downsampled', ?)
+                ON CONFLICT(symbol, ts, interval) DO UPDATE SET
+                    o = excluded.o, h = excluded.h, l = excluded.l, c = excluded.c, v = excluded.v
+                """,
+                (
+                    b.symbol,
+                    b_ts,
+                    float(b.open),
+                    float(b.high),
+                    float(b.low),
+                    float(b.close),
+                    float(b.volume),
+                    today_iso,
+                ),
+            )
+        hourly_ids = [r["id"] for r in hourly_rows]
+        db.connection.executemany(
+            "DELETE FROM prices_ohlcv WHERE id = ?",
+            [(i,) for i in hourly_ids],
+        )
+
+    # 4. Downsample daily bars (>= 5 years -> 1w; >= 10 years -> 1m)
+    cutoff_daily = _subtract_years(ref_date, policy.daily_years).isoformat()
+    daily_rows = db.connection.execute(
+        "SELECT id, symbol, ts, o, h, l, c, v FROM prices_ohlcv "
+        "WHERE interval = '1d' AND SUBSTR(ts, 1, 10) <= ?",
+        (cutoff_daily,),
+    ).fetchall()
+
+    downsampled_daily = len(daily_rows)
+    if daily_rows:
+        bars_to_ds = [
+            Bar(
+                symbol=r["symbol"],
+                ts=datetime.fromisoformat(r["ts"].replace("Z", "+00:00")),
+                open=Decimal(str(r["o"])),
+                high=Decimal(str(r["h"])),
+                low=Decimal(str(r["l"])),
+                close=Decimal(str(r["c"])),
+                volume=Decimal(str(r["v"])),
+            )
+            for r in daily_rows
+        ]
+        aggregated_bars = downsample_daily_bars(bars_to_ds, today=ref_date, policy=policy)
+        for b in aggregated_bars:
+            b_date = _to_date(b.ts)
+            interval = "1m" if b_date <= _subtract_years(ref_date, policy.weekly_years) else "1w"
+            b_ts = b.ts.isoformat() if isinstance(b.ts, date) else b.ts.date().isoformat()
+            db.connection.execute(
+                """
+                INSERT INTO prices_ohlcv (symbol, ts, interval, o, h, l, c, v, source, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'downsampled', ?)
+                ON CONFLICT(symbol, ts, interval) DO UPDATE SET
+                    o = excluded.o, h = excluded.h, l = excluded.l, c = excluded.c, v = excluded.v
+                """,
+                (
+                    b.symbol,
+                    b_ts,
+                    interval,
+                    float(b.open),
+                    float(b.high),
+                    float(b.low),
+                    float(b.close),
+                    float(b.volume),
+                    today_iso,
+                ),
+            )
+        daily_ids = [r["id"] for r in daily_rows]
+        db.connection.executemany(
+            "DELETE FROM prices_ohlcv WHERE id = ?",
+            [(i,) for i in daily_ids],
+        )
+
+    # 5. Incremental vacuum
+    try:
+        db.connection.execute("PRAGMA incremental_vacuum")
+    except Exception:
+        pass
+
+    return {
+        "compacted_news": compacted_news,
+        "compacted_llm": compacted_llm,
+        "downsampled_hourly": downsampled_hourly,
+        "downsampled_daily": downsampled_daily,
+    }
