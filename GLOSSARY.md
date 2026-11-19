@@ -100,3 +100,27 @@ Umore e posizionamento degli operatori su un titolo, da più fonti possibili (ne
 
 **Rischio evento**:
 Evento noto e datato sul singolo titolo (es. trimestrale) che può causare un gap. Competenza del Fundamental Analyst.
+
+## Runtime
+
+**Runtime**:
+L'unico processo sempre acceso del sistema. Possiede il DB in scrittura, il Trigger engine, i Cicli di analisi, l'order flow e la connessione al broker. Un Runtime per account broker. Decisione in `docs/adr/0003-runtime-unico-writer-event-driven.md`.
+_Avoid_: motore, core service, cache, engine (per il processo)
+
+**Client**:
+Qualunque interfaccia che parla con il Runtime senza possedere stato proprio: CLI, frontend (cockpit), bridge Telegram. Non apre il DB e non ha credenziali broker.
+
+**Comando**:
+Richiesta tipizzata di un Client per cambiare lo stato (es. approvare un ordine, Arresto, `Say`). Il Runtime la valida, la esegue una sola volta per `command_id` e la registra nell'Event log. I comandi che toccano il capitale richiedono una conferma esplicita.
+_Avoid_: azione, chiamata API
+
+**Lettura**:
+Richiesta di sola consultazione a un read model del Runtime (portafoglio, ordini, cicli, inbox, health). Non modifica mai lo stato.
+_Avoid_: query (nel linguaggio di dominio)
+
+**Evento**:
+Fatto di dominio già avvenuto e committato (es. `order.submitted`, `cycle.closed`). Il Runtime lo scrive nell'Event log e lo pubblica ai Client dopo il commit.
+_Avoid_: notifica, alert (un Alert è un input esterno, non un Evento)
+
+**Event log**:
+Tabella append-only `events` del DB: audit di Comandi ed Eventi, e fonte del replay per i Client che si riconnettono. Non sostituisce le tabelle di stato, che restano la verità.

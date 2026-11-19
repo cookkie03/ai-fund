@@ -1,5 +1,7 @@
 # Handoff: core runtime (single writer, event-driven) prima del frontend
 
+> **Superato il 2026-11-20**: decisioni prese e progettazione chiusa. Vedi `docs/adr/0003-runtime-unico-writer-event-driven.md`, `spec.md` e `handoff-implementazione.md` in questa cartella.
+
 Repo: `/home/luca/trading-agent`, branch `docs/agent-restart`. Wiki: `/home/luca/trading-agent-wiki`. Rispondi in italiano, conciso, azione prima della spiegazione. Commit + push di codice e wiki a fine lavoro.
 
 ## Perché esiste questo handoff
