@@ -531,8 +531,6 @@ class Office:
         now_dt = now or self.get_now()
         now_iso = now_dt.isoformat().replace("+00:00", "Z")
 
-        self.ensure_fixed_market_analyst_activations(now_dt)
-
         # 1. Fetch pending due tasks
         rows = self.db.due_scheduled_tasks(now_ts=now_iso)
         if not rows:
@@ -642,38 +640,6 @@ class Office:
         if cache is None:
             return None
         return refresh_watchlist_and_portfolio(cache=cache, force=force, kinds=kinds)
-
-    def run(self, poll_interval: float = 0.5) -> None:
-        """Start scheduler polling loop until stop() is called."""
-        self._stop_event.clear()
-        last_sync = 0.0
-        last_retention = 0.0
-        last_data_refresh = 0.0
-        while not self._stop_event.is_set():
-            try:
-                self.run_once()
-            except Exception as e:
-                logger.error(f"Error in scheduler loop: {e}")
-            now_mono = time.monotonic()
-            if now_mono - last_sync >= self.order_sync_interval:
-                last_sync = now_mono
-                try:
-                    self.order_flow.sync_broker_orders()
-                except Exception as e:
-                    logger.error(f"Error syncing broker orders: {e}")
-            if now_mono - last_retention >= self.retention_interval:
-                last_retention = now_mono
-                try:
-                    self.run_retention()
-                except Exception as e:
-                    logger.error(f"Error running retention job: {e}")
-            if now_mono - last_data_refresh >= self.data_refresh_interval:
-                last_data_refresh = now_mono
-                try:
-                    self.refresh_data()
-                except Exception as e:
-                    logger.error(f"Error refreshing data: {e}")
-            self._stop_event.wait(timeout=poll_interval)
 
     def stop(self) -> None:
         """Signal scheduler loop to stop."""

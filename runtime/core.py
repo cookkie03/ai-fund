@@ -41,7 +41,15 @@ from runtime.handlers import (
     handle_resume,
     handle_say,
 )
+from runtime.jobs import (
+    DataRefreshJob,
+    ExpirePendingOrdersJob,
+    MarketAnalystFixedJob,
+    ReleaseQueuedOrdersJob,
+    RetentionJob,
+)
 from runtime.queries import ReadModel
+from runtime.scheduler import Scheduler
 
 if TYPE_CHECKING:
     from workflows.office import Office
@@ -93,6 +101,14 @@ class Runtime:
         self._command_lock = threading.Lock()
         self.broker_stream_connected = False
         self._running = False
+
+        self.scheduler = Scheduler(runtime=self, clock=office.clock)
+        self.scheduler.register_job(DataRefreshJob(self))
+        self.scheduler.register_job(RetentionJob(self))
+        self.scheduler.register_job(MarketAnalystFixedJob(self))
+        self.scheduler.register_job(ExpirePendingOrdersJob(self))
+        self.scheduler.register_job(ReleaseQueuedOrdersJob(self))
+        self.scheduler.bind_events()
 
     def start(self) -> None:
         """Acquire single-writer process lock and start internal services."""

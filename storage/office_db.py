@@ -647,6 +647,17 @@ class OfficeDB:
         )
         return int(cursor.lastrowid)
 
+    def next_due_ts(self) -> str | None:
+        """Return earliest due timestamp of any pending scheduled task."""
+        row = self._connection.execute(
+            """
+            SELECT MIN(COALESCE(next_attempt_ts, when_ts))
+            FROM scheduled_tasks
+            WHERE status = 'pending'
+            """
+        ).fetchone()
+        return row[0] if row and row[0] is not None else None
+
     def due_scheduled_tasks(
         self, now_ts: str | None = None, limit: int = 50
     ) -> list[dict]:

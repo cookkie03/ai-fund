@@ -46,7 +46,21 @@ def _cmd_run(office: Office, args: argparse.Namespace, out: TextIO) -> int:
     )
     out.flush()
     try:
-        office.run(poll_interval=poll_interval)
+        from runtime.core import Runtime
+        from runtime.scheduler import Scheduler
+
+        rt = Runtime(office=office)
+        scheduler = Scheduler(runtime=rt)
+        orig_stop = office.stop
+
+        def _stop_both() -> None:
+            orig_stop()
+            scheduler.stop()
+            rt.stop()
+
+        office.stop = _stop_both  # type: ignore[method-assign]
+        rt.start()
+        scheduler.run()
     except KeyboardInterrupt:
         out.write("\nStopping Agent Office...\n")
         office.stop()

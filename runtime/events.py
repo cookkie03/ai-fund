@@ -71,6 +71,7 @@ class EventBus:
 
     def __init__(self) -> None:
         self._subscribers: list[Subscription] = []
+        self._listeners: list[Any] = []
         self._lock = threading.Lock()
 
     def subscribe(self, maxsize: int = 1000) -> Subscription:
@@ -84,11 +85,26 @@ class EventBus:
             if sub in self._subscribers:
                 self._subscribers.remove(sub)
 
+    def add_listener(self, listener: Any) -> None:
+        with self._lock:
+            self._listeners.append(listener)
+
+    def remove_listener(self, listener: Any) -> None:
+        with self._lock:
+            if listener in self._listeners:
+                self._listeners.remove(listener)
+
     def publish(self, event: Event) -> None:
         with self._lock:
             subs = list(self._subscribers)
+            listeners = list(self._listeners)
         for sub in subs:
             sub.put(event)
+        for listener in listeners:
+            try:
+                listener(event)
+            except Exception:
+                logger.exception("Error in event bus listener")
 
 
 class EventLog:
