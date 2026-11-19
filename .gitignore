@@ -28,3 +28,10 @@ telegram-claude/__pycache__/
 .qwen
 .hermes
 .impeccable
+.serena
+graphify_out
+graphify-out/
+nohup.out
+*.db
+*.db-shm
+*.db-wal

@@ -360,6 +360,7 @@ class OfficeDB:
             self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._on_commit_callbacks: list[Callable[[], None]] | None = None
+        self._tx_depth = 0
         self._connection = sqlite3.connect(
             str(self.path), isolation_level=None, check_same_thread=False
         )
@@ -414,25 +415,30 @@ class OfficeDB:
     @contextmanager
     def transaction(self) -> Iterator[Self]:
         with self._lock:
-            if self._connection.in_transaction:
-                raise RuntimeError("nested transactions are not supported")
-            self._connection.execute("BEGIN IMMEDIATE")
-            callbacks: list[Callable[[], None]] = []
-            self._on_commit_callbacks = callbacks
+            is_outer = (self._tx_depth == 0)
+            if is_outer:
+                self._connection.execute("BEGIN IMMEDIATE")
+                self._on_commit_callbacks = []
+            self._tx_depth += 1
             try:
                 yield self
             except Exception:
-                self._on_commit_callbacks = None
-                self._connection.rollback()
+                if is_outer:
+                    self._on_commit_callbacks = None
+                    self._connection.rollback()
                 raise
             else:
-                self._connection.commit()
-                self._on_commit_callbacks = None
-                for cb in callbacks:
-                    try:
-                        cb()
-                    except Exception:
-                        logger.exception("Error executing on_commit callback")
+                if is_outer:
+                    self._connection.commit()
+                    callbacks = self._on_commit_callbacks or []
+                    self._on_commit_callbacks = None
+                    for cb in callbacks:
+                        try:
+                            cb()
+                        except Exception:
+                            logger.exception("Error executing on_commit callback")
+            finally:
+                self._tx_depth -= 1
 
     def add_on_commit(self, callback: Callable[[], None]) -> None:
         """Register a callback to run after the current transaction commits, or run now if autocommit."""
