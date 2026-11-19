@@ -1,64 +1,111 @@
 # Trading Agent
 
-Progetto Python per un sistema multi-agente di analisi e gestione di un portafoglio azionario. Gli agenti elaborano informazioni e proposte; calcoli, controlli di rischio ed esecuzione restano deterministicamente verificabili.
+Un "ufficio di agenti di trading" per azioni USA: sei agenti pari (Portfolio Manager, Market, Sentiment, Technical, Fundamental e Risk Analyst) ragionano tramite messaggi in chat, ciascuno richiamato da uno Scheduled task. Gli LLM propongono e discutono; bozza dell'ordine, Risk Gate, trailing stop ed esecuzione sono calcoli deterministici testati. Il broker è Alpaca **paper**; la spec è in [`.scratch/agent-mvp/spec.md`](.scratch/agent-mvp/spec.md).
 
-## Avanzamento parziale al 2026-11-05
+Flusso di un ciclo su un ticker: Scheduled task → il PM scrive ai quattro Analyst → gli Analyst rispondono (e il Risk Analyst calibra `k_entry`/`risk_fraction`) → il codice calcola la bozza dell'ordine → il PM la accetta o rimanda (`defer`) → il Risk Gate può solo bloccare → ordine bracket (limit + take profit + stop) su Alpaca, in automatico o dopo approvazione manuale. Ogni decisione programma un controllo futuro.
 
-Il grafo prototipale `agents/graph.py` è separato dal runtime e usa analisti, PM e controlli iniettati; il routing è provvisorio. Quattro desk deterministici limitati, un Portfolio Manager con backend iniettato e astensione e un adapter di rischio per proposte long sono disponibili separatamente. Nessuna integrazione provider o broker né ragionamento agentico pieno. `agents/desk_adapters.py` collega i quattro desk richiedendo evidence e usando il timestamp della fonte più vecchia; il gate verifica identità del symbol e direzione long. L'adapter PM espone `pm_decision` mantenendo l'esito del grafo `pending`. Nessun backend reale; routing non deciso. Il clock è iniettabile: senza clock il grafo usa `now` fornito dal chiamante, adatto al replay ma non a rilevare il tempo trascorso durante il PM. Verificati `uv run pytest -q` (200 passati, 1 saltato, 2 warning) e `uv run ruff check agents/graph.py agents/desks.py agents/desk_adapters.py agents/portfolio_manager.py agents/portfolio_manager_adapter.py agents/risk_adapter.py tests/agents` (superato). Dettagli in [architettura](docs/architecture.md).
+## Requisiti
 
-## Stato verificato al 2026-11-02
-
-Nel workspace attuale, inclusi test locali non tracciati preesistenti, la suite riporta **157 passed, 1 skipped, 2 warning**. Il test Alpaca paper saltato richiede `--alpaca-paper`. Lint e build frontend sono passati.
-
-La review PM è sperimentale: un reviewer iniettato può approvare l'esecuzione se supera i controlli strutturali e il risk gate. L'adapter OmniRoute locale usa `OMNIROUTE_API_KEY` e `OMNIROUTE_MODEL` (default `my-combo`). Verificati E2E offline simulato e percorso provider simulato → OmniRoute reale → dashboard con decisione pending e broker simulato. Non usare il percorso con un broker reale: la validazione delle citazioni non verifica la qualità della tesi.
+- Python 3.12 e [`uv`](https://docs.astral.sh/uv/); Docker con Compose per la produzione.
+- Un endpoint LLM compatibile OpenAI (di default OmniRoute su `http://localhost:20128/v1`, modello `my-combo`).
+- Un conto Alpaca paper (chiave e secret).
 
 ## Configurazione
 
-`config.Settings` centralizza i parametri runtime e legge `.env` quando il comando lo abilita. I segreti Alpaca devono essere forniti insieme; una configurazione parziale viene rifiutata. I default locali sono `data/trading-agent.db`, `localhost` e porta `8000`.
+I segreti stanno solo nel file `.env` (mai committato, mai nel TOML):
 
-## Development locale
+| Variabile | Uso |
+|---|---|
+| `ALPACA_API_KEY`, `ALPACA_SECRET_KEY` | Obbligatorie: broker, portafoglio e news Alpaca. |
+| `ALPACA_TRADING_URL` | Facoltativa; default `https://paper-api.alpaca.markets/v2`. |
+| `OMNIROUTE_API_KEY` | Chiave dell'endpoint LLM (nome indicato da `api_key_env` per ogni agente). |
+| `OFFICE_LLM_ENDPOINT` | Facoltativa: sovrascrive l'endpoint di tutti gli agenti (usata da Docker). |
+| `DATA_PRICES_PROVIDER` | `yahoo` (default) o `openbb`; se uno non parte, si usa l'altro. |
+| `TRADING_AGENT_DB` | Percorso del DB SQLite; default `data/trading-agent.db`. |
 
-Per eseguire i comandi del motore in locale:
+Le impostazioni non segrete sono in [`config/office.toml`](config/office.toml):
+
+- `approval_mode`: `"auto"` invia subito l'ordine al broker, `"manual"` lo mette in coda finché non lo approvi con `orders approve`. **Per le prime prove usa `manual`.**
+- `max_parallel`, `[budgets]` (limiti di messaggi per ciclo), `[schedule]` (orari NY), `[retention]` (conservazione dati) e `db_size_alert_mb`.
+- `[limits]`: i limiti del Risk Gate (rischio per trade 1%, posizione 10%, settore 30%, cassa minima 5%, R:R minimo 1,5, embargo utili 2 giorni).
+- `[agents.*]`: endpoint, modello, `effort` e `api_key_env` di ciascun agente.
+
+Controlla configurazione e credenziali con `uv run trading-agent config check`.
+
+I prompt degli agenti sono in [`prompts/`](prompts/) (un file Markdown per agente, versionato; l'hash finisce nel registro di ogni chiamata LLM). Sono bozze marcate "DRAFT per la revisione di Luca": rileggili e correggili.
+
+## Uso in locale
 
 ```bash
-uv run trading-agent <cmd>
+uv sync
+uv run trading-agent config check
+uv run trading-agent run          # avvia lo scheduler (resta in primo piano)
 ```
 
-Le formule pure disponibili in `analysis/indicators.py` sono SMA, EMA, RSI Wilder, MACD, ATR Wilder e Pivot Points classici. Sono funzioni deterministiche testate.
+In un altro terminale:
 
-## Ricerca tecnica
+```bash
+uv run trading-agent task AAPL --reason "Valuta un ingresso long"   # accoda un ciclo manuale
+uv run trading-agent cycles list                # cicli e loro esito
+uv run trading-agent chat show portfolio_manager AAPL    # conversazione del PM sul ticker
+uv run trading-agent state show AAPL            # stato condiviso (analisi, coefficienti, bozza)
+uv run trading-agent orders list                # ordini e stato
+uv run trading-agent orders approve <id>        # con approval_mode = "manual"
+uv run trading-agent orders reject <id>
+uv run trading-agent orders sync                # allinea gli ordini allo stato del broker
+uv run trading-agent trades list                # trade aperti/chiusi (trailing stop)
+uv run trading-agent portfolio sync             # equity, cassa, posizioni da Alpaca
+uv run trading-agent watchlist --help           # gestione della watchlist
+uv run trading-agent inbox                      # avvisi: rischio, budget, errori, dimensione DB
+uv run trading-agent say <agente> <messaggio>   # scrivi tu a un agente
+uv run trading-agent halt                       # ferma tutto e cancella gli ordini aperti
+uv run trading-agent resume
+```
 
-Il confronto datato con TradingAgents, Qlib, QuantLab e vectorbt è in [`docs/research/prior-art-benchmark.md`](docs/research/prior-art-benchmark.md). Le repository esterne sono riferimenti selettivi: non sostituiscono i contratti locali, la provenance SQLite o il replay canonico.
+Ogni sottocomando ha `--help`.
 
-## Esecuzione con Docker
-
-In produzione o sul server:
+## Produzione con Docker
 
 ```bash
 docker compose -f compose.engine.yaml up -d --build
+docker compose -f compose.engine.yaml logs -f engine
 ```
 
-Per interagire con la CLI del container in esecuzione:
+Il servizio `engine` legge `.env`, tiene il DB nel volume `trading-agent-data` e si unisce alla rete Docker `omniroute_default` per raggiungere OmniRoute (`OFFICE_LLM_ENDPOINT`). Per usare la CLI dentro il container:
 
 ```bash
-docker compose -f compose.engine.yaml exec -T engine uv run --no-sync trading-agent <cmd>
+docker compose -f compose.engine.yaml exec -T engine uv run --no-sync trading-agent <comando>
 ```
 
-## Ricerca semantica con MemPalace
-
-MemPalace è una dipendenza runtime del progetto e usa il palace condiviso in
-`/home/luca/.config/mempalace/palace`. Per verificare l'installazione e la ricerca:
+## Test
 
 ```bash
-uv run mempalace --version
-uv run mempalace --palace /home/luca/.config/mempalace/palace status
-uv run mempalace --palace /home/luca/.config/mempalace/palace search "query semantica"
-claude mcp get mempalace
+uv run pytest -q                                                       # suite offline (broker, LLM e dati finti)
+uv run pytest tests/integration/test_office_smoke.py --alpaca-paper -m integration -q -s   # opt-in: LLM veri, broker finto
 ```
 
-Il server MCP deve puntare a `mempalace-mcp --palace /home/luca/.config/mempalace/palace`.
-La raccolta mantiene il repository principale e tutti i worktree Git registrati; prima di
-rimuovere dati usare sempre `sync --dry-run` e verificare il report.
+Lo smoke test richiede `OMNIROUTE_API_KEY` e legge dati live con `OFFICE_SMOKE_LIVE_DATA=1`. Lint: `uv run ruff check execution tools workflows storage bootstrap.py interface agents data analysis`.
 
-## Strategy state
+## Struttura
 
+| Cartella | Contenuto |
+|---|---|
+| `workflows/` | Motore (`Office`), ciclo (`CycleRunner`), scheduling, calendario di mercato |
+| `agents/` | Backend LLM sostituibile (OpenAI-compatibile) e backend finto per i test |
+| `tools/` | Ambiente degli agenti: tool per ruolo, schemi Pydantic |
+| `execution/` | Bozza dell'ordine, Risk Gate, flusso ordini, trade manager, trailing |
+| `storage/` | DB SQLite (WAL), registro LLM/tool, retention |
+| `data/` | Cache dati DB-first e provider (Yahoo, Alpaca news, OpenBB) |
+| `analysis/` | Indicatori tecnici (SMA, EMA, RSI, MACD, ATR, pivot) |
+| `interface/` | CLI `trading-agent` |
+| `config/` | Impostazioni (`office.toml`) |
+| `prompts/` | System prompt degli agenti |
+| `docs/` | [Architettura](docs/architecture.md) e ricerca |
+
+`frontend/`, `openbb-ui/` e `telegram-claude/` sono app separate non collegate al motore.
+
+## Avvertenze
+
+- È un sistema sperimentale collegato a un conto **paper**. Nessuna informazione paper/live è esposta agli agenti, ma non collegarlo a un conto reale senza una revisione dei prompt e dei limiti del Risk Gate.
+- Gli LLM possono sbagliare: il Risk Gate blocca solo ciò che viola i limiti numerici, non valuta la qualità della tesi.
+- Ogni ciclo reale consuma token dell'endpoint LLM (tipicamente 30 s – 4 min per ticker).
