@@ -37,10 +37,10 @@ class FakeMarketData:
         for i in range(35):
             o = base + i
             h = o + 2.0
-            l = o - 1.5
+            low = o - 1.5
             c = o + 1.0
             bars.append(
-                {"ts": f"2026-01-{i+1:02d}T00:00:00Z", "o": o, "h": h, "l": l, "c": c, "v": 1000}
+                {"ts": f"2026-01-{i+1:02d}T00:00:00Z", "o": o, "h": h, "l": low, "c": c, "v": 1000}
             )
         return bars
 

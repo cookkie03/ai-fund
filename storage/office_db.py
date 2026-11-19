@@ -9,15 +9,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import sqlite3
 import threading
 import zlib
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
+
+logger = logging.getLogger(__name__)
 
 
 def utc_now_iso() -> str:
@@ -327,6 +330,24 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         );
         """,
     ),
+    (
+        2,
+        "002_events_table",
+        """
+        CREATE TABLE IF NOT EXISTS events (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts         TEXT NOT NULL,
+            type       TEXT NOT NULL,
+            actor      TEXT NOT NULL,
+            subject    TEXT,
+            command_id TEXT,
+            payload    TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS events_type_ts ON events(type, ts);
+        CREATE UNIQUE INDEX IF NOT EXISTS events_command_once ON events(command_id)
+            WHERE command_id IS NOT NULL AND type = 'command.accepted';
+        """,
+    ),
 ]
 
 
@@ -338,6 +359,7 @@ class OfficeDB:
         if self.path != Path(":memory:"):
             self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        self._on_commit_callbacks: list[Callable[[], None]] | None = None
         self._connection = sqlite3.connect(
             str(self.path), isolation_level=None, check_same_thread=False
         )
@@ -395,13 +417,30 @@ class OfficeDB:
             if self._connection.in_transaction:
                 raise RuntimeError("nested transactions are not supported")
             self._connection.execute("BEGIN IMMEDIATE")
+            callbacks: list[Callable[[], None]] = []
+            self._on_commit_callbacks = callbacks
             try:
                 yield self
             except Exception:
+                self._on_commit_callbacks = None
                 self._connection.rollback()
                 raise
             else:
                 self._connection.commit()
+                self._on_commit_callbacks = None
+                for cb in callbacks:
+                    try:
+                        cb()
+                    except Exception:
+                        logger.exception("Error executing on_commit callback")
+
+    def add_on_commit(self, callback: Callable[[], None]) -> None:
+        """Register a callback to run after the current transaction commits, or run now if autocommit."""
+        with self._lock:
+            if self._on_commit_callbacks is not None:
+                self._on_commit_callbacks.append(callback)
+            else:
+                callback()
 
     def close(self) -> None:
         self._connection.close()

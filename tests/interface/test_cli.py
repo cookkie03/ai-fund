@@ -235,7 +235,7 @@ def test_cli_trades_list(office_factory, test_db):
         client_order_id="c_001",
         status="filled",
     )
-    tid = test_db.insert_trade(
+    _ = test_db.insert_trade(
         ticker="MSFT",
         entry_order_id=1,
         entry_price=300.0,

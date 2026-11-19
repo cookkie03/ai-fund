@@ -1,3 +1,4 @@
+from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -49,7 +50,7 @@ def test_scheduled_task_frozen_dataclass():
     assert task.attempts == 0
     assert task.next_attempt_not_before is None
 
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         task.reason = "modified"  # frozen
 
 
@@ -97,7 +98,9 @@ def test_clamp_schedule_date_above_max():
 
 def test_clamp_schedule_date_with_callable_calendar():
     # Test calendar as a callable or object with is_trading_day
-    calendar = lambda d: d.weekday() < 5
+    def calendar(d):
+        return d.weekday() < 5
+
     now = datetime(2026, 11, 18, 10, 0, tzinfo=UTC)
     requested = datetime(2026, 12, 18, 10, 0, tzinfo=UTC)
     clamped = clamp_schedule_date(requested, now, min_trading_days=1, max_trading_days=2, calendar=calendar)

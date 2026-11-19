@@ -36,9 +36,9 @@ class FakeMarketData:
         for i in range(35):
             o = base + i
             h = o + 2.0
-            l = o - 1.5
+            low = o - 1.5
             c = o + 1.0
-            bars.append({"ts": f"2026-01-{i+1:02d}T00:00:00Z", "o": o, "h": h, "l": l, "c": c, "v": 1000})
+            bars.append({"ts": f"2026-01-{i+1:02d}T00:00:00Z", "o": o, "h": h, "l": low, "c": c, "v": 1000})
         return bars
 
     def news(
@@ -284,7 +284,7 @@ def test_analyst_write_analysis_and_suggest(test_setup):
     assert state["suggestions"]["technical_analyst"] == {"direction": "buy", "conviction": 0.8}
 
     # Invalid suggestion direction
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         tools["suggest"].execute(
             ToolCall(
                 id="3",
@@ -294,7 +294,7 @@ def test_analyst_write_analysis_and_suggest(test_setup):
         )
 
     # Invalid conviction
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         tools["suggest"].execute(
             ToolCall(
                 id="4",
