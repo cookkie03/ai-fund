@@ -167,7 +167,13 @@ def test_smoke_submit_fails_order_reconcilable_not_lost(tmp_path):
     """Smoke: submit con errore broker => ordine riconciliabile, non perso da rollback."""
     db = OfficeDB(tmp_path / "smoke_submit_err.db")
     fake_broker = FakeBracketBroker()
-    fake_broker.submit_bracket = MagicMock(side_effect=RuntimeError("Broker gateway timeout"))
+    submit = fake_broker.submit_bracket
+
+    def accepted_then_timeout(**kwargs):
+        submit(**kwargs)
+        raise TimeoutError("Broker gateway timeout")
+
+    fake_broker.submit_bracket = MagicMock(side_effect=accepted_then_timeout)
 
     acc = Account(
         id="test",
@@ -214,4 +220,10 @@ def test_smoke_submit_fails_order_reconcilable_not_lost(tmp_path):
     saved = db.get_order(outcome.order_id)
     assert saved is not None
     assert saved["client_order_id"] == "cid_reconcilable"
-    assert saved["status"] in ("submitting", "rejected")
+    assert saved["status"] == "submitting"
+    office.order_flow.sync_broker_orders()
+    saved = db.get_order(outcome.order_id)
+    assert saved["status"] == "submitted"
+    assert saved["broker_order_id"] == fake_broker.client_map["cid_reconcilable"]
+    office.order_flow.sync_broker_orders()
+    assert len(fake_broker.orders) == 1

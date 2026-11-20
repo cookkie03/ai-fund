@@ -506,6 +506,9 @@ class OrderFlow:
         if draft.stop is None or draft.take_profit is None:
             raise ValueError("Buy bracket order requires non-null stop and take_profit")
 
+        with self.db.transaction():
+            self.db.update_order_status(order_id, status="submitting")
+
         try:
             broker_order_id = self.broker.submit_bracket(
                 client_order_id=client_order_id,
@@ -516,13 +519,12 @@ class OrderFlow:
                 take_profit=draft.take_profit,
                 stop_loss=draft.stop,
             )
-        except Exception as exc:  # broker refused or unreachable: never leave the order pending
-            logger.error("Broker rejected bracket order %s: %s", client_order_id, exc)
+        except Exception as exc:  # The broker may have accepted the order before the error.
+            logger.error("Broker submit outcome unknown for %s: %s", client_order_id, exc)
             with self.db.transaction():
-                self.db.update_order_status(order_id, status="rejected")
                 self.db.insert_order_event(order_id, "broker_error", {"error": str(exc)})
             return Outcome(
-                status="rejected",
+                status="submitting",
                 order_id=order_id,
                 client_order_id=client_order_id,
                 reasons=(f"Broker error: {exc}",),
@@ -731,17 +733,31 @@ class OrderFlow:
         """
         rows = self.db.connection.execute(
             "SELECT id, status, broker_order_id, client_order_id, ticker, side FROM orders "
-            "WHERE status IN ('submitted', 'submitting') AND broker_order_id IS NOT NULL"
+            "WHERE status IN ('submitted', 'submitting')"
         ).fetchall()
         changed: list[int] = []
         for row in rows:
             try:
-                broker_order = self.broker.get_order(row["broker_order_id"])
+                broker_order = (
+                    self.broker.get_order(row["broker_order_id"])
+                    if row["broker_order_id"]
+                    else self.broker.find_by_client_id(row["client_order_id"])
+                )
             except Exception as exc:
-                logger.warning("Order sync failed for %s: %s", row["broker_order_id"], exc)
+                logger.warning("Order sync failed for %s: %s", row["client_order_id"], exc)
                 continue
             if broker_order is None:
                 continue
+            if not row["broker_order_id"]:
+                broker_id = getattr(broker_order, "broker_order_id", None) or getattr(broker_order, "id", None)
+                if not broker_id:
+                    continue
+                with self.db.transaction():
+                    self.db.update_order_status(row["id"], status=row["status"], broker_order_id=str(broker_id))
+                row = self.db.connection.execute(
+                    "SELECT id, status, broker_order_id, client_order_id, ticker, side FROM orders WHERE id = ?",
+                    (row["id"],),
+                ).fetchone()
             raw = getattr(broker_order, "status", None)
             raw = str(getattr(raw, "value", raw)).split(".")[-1].lower()
             new_status = self._BROKER_STATUS_MAP.get(raw)

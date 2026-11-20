@@ -448,7 +448,7 @@ class _RejectingBroker(FakeBracketBroker):
         raise RuntimeError('{"code":42210000,"message":"sub-penny increment"}')
 
 
-def test_broker_error_rejects_order_instead_of_leaving_it_pending(
+def test_broker_error_preserves_order_for_reconciliation(
     db, valid_buy_draft, valid_gate_ctx
 ):
     """A broker failure must not leave the order pending nor raise out of the flow."""
@@ -458,10 +458,10 @@ def test_broker_error_rejects_order_instead_of_leaving_it_pending(
         ticker="AAPL", action="accept", draft=valid_buy_draft, ctx=valid_gate_ctx
     )
 
-    assert outcome.status == "rejected"
+    assert outcome.status == "submitting"
     assert outcome.order_id is not None
     assert any("sub-penny" in reason for reason in outcome.reasons)
-    assert db.get_order(outcome.order_id)["status"] == "rejected"
+    assert db.get_order(outcome.order_id)["status"] == "submitting"
     events = [e["event"] for e in db.list_order_events(outcome.order_id)]
     assert "broker_error" in events
 
