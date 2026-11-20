@@ -830,35 +830,119 @@ class OrderFlow:
                 self.apply_broker_update(update)
 
         # 2. Check open trades: if a trade is open in DB, but no position exists at broker, close trade!
-        reader = self.broker_reader or getattr(self.broker, "broker_reader", None) or (self.broker if hasattr(self.broker, "get_positions") else None)
+        reader = (
+            self.broker_reader
+            or getattr(self.broker, "broker_reader", None)
+            or (self.broker if hasattr(self.broker, "get_positions") else None)
+        )
         if reader is not None and self.trade_manager is not None:
             try:
                 positions = reader.get_positions()
-                pos_symbols = {
-                    str(getattr(p, "symbol", "") if hasattr(p, "symbol") else p.get("symbol", "")).upper()
-                    for p in positions
-                    if float(getattr(p, "quantity", 0) if hasattr(p, "quantity") else p.get("quantity", 0)) > 0
-                }
-                open_trades = self.db.connection.execute(
-                    "SELECT * FROM trades WHERE closed_ts IS NULL"
-                ).fetchall()
-                for trade in open_trades:
-                    ticker = str(trade["ticker"]).upper()
-                    if ticker not in pos_symbols:
-                        # Position was closed offline! Close the trade.
-                        close_price = float(trade["entry_price"])
-                        close_reason = "tp"
-                        self.trade_manager.record_exit_fill(
-                            trade_id=int(trade["id"]),
-                            exit_price=close_price,
-                            exit_reason=close_reason,
-                            ts=utc_now_iso(),
-                            ticker=ticker,
-                        )
             except Exception as exc:
-                logger.warning("Error checking open trade positions during sync: %s", exc)
+                logger.warning("Error reading broker positions during sync: %s", exc)
+                return changed
+
+            if positions is None:
+                logger.warning("Broker reader returned None for positions; skipping trade reconciliation")
+                return changed
+
+            pos_symbols: set[str] = set()
+            for p in positions:
+                if isinstance(p, dict):
+                    sym = str(p.get("symbol", "")).upper()
+                    qty_raw = p.get("qty") if p.get("qty") is not None else p.get("quantity", 0)
+                else:
+                    sym = str(getattr(p, "symbol", "")).upper()
+                    qty_raw = getattr(p, "qty", None)
+                    if qty_raw is None:
+                        qty_raw = getattr(p, "quantity", 0)
+                try:
+                    qty_val = float(qty_raw or 0)
+                except (ValueError, TypeError):
+                    qty_val = 0.0
+                if sym and qty_val > 0:
+                    pos_symbols.add(sym)
+
+            open_trades = self.db.connection.execute(
+                "SELECT * FROM trades WHERE closed_ts IS NULL"
+            ).fetchall()
+            for trade in open_trades:
+                ticker = str(trade["ticker"]).upper()
+                if ticker not in pos_symbols:
+                    # Position was closed offline! Reconstruct real exit fill or mark reconciled_unknown
+                    exit_fill_price, exit_reason, exit_ts = self._find_exit_fill_for_trade(trade)
+                    self.trade_manager.record_exit_fill(
+                        trade_id=int(trade["id"]),
+                        exit_price=exit_fill_price,
+                        exit_reason=exit_reason,
+                        ts=exit_ts or utc_now_iso(),
+                        ticker=ticker,
+                    )
 
         return changed
+
+    def _find_exit_fill_for_trade(self, trade: Any) -> tuple[float | None, str, str | None]:
+        """Try to reconstruct real exit fill from broker orders (legs / closed orders).
+
+        Returns (exit_price, exit_reason, exit_ts).
+        If not reconstructable, returns (None, 'reconciled_unknown', None).
+        """
+        ticker = str(trade["ticker"]).upper()
+        # 1. Check parent order legs if parent broker_order_id exists
+        entry_order = self.db.get_order(trade["entry_order_id"]) if trade["entry_order_id"] else None
+        parent_id = entry_order["broker_order_id"] if entry_order else None
+        if parent_id and hasattr(self.broker, "get_order"):
+            try:
+                parent_order = self.broker.get_order(parent_id)
+                legs = getattr(parent_order, "legs", None) or []
+                for leg in legs:
+                    leg_status = str(getattr(leg, "status", "")).lower()
+                    if leg_status in ("fill", "filled"):
+                        price = (
+                            getattr(leg, "average_fill_price", None)
+                            or getattr(leg, "filled_avg_price", None)
+                            or getattr(leg, "limit_price", None)
+                            or getattr(leg, "price", None)
+                        )
+                        order_type = str(getattr(leg, "order_type", getattr(leg, "type", ""))).lower()
+                        reason = "sl" if "stop" in order_type else "tp"
+                        ts = str(getattr(leg, "filled_at", None) or getattr(leg, "updated_at", None) or "")
+                        return (float(price) if price is not None else None, reason, ts or None)
+            except Exception as exc:
+                logger.debug("Error checking parent order legs for trade %s: %s", trade["id"], exc)
+
+        # 2. Check broker's recent closed orders or get_orders
+        reader = (
+            self.broker_reader
+            or getattr(self.broker, "broker_reader", None)
+            or (self.broker if hasattr(self.broker, "get_orders") else None)
+        )
+        if reader is not None and hasattr(reader, "get_orders"):
+            try:
+                orders = reader.get_orders()
+                for o in orders:
+                    o_sym = str(getattr(o, "symbol", "") if hasattr(o, "symbol") else o.get("symbol", "")).upper()
+                    o_status = str(getattr(o, "status", "") if hasattr(o, "status") else o.get("status", "")).lower()
+                    o_side = str(getattr(o, "side", "") if hasattr(o, "side") else o.get("side", "")).lower()
+                    if o_sym == ticker and o_side == "sell" and o_status in ("fill", "filled"):
+                        price = (
+                            getattr(o, "average_fill_price", None)
+                            or getattr(o, "filled_avg_price", None)
+                            or (o.get("filled_avg_price") if isinstance(o, dict) else None)
+                            or (o.get("limit_price") if isinstance(o, dict) else None)
+                        )
+                        raw_type = getattr(o, "order_type", getattr(o, "type", None)) or (
+                            o.get("order_type") if isinstance(o, dict) else None
+                        ) or (o.get("type") if isinstance(o, dict) else "")
+                        o_type = str(raw_type).lower()
+                        reason = "sl" if "stop" in o_type else "tp"
+                        ts = str(getattr(o, "filled_at", None) or (o.get("filled_at") if isinstance(o, dict) else "") or "")
+                        return (float(price) if price is not None else None, reason, ts or None)
+            except Exception as exc:
+                logger.debug("Error checking get_orders for trade %s: %s", trade["id"], exc)
+
+        # 3. Not reconstructable
+        return (None, "reconciled_unknown", None)
 
     def _find_open_bracket_order_id(self, ticker: str) -> str | None:
         """Find the broker order ID of the active bracket order for a ticker."""

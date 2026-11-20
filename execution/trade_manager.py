@@ -17,7 +17,7 @@ from execution.trailing import (
 )
 from storage.office_db import OfficeDB, utc_now_iso
 
-ExitReason = Literal["tp", "sl", "pm_sell", "expired"]
+ExitReason = Literal["tp", "sl", "pm_sell", "expired", "reconciled_unknown"]
 
 
 class TradeManager:
@@ -218,7 +218,7 @@ class TradeManager:
     def record_exit_fill(
         self,
         trade_id: int | None = None,
-        exit_price: Decimal | float | int | str = 0,
+        exit_price: Decimal | float | int | str | None = None,
         exit_reason: ExitReason = "tp",
         ts: str | None = None,
         ticker: str | None = None,
@@ -226,7 +226,7 @@ class TradeManager:
         exit_order_id: int | None = None,
     ) -> None:
         """Record exit fill for an open Trade, closing it with specified exit reason."""
-        if exit_reason not in ("tp", "sl", "pm_sell", "expired"):
+        if exit_reason not in ("tp", "sl", "pm_sell", "expired", "reconciled_unknown"):
             raise ValueError(f"Invalid exit reason: {exit_reason}")
 
         tid = trade_id
@@ -248,7 +248,8 @@ class TradeManager:
             raise KeyError(f"Trade {trade_id} not found")
 
         now_ts = ts or utc_now_iso()
-        price_dec = Decimal(str(exit_price))
+        price_dec = Decimal(str(exit_price)) if exit_price is not None else None
+        price_val = float(price_dec) if price_dec is not None else None
 
         events: list[dict[str, Any]] = (
             json.loads(trade["events_json"]) if trade["events_json"] else []
@@ -257,14 +258,14 @@ class TradeManager:
             {
                 "ts": now_ts,
                 "event": f"exit_{exit_reason}",
-                "price": float(price_dec),
+                "price": price_val,
                 "reason": exit_reason,
             }
         )
 
         self.db.close_trade(
             trade_id=tid,
-            exit_price=float(price_dec),
+            exit_price=price_val,
             exit_reason=exit_reason,
             closed_ts=now_ts,
             events=events,
@@ -275,9 +276,14 @@ class TradeManager:
         self._trade_ids.pop(ticker, None)
         self._trade_orders.pop(ticker, None)
 
+        inbox_msg = (
+            f"Trade {tid} on {ticker} chiuso per riconciliazione: posizione broker assente ma fill non ricostruibile"
+            if exit_reason == "reconciled_unknown"
+            else f"Trade {tid} on {ticker} closed via {exit_reason} at {price_dec}"
+        )
         self.db.add_inbox(
             "order_executed",
-            f"Trade {tid} on {ticker} closed via {exit_reason} at {price_dec}",
+            inbox_msg,
             ts=now_ts,
         )
 
@@ -288,7 +294,7 @@ class TradeManager:
                 payload={
                     "trade_id": tid,
                     "ticker": ticker,
-                    "exit_price": float(price_dec),
+                    "exit_price": price_val,
                     "exit_reason": exit_reason,
                     "closed_ts": now_ts,
                 },

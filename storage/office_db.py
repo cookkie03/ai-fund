@@ -139,7 +139,7 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
             opened_ts TEXT NOT NULL,
             closed_ts TEXT,
             exit_reason TEXT
-                CHECK (exit_reason IS NULL OR exit_reason IN ('tp', 'sl', 'pm_sell', 'expired')),
+                CHECK (exit_reason IS NULL OR exit_reason IN ('tp', 'sl', 'pm_sell', 'expired', 'reconciled_unknown')),
             entry_price REAL NOT NULL,
             exit_price REAL,
             qty REAL NOT NULL,
@@ -346,6 +346,31 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         CREATE INDEX IF NOT EXISTS events_type_ts ON events(type, ts);
         CREATE UNIQUE INDEX IF NOT EXISTS events_command_once ON events(command_id)
             WHERE command_id IS NOT NULL AND type = 'command.accepted';
+        """,
+    ),
+    (
+        3,
+        "003_reconciled_unknown_exit_reason",
+        """
+        PRAGMA foreign_keys = OFF;
+        CREATE TABLE IF NOT EXISTS trades_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker TEXT NOT NULL,
+            entry_order_id INTEGER NOT NULL,
+            opened_ts TEXT NOT NULL,
+            closed_ts TEXT,
+            exit_reason TEXT
+                CHECK (exit_reason IS NULL OR exit_reason IN ('tp', 'sl', 'pm_sell', 'expired', 'reconciled_unknown')),
+            entry_price REAL NOT NULL,
+            exit_price REAL,
+            qty REAL NOT NULL,
+            events_json TEXT NOT NULL DEFAULT '[]',
+            FOREIGN KEY (entry_order_id) REFERENCES orders(id)
+        );
+        INSERT INTO trades_new SELECT id, ticker, entry_order_id, opened_ts, closed_ts, exit_reason, entry_price, exit_price, qty, events_json FROM trades;
+        DROP TABLE trades;
+        ALTER TABLE trades_new RENAME TO trades;
+        PRAGMA foreign_keys = ON;
         """,
     ),
 ]
@@ -975,12 +1000,12 @@ class OfficeDB:
     def close_trade(
         self,
         trade_id: int,
-        exit_price: float,
-        exit_reason: str,
+        exit_price: float | None = None,
+        exit_reason: str = "tp",
         closed_ts: str | None = None,
         events: list | str | None = None,
     ) -> None:
-        if exit_reason not in ("tp", "sl", "pm_sell", "expired"):
+        if exit_reason not in ("tp", "sl", "pm_sell", "expired", "reconciled_unknown"):
             raise ValueError(f"Invalid exit reason: {exit_reason}")
         closed_ts = closed_ts or utc_now_iso()
         if events is not None:

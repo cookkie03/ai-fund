@@ -95,14 +95,27 @@ class SafeBrokerReader:
         res: list[dict[str, Any]] = []
         for p in positions:
             if isinstance(p, dict):
-                res.append(p)
-            else:
+                qty = p.get("qty")
+                if qty is None:
+                    qty = p.get("quantity", 0)
                 res.append(
                     {
-                        "symbol": getattr(p, "symbol", ""),
-                        "qty": float(getattr(p, "qty", 0)),
-                        "market_value": float(getattr(p, "market_value", 0.0)),
-                        "cost_basis": float(getattr(p, "cost_basis", 0.0)),
+                        "symbol": str(p.get("symbol", "")).upper(),
+                        "qty": float(qty),
+                        "market_value": float(p.get("market_value", 0.0) or 0.0),
+                        "cost_basis": float(p.get("cost_basis", 0.0) or 0.0),
+                    }
+                )
+            else:
+                qty = getattr(p, "qty", None)
+                if qty is None:
+                    qty = getattr(p, "quantity", 0)
+                res.append(
+                    {
+                        "symbol": str(getattr(p, "symbol", "")).upper(),
+                        "qty": float(qty),
+                        "market_value": float(getattr(p, "market_value", 0.0) or 0.0),
+                        "cost_basis": float(getattr(p, "cost_basis", 0.0) or 0.0),
                     }
                 )
         return res
