@@ -69,6 +69,30 @@ class BracketBroker(Protocol):
         ...
 
 
+def _is_explicit_rejection(exc: Exception) -> bool:
+    """Check if exception represents an explicit broker rejection (e.g. 4xx HTTP error)."""
+    # 1. BrokerError with status_code
+    status = getattr(exc, "status_code", None)
+    if status is not None and 400 <= int(status) < 500:
+        return True
+
+    # 2. Check for Alpaca or HTTP response status_code attribute
+    resp = getattr(exc, "response", None)
+    if resp is not None:
+        resp_status = getattr(resp, "status_code", getattr(resp, "status", None))
+        if resp_status is not None and 400 <= int(resp_status) < 500:
+            return True
+
+    # 3. Check error string for common 4xx patterns or JSON error code
+    exc_str = str(exc).lower()
+    if any(pat in exc_str for pat in ("422", "400", "403", "sub-penny", "invalid", "insufficient")):
+        # Ensure it's not a 5xx or connection/timeout message
+        if not any(net in exc_str for net in ("timeout", "connection", "500", "502", "503", "504")):
+            return True
+
+    return False
+
+
 class SystemHalt:
     """Manages system halt state stored durably in OfficeDB."""
 
@@ -427,7 +451,11 @@ class OrderFlow:
             )
 
         # 2. Check broker idempotency (find_by_client_id)
-        existing = self.broker.find_by_client_id(client_order_id)
+        try:
+            existing = self.broker.find_by_client_id(client_order_id)
+        except Exception as exc:
+            logger.debug("find_by_client_id before submit failed for %s: %s", client_order_id, exc)
+            existing = None
         if existing is not None:
             broker_order_id = getattr(
                 existing,
@@ -519,15 +547,51 @@ class OrderFlow:
                 take_profit=draft.take_profit,
                 stop_loss=draft.stop,
             )
-        except Exception as exc:  # The broker may have accepted the order before the error.
-            logger.error("Broker submit outcome unknown for %s: %s", client_order_id, exc)
+        except Exception as exc:
+            logger.error("Broker submit exception for %s: %s", client_order_id, exc)
+
+            # 1. Check if broker actually created the order before the error
+            existing = None
+            try:
+                existing = self.broker.find_by_client_id(client_order_id)
+            except Exception as find_exc:
+                logger.debug("find_by_client_id failed after submit error for %s: %s", client_order_id, find_exc)
+
+            if existing is not None:
+                b_id = getattr(existing, "broker_order_id", getattr(existing, "id", str(existing)))
+                status = getattr(existing, "status", "submitted")
+                with self.db.transaction():
+                    self.db.update_order_status(order_id, status=status, broker_order_id=str(b_id))
+                    self.db.insert_order_event(order_id, "submitted", {"broker_order_id": str(b_id)})
+                return Outcome(
+                    status="submitted",
+                    order_id=order_id,
+                    client_order_id=client_order_id,
+                    broker_order_id=str(b_id),
+                    action=action,
+                )
+
+            # 2. Check if this is an explicit 4xx / rejection error
+            if _is_explicit_rejection(exc):
+                with self.db.transaction():
+                    self.db.update_order_status(order_id, status="rejected")
+                    self.db.insert_order_event(order_id, "broker_error", {"error": str(exc), "rejected": True})
+                return Outcome(
+                    status="rejected",
+                    order_id=order_id,
+                    client_order_id=client_order_id,
+                    reasons=(f"Broker rejected: {exc}",),
+                    action=action,
+                )
+
+            # 3. Ambiguous network error / timeout -> stays submitting without broker_order_id
             with self.db.transaction():
-                self.db.insert_order_event(order_id, "broker_error", {"error": str(exc)})
+                self.db.insert_order_event(order_id, "broker_error", {"error": str(exc), "rejected": False})
             return Outcome(
                 status="submitting",
                 order_id=order_id,
                 client_order_id=client_order_id,
-                reasons=(f"Broker error: {exc}",),
+                reasons=(f"Broker submit outcome unknown: {exc}",),
                 action=action,
             )
         with self.db.transaction():

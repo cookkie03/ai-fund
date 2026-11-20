@@ -168,12 +168,20 @@ def test_smoke_submit_fails_order_reconcilable_not_lost(tmp_path):
     db = OfficeDB(tmp_path / "smoke_submit_err.db")
     fake_broker = FakeBracketBroker()
     submit = fake_broker.submit_bracket
+    orig_find = fake_broker.find_by_client_id
+    broker_offline = True
 
     def accepted_then_timeout(**kwargs):
         submit(**kwargs)
         raise TimeoutError("Broker gateway timeout")
 
+    def find_maybe_offline(cid):
+        if broker_offline:
+            raise ConnectionError("Broker connection down")
+        return orig_find(cid)
+
     fake_broker.submit_bracket = MagicMock(side_effect=accepted_then_timeout)
+    fake_broker.find_by_client_id = MagicMock(side_effect=find_maybe_offline)
 
     acc = Account(
         id="test",
@@ -221,6 +229,7 @@ def test_smoke_submit_fails_order_reconcilable_not_lost(tmp_path):
     assert saved is not None
     assert saved["client_order_id"] == "cid_reconcilable"
     assert saved["status"] == "submitting"
+    broker_offline = False
     office.order_flow.sync_broker_orders()
     saved = db.get_order(outcome.order_id)
     assert saved["status"] == "submitted"
