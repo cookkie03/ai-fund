@@ -38,11 +38,11 @@ I prompt degli agenti sono in [`prompts/`](prompts/) (un file Markdown per agent
 
 ```bash
 uv sync
-uv run trading-agent config check
-uv run trading-agent run          # avvia lo scheduler (resta in primo piano)
+uv run trading-agent config check # verifica configurazione (comando locale)
+uv run trading-agent run          # avvia il Runtime single-writer (scheduler event-driven + API HTTP/SSE su :8765)
 ```
 
-In un altro terminale:
+In un altro terminale (i comandi CLI operano come client sottile via HTTP contro il Runtime):
 
 ```bash
 uv run trading-agent task AAPL --reason "Valuta un ingresso long"   # accoda un ciclo manuale

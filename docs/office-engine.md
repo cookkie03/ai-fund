@@ -4,14 +4,14 @@ Operating manual for the autonomous Agent Office engine and CLI.
 
 ## 1. Running in Development (uv)
 
-Start the engine loop:
+Start the single-writer Runtime process (event-driven scheduler + HTTP/SSE API server):
 ```bash
 uv run trading-agent run
 ```
 
-Run CLI subcommands directly:
+Run CLI subcommands directly from another terminal (the CLI operates as a thin client against `http://127.0.0.1:8765` or `--runtime URL`):
 ```bash
-# Verify configuration
+# Verify configuration (local command, does not require Runtime)
 uv run trading-agent config check
 
 # Create a manual Scheduled task on a ticker
@@ -95,4 +95,4 @@ uv run trading-agent halt --no-cancel-open
 # Resume normal operations
 uv run trading-agent resume
 ```
-All halt/resume actions and CLI commands are permanently logged in `cli_commands` and `inbox`.
+All halt/resume actions, commands, and order lifecycle changes are permanently logged in the append-only `events` table and in `inbox`.

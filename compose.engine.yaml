@@ -9,6 +9,14 @@ services:
       TRADING_AGENT_DB: /app/data/trading-agent.db
       # OmniRoute gira sullo stesso host, in un container sulla rete omniroute_default.
       OFFICE_LLM_ENDPOINT: http://omniroute:20128/v1
+    ports:
+      - "127.0.0.1:8765:8765"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     volumes:
       - trading-agent-data:/app/data
     networks:

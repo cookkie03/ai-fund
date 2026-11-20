@@ -2,9 +2,15 @@
 
 Stato: alberatura approvata da Luca il 2026-10-30; creato lo scheletro dei package. Primo contratto Broker di sola lettura e adapter Alpaca paper implementati il 2026-10-31; execution e agenti ancora da sviluppare.
 
-## Runtime unico (decisione 2026-11-20, non ancora implementato)
+## Runtime unico (implementato e verificato 2026-11-20, ADR 0003)
 
-Il sistema sta migrando verso un **Runtime**: un solo processo sempre acceso, unico writer del DB, con comandi, letture ed eventi esposti via HTTP + SSE. CLI, frontend e Telegram ne diventano client sottili, e il polling (scheduler a 0,5 s, sync ordini a 30 s) viene sostituito da scadenze ed eventi. Finché le fette della spec non sono completate, la struttura descritta sotto resta quella in vigore. Decisione: [ADR 0003](adr/0003-runtime-unico-writer-event-driven.md). Spec e piano a fette: `.scratch/core-runtime/spec.md`.
+Il sistema adotta un'architettura a **Runtime unico single-writer**:
+- **Processo Runtime**: un solo processo Python (`runtime/core.py`) sempre attivo, unico writer del database SQLite sotto lock OS esclusivo (`<db>.lock` con `fcntl.flock`).
+- **Event Bus & Event Log** (`runtime/events.py`): tabella append-only `events` in SQLite con hook transazionali `on_commit` in `OfficeDB.transaction()`. Rollback scarta gli eventi non committati.
+- **Scheduler event-driven a zero polling** (`runtime/scheduler.py`, `runtime/jobs.py`): calcola `min(next_due_ts(), min(job.next_run()))` e dorme fino al timeout o a un evento di dominio (`task.enqueued`, `halt.changed`, `stop`). Nessun polling busy-loop.
+- **Broker Stream & Fills** (`execution/alpaca_stream.py`, `execution/order_flow.py`): stream websocket Alpaca `trade_updates` in thread proprio; `apply_broker_update` gestisce fill di entrata (`trade.opened`) e di uscita TP/SL (`trade.closed`) collegati al `TradeManager`. Riconciliazione automatica all'avvio e a ogni riconnessione.
+- **Trasporto HTTP & SSE** (`runtime/http.py`): FastAPI serve su `127.0.0.1:8765` endpoint per comandi (`/v1/commands/{name}` con idempotenza), letture serializzabili (`/v1/read/{name}`) ed eventi SSE (`/v1/events` con replay storico e streaming live). Autenticazione Bearer obbligatoria su bind non-loopback.
+- **Client sottili** (`interface/client.py`, `interface/cli.py`): CLI, cockpit frontend e Telegram comunicano esclusivamente via HTTP/SSE con il Runtime. A Runtime spento la CLI esce pulita con codice 2. Decisione: [ADR 0003](adr/0003-runtime-unico-writer-event-driven.md); spec: `.scratch/core-runtime/spec.md`.
 
 ## Prototipo grafo agentico — 2026-11-05
 

@@ -21,6 +21,7 @@ COPY data ./data
 COPY execution ./execution
 COPY interface ./interface
 COPY prompts ./prompts
+COPY runtime ./runtime
 COPY storage ./storage
 COPY tools ./tools
 COPY workflows ./workflows
