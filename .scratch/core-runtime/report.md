@@ -72,3 +72,16 @@ Tutti i problemi identificati nella review (`.scratch/core-runtime/review.md`) s
 3. **Repository e documentazione**:
    - Repository `trading-agent` pulito e sincronizzato con `origin/docs/agent-restart`.
    - Repository `trading-agent-wiki` pulito e sincronizzato con `origin/main`.
+
+## 5. Secondo giro
+
+| Voce | Commit | Scelta e verifica |
+|---|---|---|
+| N1 | `0cc261a`, `7ba4e89` | La riconciliazione legge `qty` dal `SafeBrokerReader` senza chiudere Trade con posizione aperta. Se manca la posizione, usa solo il prezzo effettivo di una gamba bracket collegata (richiesta Alpaca `nested=True`); altrimenti `reconciled_unknown`, prezzo nullo e avviso in Inbox. Se la lettura delle posizioni fallisce, non chiude i Trade. |
+| N2 | `356f9d0`, `f296161` | Dopo un errore di invio cerca subito l'ordine per `client_order_id`. Un errore ambiguo resta `submitting` se il lookup non lo trova; solo una risposta 4xx strutturata e definitiva produce `rejected`. |
+| N3 | `c285308` | Effetto locale e audit condividono la transazione; il test forza un errore sull'audit e verifica il rollback. Approvazione, halt, riconciliazione e refresh mantengono transazioni separate per non trattenere il lock SQLite durante I/O esterno. |
+| N4 | `b7df168` | `order.created` e `order.status_changed` svegliano lo scheduler; regressioni verificate su entrambi gli eventi. |
+| N5 | — | Rinviato: occorre condividere la selezione dei task consegnabili fra Office e scheduler senza saltare task pronti. Rimane il backoff da 1 s. |
+| N6 | `23e23cc` | CLI e bootstrap condividono il percorso canonico, anche con un symlink. Una `runtime_factory` personalizzata deve ancora rispettare il percorso configurato. |
+
+Verifica offline: 350 test passati, 2 saltati, Ruff pulito. Nessuna prova con Alpaca reale.
