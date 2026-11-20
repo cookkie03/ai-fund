@@ -3,7 +3,7 @@
 **Data**: 2026-11-20  
 **Riferimento**: `.scratch/core-runtime/spec.md`, `.scratch/core-runtime/review.md`, [ADR 0003](docs/adr/0003-runtime-unico-writer-event-driven.md)  
 **Branch**: `docs/agent-restart`  
-**Esito**: Completato, corretto e verificato (331 test superati, ruff 0 errori, DoD §13 soddisfatta).
+**Esito**: 336 test offline superati, 2 saltati; ruff senza errori. Nessuna verifica Alpaca reale in questa sessione.
 
 ---
 
@@ -31,7 +31,7 @@ Tutte le fette previste dalla specifica sono state realizzate secondo approccio 
    - `execution/alpaca_stream.py` re-importa e riesporta le classi per mantenere piena retrocompatibilità senza duplicazione.
 2. **Isolamento transazioni e chiamate di rete (2-phase submit)**:
    - `Runtime.execute` non avvolge più l'intero handler in un'unica transazione SQLite immediata. Le scritture locali avvengono in transazioni dedicate prima e dopo la chiamata esterna di rete al broker.
-   - Per gli ordini approvati: transazione 1 imposta lo stato locale `submitting` con `client_order_id` ed emette `order.approved`; submit al broker a lock DB rilasciato (`tx_depth == 0`); transazione 2 aggiorna a `submitted` con `broker_order_id` (o `rejected` con evento `broker_error`). In caso di timeout di rete o crash, l'ordine non viene perso o cancellato da un rollback, restando pienamente riconciliabile.
+   - Prima del submit lo stato locale diventa `submitting` con `client_order_id`; la rete opera fuori dalla transazione. Su errore l'esito resta incerto in `submitting`: la riconciliazione cerca il broker per `client_order_id`, senza inviare nuovamente. Anche un rifiuto certo resta in attesa di riconciliazione, perché il contratto broker non distingue gli errori definitivi.
 3. **`RefreshData` asincrono con HTTP 202**:
    - Conforme a spec §5, `RefreshData` delega il prefetch dati a un thread worker in background e risponde immediatamente 202 con `{"status": "accepted"}`. Al termine del download, il worker emette l'evento `data.refreshed` nel bus ed event log.
 4. **Persistenza job basata su Event Log**:
@@ -46,7 +46,7 @@ Tutti i problemi identificati nella review (`.scratch/core-runtime/review.md`) s
 | Problema | Titolo | Commit | Scelte prese e Verifiche |
 |---|---|---|---|
 | **R1** | Configurazione stream e riconciliazione all'avvio | `3e028f0` | Centralizzata lettura credenziali (`ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, `ALPACA_TRADING_URL`) tramite `get_alpaca_credentials()`. Esecuzione forzata di `reconcile_broker()` all'avvio del Runtime anche in assenza di stream. `HealthDTO` espone `broker_configured` e stato stream. Verificato da `tests/runtime/test_r1_broker_config_startup.py`. |
-| **R2** | Chiamate di rete broker fuori dalla transazione DB | `3e60b01` | Rimosso il wrapping transazionale globale in `Runtime.execute`. Transazioni locali circoscritte alle singole scritture. Submit bracket a due fasi (`submitting` → submit → `submitted`/`rejected`). `RefreshData` asincrono con risposta 202 ed emissione successiva di `data.refreshed`. Verificato da `tests/runtime/test_r2_network_outside_tx.py`. |
+| **R2** | Chiamate di rete broker fuori dalla transazione DB | `3e60b01`, `9f0655d` | Submit a due fasi; errore ambiguo conservato in `submitting` e ricerca per `client_order_id`. Smoke: il broker accetta, la risposta va in timeout e la riconciliazione ritrova l'ordine. `RefreshData` risponde 202 ed emette `data.refreshed` successivamente. |
 | **R3** | Robustezza stream Alpaca e riconnessione | `d04cb41` | Aggiunto loop di riconnessione con backoff esponenziale in `AlpacaTradeUpdateStream`. Esecuzione del callback di riconciliazione ad ogni (ri)connessione. Proprietà `connected` reale e calcolo di `paper` dall'URL di trading. Verificato da `tests/runtime/test_r3_stream_robustness.py`. |
 | **R4** | Creazione Trade da riconciliazione offline | `4e9d03f` | `sync_broker_orders` instrada i fill rilevati tramite `apply_broker_update`, generando `trade.opened` e record in `trades` per gli ordini eseguiti a Runtime spento. Confronto con posizioni del broker per chiudere trade i cui TP/SL sono scattati offline (`trade.closed`). Verificato da `tests/execution/test_r4_reconciliation_trades.py`. |
 | **R5** | Scadenze reali dei job e persistenza esecuzioni | `28d399f` | Rimossi timer fissi: `expire_pending` calcola la deadline minima dei pending (o None se assenti), `release_queued` si risveglia alla prossima apertura del mercato broker (o None se assenti), `market_analyst_fixed` punta alla prossima sessione premarket. Persistito `last_run` tramite eventi `job.ran`. Verificato da `tests/runtime/test_r5_job_deadlines_persistence.py`. |
@@ -56,14 +56,14 @@ Tutti i problemi identificati nella review (`.scratch/core-runtime/review.md`) s
 | **R9** | Prevenzione busy-loop dello scheduler | `c083239` | Se `run_once()` non consegna task e la prossima scadenza è nel passato (task non consegnabile o filtrato dal cursore), lo scheduler applica un backoff minimo di 1.0s evitando di risvegliarsi a 0.0s in busy loop. Verificato da `tests/runtime/test_r9_scheduler_busy_loop.py`. |
 | **R10** | Lock di processo anticipato e rimozione log residuo | `346803a` | Acquisizione del lock OS `<db>.db.lock` in `interface/cli.py` prima di costruire l'Office o migrare il DB; uscita pulita con exit code 1 e messaggio d'errore senza traceback. Rimossa dicitura `(poll interval: 0.5s)`. Verificato da `tests/interface/test_r10_early_lock_and_poll_log.py`. |
 | **R11** | Conferme CLI, autore messaggi e token HMAC | `a9eddcf` | Aggiunto flag `-y`/`--yes` e richiesta di conferma interattiva per `halt`, `resume` e `orders approve`. Comando `Say` registra autore come `user` (actor `cli` nell'evento). Endpoint read migrati a funzioni sincrone `def` in threadpool. Confronto token con `hmac.compare_digest`. Verificato da `tests/interface/test_r11_cli_confirmation_and_author.py`. |
-| **R12** | Protocollo BrokerUpdateStream e completamento report | *In commit corrente* | Formalizzazione del protocollo `BrokerUpdateStream` e conformità di `FakeBrokerStream`; correzione hash di commit e documentazione scelte/deviazioni. |
+| **R12** | Protocollo BrokerUpdateStream e completamento report | `cbbcac5` | Formalizzazione del protocollo `BrokerUpdateStream` e conformità di `FakeBrokerStream`; correzione hash di commit e documentazione scelte/deviazioni. |
 
 ---
 
 ## 4. Verifica Finale di Conformità (§13 DoD e Verifica Review)
 
 1. **Suite di test completa**:
-   - `uv run pytest`: **331 passed**, 0 failed, 2 skipped in 14.5s.
+   - `uv run pytest`: **336 passed**, 0 failed, 2 skipped in 14.40s.
    - `uv run ruff check .`: **0 issues**.
 2. **Regole architetturali**:
    - Nessun import di `OfficeDB` o `build_office` al di fuori di `runtime/` e dei test di bootstrap.
