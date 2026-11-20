@@ -123,7 +123,7 @@ Lo stream sta in `execution/alpaca_stream.py` invece che in `runtime/broker_stre
 
 ## Goal (da incollare in `/goal`)
 
-> Correggi N1–N3 di `.scratch/core-runtime/review.md` (§«Secondo giro»), test-first. Fai anche N4–N6 se restano semplici. Ogni test deve usare le **forme reali di produzione**: `SafeBrokerReader`, che restituisce dizionari con `qty`, e il wiring di `bootstrap.build_office`/`_lazy_init_alpaca_broker` dove possibile, non mock con attributi inventati. Hai finito quando suite e ruff sono verdi, la riproduzione di N1 qui sotto non chiude più il Trade, `report.md` ha un §«Secondo giro» con hash e scelte prese, e codice e wiki sono pushati senza ahead/behind.
+> Correggi N1, N3 e il residuo di N2 di `.scratch/core-runtime/review.md` (§«Secondo giro»), test-first. Fai anche N4–N6 se restano semplici. Ogni test deve usare le **forme reali di produzione**: `SafeBrokerReader`, che restituisce dizionari con `qty`, e il wiring di `bootstrap.build_office`/`_lazy_init_alpaca_broker` dove possibile, non mock con attributi inventati. Hai finito quando suite e ruff sono verdi, la riproduzione di N1 qui sotto non chiude più il Trade, `report.md` ha un §«Secondo giro» con hash e scelte prese, e codice e wiki sono pushati senza ahead/behind.
 
 ## Verificato
 
@@ -148,6 +148,8 @@ Correzione:
 - se la lettura delle posizioni fallisce, non toccare i Trade.
 
 ### N2 — Alto: un errore di rete all'invio può lasciare un ordine orfano al broker
+
+> **Stato (verificato il 2026-11-20 su `89c2a7c`)**: risolto in `9f0655d` per il caso ambiguo (timeout ⇒ `submitting`, ritrovato per `client_order_id`). **Resta da fare**: un rifiuto definitivo del broker (4xx) rimane anch'esso `submitting` per sempre, perché il contratto `BracketBroker` non distingue gli errori definitivi da quelli ambigui. Serve un'eccezione tipizzata (`BrokerRejected` contro `BrokerUnavailable`) nell'adapter Alpaca, oppure una scadenza: `submitting` più vecchio di N minuti e non trovato al broker ⇒ `rejected` + Inbox.
 
 In `_submit_order_locked`, qualsiasi eccezione di `submit_bracket` imposta lo stato `rejected`. Con un timeout l'ordine può essere già stato accettato da Alpaca: localmente risulta rifiutato, e la riconciliazione cerca solo `submitted`/`submitting` con `broker_order_id IS NOT NULL`, quindi non lo vedrà mai. Lo stato `submitting` introdotto da R2 viene sovrascritto e non serve allo scopo.
 
