@@ -172,7 +172,7 @@ class ReadModel:
                 stream_connected = self._runtime.broker_stream_connected
 
         return HealthDTO(
-            account_label="default",
+            account_label=getattr(self._runtime, "account_label", "default"),
             runtime_version="0.1.0",
             halted=halted,
             broker_stream_connected=stream_connected,

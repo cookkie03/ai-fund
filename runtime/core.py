@@ -125,9 +125,16 @@ class Runtime:
         self,
         office: Office,
         broker_stream: Any | None = None,
+        account_label: str | None = None,
     ) -> None:
+        import os
+
         self.office = office
         self.broker_stream = broker_stream
+        # One Runtime per broker account: the label tells clients which account this is.
+        self.account_label = (
+            account_label or os.environ.get("TRADING_AGENT_ACCOUNT_LABEL", "").strip() or "default"
+        )
         self.bus = EventBus()
         self.event_log = EventLog(db=office.db, bus=self.bus)
         self.read = ReadModel(db_path=office.db.path, runtime=self)

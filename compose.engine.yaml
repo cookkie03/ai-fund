@@ -7,6 +7,8 @@ services:
       - .env
     environment:
       TRADING_AGENT_DB: /app/data/trading-agent.db
+      # Etichetta dell'account broker servito da questo Runtime (uno per account).
+      TRADING_AGENT_ACCOUNT_LABEL: ${TRADING_AGENT_ACCOUNT_LABEL:-default}
       # OmniRoute gira sullo stesso host, in un container sulla rete omniroute_default.
       OFFICE_LLM_ENDPOINT: http://omniroute:20128/v1
     ports:

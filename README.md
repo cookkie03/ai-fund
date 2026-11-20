@@ -42,6 +42,15 @@ uv run trading-agent config check # verifica configurazione (comando locale)
 uv run trading-agent run          # avvia il Runtime single-writer (scheduler event-driven + API HTTP/SSE su :8765)
 ```
 
+Un Runtime serve un solo account broker. Variabili utili:
+
+- `TRADING_AGENT_ACCOUNT_LABEL`: etichetta dell'account, mostrata da `/v1/health` (default `default`).
+- `TRADING_AGENT_DB`: percorso del DB, uno per account.
+- `TRADING_AGENT_API_PORT`: porta dell'API, una per account (default `8765`).
+- `TRADING_AGENT_RUNTIME_URL`: Runtime a cui si collega la CLI.
+
+API per i client (CLI, cockpit, Telegram): `docs/dashboard.md`.
+
 In un altro terminale (i comandi CLI operano come client sottile via HTTP contro il Runtime):
 
 ```bash
