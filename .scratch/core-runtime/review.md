@@ -173,3 +173,11 @@ Correzione: gli handler solo locali (`EnqueueTask`, `Say`, watchlist, `MarkInbox
 ## Lezione per i prossimi goal
 
 I test con mock costruiti a mano hanno nascosto N1. Per tutto ciò che legge dati del broker, almeno un test deve passare dal wiring di produzione (`SafeBrokerReader` e gli adapter reali con client finto).
+
+---
+
+# Chiusura della review (2026-11-20, base `e21532d`)
+
+Verificato: 350 test passati, 2 saltati, ruff pulito. La riproduzione di N1 lascia aperto il Trade quando la posizione è ancora presente al broker. Il blocco di riconciliazione accetta `qty` e `quantity`, non tocca i Trade se le posizioni non sono leggibili e ricostruisce l'uscita dal broker oppure la registra come `reconciled_unknown`. N2, N3, N4 e N6 sono applicati; N5 è rinviato e accettato (backoff a 1 s solo con un task bloccato).
+
+**La review offline del Runtime è chiusa.** Il prossimo e ultimo gate prima di ordini reali è una prova con Alpaca paper e LLM reale sul Minisforum, non un altro giro di review. Dopo la prova vengono S9 (spec §14) e il frontend.
