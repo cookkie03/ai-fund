@@ -254,10 +254,10 @@ class Runtime:
                 if existing is not None:
                     return existing
 
-            # 2. Execute handler inside database transaction with event log
+            # 2. Execute handler, then log result in a database transaction
             try:
+                result = handler(self._ctx, cmd, actor)
                 with self.office.db.transaction():
-                    result = handler(self._ctx, cmd, actor)
                     if result.ok:
                         self.event_log.append(
                             type="command.accepted",
@@ -287,20 +287,21 @@ class Runtime:
                 return result
             except Exception as exc:
                 logger.exception("Error executing command %s", cmd.__class__.__name__)
-                # Outside tx: log rejection
+                # Outside handler: log rejection
                 try:
-                    self.event_log.append(
-                        type="command.rejected",
-                        subject=f"command:{cmd.__class__.__name__}",
-                        payload={
-                            "command": cmd.__class__.__name__,
-                            "ok": False,
-                            "reasons": [str(exc)],
-                            "data": {},
-                        },
-                        actor=actor,
-                        command_id=command_id,
-                    )
+                    with self.office.db.transaction():
+                        self.event_log.append(
+                            type="command.rejected",
+                            subject=f"command:{cmd.__class__.__name__}",
+                            payload={
+                                "command": cmd.__class__.__name__,
+                                "ok": False,
+                                "reasons": [str(exc)],
+                                "data": {},
+                            },
+                            actor=actor,
+                            command_id=command_id,
+                        )
                 except Exception:
                     pass
                 return CommandResult(ok=False, reasons=[str(exc)])

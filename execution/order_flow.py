@@ -411,10 +411,11 @@ class OrderFlow:
         """Internal submission method, must be called with self._lock held."""
         # 1. Re-check halt
         if self.halt.is_halted():
-            self.db.update_order_status(order_id, status="deferred")
-            self.db.insert_order_event(
-                order_id, "blocked", {"reason": "System is halted"}
-            )
+            with self.db.transaction():
+                self.db.update_order_status(order_id, status="deferred")
+                self.db.insert_order_event(
+                    order_id, "blocked", {"reason": "System is halted"}
+                )
             return Outcome(
                 status="deferred",
                 order_id=order_id,
@@ -432,12 +433,13 @@ class OrderFlow:
                 getattr(existing, "id", str(existing)),
             )
             status = getattr(existing, "status", "submitted")
-            self.db.update_order_status(
-                order_id, status=status, broker_order_id=broker_order_id
-            )
-            self.db.insert_order_event(
-                order_id, "reconciled", {"broker_order_id": broker_order_id, "status": status}
-            )
+            with self.db.transaction():
+                self.db.update_order_status(
+                    order_id, status=status, broker_order_id=broker_order_id
+                )
+                self.db.insert_order_event(
+                    order_id, "reconciled", {"broker_order_id": broker_order_id, "status": status}
+                )
             return Outcome(
                 status="submitted",
                 order_id=order_id,
@@ -448,8 +450,9 @@ class OrderFlow:
 
         # 3. Market Open check: only bracket limit orders when market open
         if not self.is_market_open():
-            self.db.update_order_status(order_id, status="queued")
-            self.db.insert_order_event(order_id, "queued", {"reason": "Market closed"})
+            with self.db.transaction():
+                self.db.update_order_status(order_id, status="queued")
+                self.db.insert_order_event(order_id, "queued", {"reason": "Market closed"})
             return Outcome(
                 status="queued",
                 order_id=order_id,
@@ -459,22 +462,21 @@ class OrderFlow:
 
         # 4. Handle Sell vs Buy
         if draft.side == "sell":
-            # "Sell on an open position: moves the TP of the open bracket to the sell limit price
-            # keeping SL."
             open_broker_order_id = self._find_open_bracket_order_id(ticker)
             if open_broker_order_id:
                 self.broker.modify_take_profit(open_broker_order_id, draft.limit_price)
-                self.db.update_order_status(
-                    order_id, status="submitted", broker_order_id=open_broker_order_id
-                )
-                self.db.insert_order_event(
-                    order_id,
-                    "tp_modified_for_sell",
-                    {
-                        "target_broker_order_id": open_broker_order_id,
-                        "limit_price": str(draft.limit_price),
-                    },
-                )
+                with self.db.transaction():
+                    self.db.update_order_status(
+                        order_id, status="submitted", broker_order_id=open_broker_order_id
+                    )
+                    self.db.insert_order_event(
+                        order_id,
+                        "tp_modified_for_sell",
+                        {
+                            "target_broker_order_id": open_broker_order_id,
+                            "limit_price": str(draft.limit_price),
+                        },
+                    )
                 return Outcome(
                     status="submitted",
                     order_id=order_id,
@@ -483,12 +485,13 @@ class OrderFlow:
                     action=action,
                 )
             else:
-                self.db.update_order_status(order_id, status="deferred")
-                self.db.insert_order_event(
-                    order_id,
-                    "deferred",
-                    {"reason": "No open bracket order found to modify take profit"},
-                )
+                with self.db.transaction():
+                    self.db.update_order_status(order_id, status="deferred")
+                    self.db.insert_order_event(
+                        order_id,
+                        "deferred",
+                        {"reason": "No open bracket order found to modify take profit"},
+                    )
                 return Outcome(
                     status="deferred",
                     order_id=order_id,
@@ -513,8 +516,9 @@ class OrderFlow:
             )
         except Exception as exc:  # broker refused or unreachable: never leave the order pending
             logger.error("Broker rejected bracket order %s: %s", client_order_id, exc)
-            self.db.update_order_status(order_id, status="rejected")
-            self.db.insert_order_event(order_id, "broker_error", {"error": str(exc)})
+            with self.db.transaction():
+                self.db.update_order_status(order_id, status="rejected")
+                self.db.insert_order_event(order_id, "broker_error", {"error": str(exc)})
             return Outcome(
                 status="rejected",
                 order_id=order_id,
@@ -522,12 +526,13 @@ class OrderFlow:
                 reasons=(f"Broker error: {exc}",),
                 action=action,
             )
-        self.db.update_order_status(
-            order_id, status="submitted", broker_order_id=broker_order_id
-        )
-        self.db.insert_order_event(
-            order_id, "submitted", {"broker_order_id": broker_order_id}
-        )
+        with self.db.transaction():
+            self.db.update_order_status(
+                order_id, status="submitted", broker_order_id=broker_order_id
+            )
+            self.db.insert_order_event(
+                order_id, "submitted", {"broker_order_id": broker_order_id}
+            )
         return Outcome(
             status="submitted",
             order_id=order_id,
@@ -854,23 +859,24 @@ class OrderFlow:
                         reasons=gate_res.reasons,
                     )
 
-            # Mark approved
-            self.db.update_order_status(
-                order_id, status="approved", approval_status="approved"
-            )
-            self.db.insert_order_event(order_id, "approved")
+            # Mark approved locally in Tx 1
+            with self.db.transaction():
+                self.db.update_order_status(
+                    order_id, status="submitting", approval_status="approved"
+                )
+                self.db.insert_order_event(order_id, "approved")
+                if self.event_log is not None:
+                    self.event_log.append(
+                        type="order.approved",
+                        subject=f"order:{order_id}",
+                        payload={"order_id": order_id, "status": "approved"},
+                        actor="order_flow",
+                    )
 
-            outcome = self._submit_order_locked(
+            # Submit order outside Tx 1
+            return self._submit_order_locked(
                 order_id, order["ticker"], draft, order["client_order_id"], order["side"]
             )
-            if outcome.status in ("submitted", "approved") and self.event_log is not None:
-                self.event_log.append(
-                    type="order.approved",
-                    subject=f"order:{order_id}",
-                    payload={"order_id": order_id, "status": outcome.status},
-                    actor="order_flow",
-                )
-            return outcome
 
     def reject(self, order_id: int, reason: str = "") -> Outcome:
         """Reject a pending order in the approval queue."""

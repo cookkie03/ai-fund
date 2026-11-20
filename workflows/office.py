@@ -140,6 +140,68 @@ class Office:
                 return self.env_factory()
         return self.env_factory
 
+    def build_risk_gate_context(self) -> Any:
+        """Build fresh RiskGateContext from current broker account, positions, and limits."""
+        from decimal import Decimal
+
+        from execution.risk_gate import RiskGateContext, RiskGateLimits
+
+        env = self.get_env()
+        reader = getattr(self, "broker_reader", None) or getattr(env, "broker_reader", None)
+        account = reader.get_account() if reader else {}
+        positions = reader.get_positions() if reader else ()
+
+        equity_val = getattr(account, "equity", None)
+        if equity_val is None and isinstance(account, dict):
+            equity_val = account.get("equity")
+        equity = Decimal(str(equity_val or "100000.0"))
+
+        cash_val = getattr(account, "cash", None)
+        if cash_val is None and isinstance(account, dict):
+            cash_val = account.get("cash")
+        cash = Decimal(str(cash_val or "50000.0"))
+
+        pos_dict: dict[str, Decimal] = {}
+        for p in positions:
+            sym = getattr(p, "symbol", "") if hasattr(p, "symbol") else p.get("symbol", "")
+            mv = getattr(p, "market_value", None)
+            if mv is None:
+                qty = Decimal(str(getattr(p, "quantity", 0)))
+                price = Decimal(
+                    str(getattr(p, "current_price", 0) or getattr(p, "average_entry_price", 0))
+                )
+                mv = qty * price
+            pos_dict[sym.upper()] = Decimal(str(mv))
+
+        sector_map: dict[str, str] = {}
+        try:
+            rows = self.db.connection.execute("SELECT symbol, sector FROM securities").fetchall()
+            for r in rows:
+                if r["sector"]:
+                    sector_map[r["symbol"].upper()] = r["sector"]
+        except Exception:
+            pass
+
+        limits = RiskGateLimits(
+            max_risk_per_trade=Decimal(str(self.settings.limits.max_risk_per_trade_fraction)),
+            max_position_size=Decimal(str(self.settings.limits.max_position_fraction)),
+            max_sector_exposure=Decimal(str(self.settings.limits.max_sector_fraction)),
+            max_open_positions=self.settings.limits.max_open_positions,
+            min_cash_reserve=Decimal(str(self.settings.limits.min_cash_reserve_fraction)),
+            min_risk_reward=Decimal(str(self.settings.limits.min_risk_reward_ratio)),
+            earnings_blackout_trading_days=self.settings.limits.earnings_embargo_days,
+        )
+
+        return RiskGateContext(
+            equity=equity,
+            cash=cash,
+            positions=pos_dict,
+            sector_map=sector_map,
+            open_positions_count=len(positions),
+            limits=limits,
+            today=self.get_now().date(),
+        )
+
     def _is_pm_agent(self, agent_name: str) -> bool:
         norm = agent_name.lower().strip()
         return norm in ("pm", "portfolio_manager")
