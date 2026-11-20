@@ -40,30 +40,59 @@ def _format_table(headers: Sequence[str], rows: Sequence[Sequence[Any]]) -> str:
 
 
 def _cmd_run(office: Office, args: argparse.Namespace, out: TextIO) -> int:
+    import os
+    import threading
+
+    import uvicorn
+
+    from runtime.core import Runtime
+    from runtime.http import create_app
+
+    host = getattr(args, "host", None) or os.environ.get("TRADING_AGENT_API_HOST", "127.0.0.1")
+    port = int(getattr(args, "port", None) or os.environ.get("TRADING_AGENT_API_PORT", "8765"))
+    token = getattr(args, "token", None) or os.environ.get("TRADING_AGENT_API_TOKEN")
+
     poll_interval = getattr(args, "poll_interval", 0.5)
     out.write(
-        f"Starting Agent Office loop (poll interval: {poll_interval}s)... Press Ctrl+C to stop.\n"
+        f"Starting Agent Office loop / Trading Agent Runtime on {host}:{port} (poll interval: {poll_interval}s)... Press Ctrl+C to stop.\n"
     )
     out.flush()
+
+    rt = Runtime(office=office)
+    app = create_app(rt, token=token, host=host)
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="warning")
+    server = uvicorn.Server(config)
+
+    orig_stop = office.stop
+
+    def _stop_all() -> None:
+        server.should_exit = True
+        orig_stop()
+        rt.scheduler.stop()
+        rt.stop()
+
+    office.stop = _stop_all  # type: ignore[method-assign]
+
+    def _watch_stop() -> None:
+        office._stop_event.wait()
+        server.should_exit = True
+
+    watch_thread = threading.Thread(target=_watch_stop, daemon=True)
+    watch_thread.start()
+
+    rt.start()
+    scheduler_thread = threading.Thread(target=rt.scheduler.run, daemon=True)
+    scheduler_thread.start()
+
     try:
-        from runtime.core import Runtime
-        from runtime.scheduler import Scheduler
-
-        rt = Runtime(office=office)
-        scheduler = Scheduler(runtime=rt)
-        orig_stop = office.stop
-
-        def _stop_both() -> None:
-            orig_stop()
-            scheduler.stop()
-            rt.stop()
-
-        office.stop = _stop_both  # type: ignore[method-assign]
-        rt.start()
-        scheduler.run()
+        server.run()
     except KeyboardInterrupt:
         out.write("\nStopping Agent Office...\n")
-        office.stop()
+    finally:
+        _stop_all()
+        scheduler_thread.join(timeout=1.0)
+
     return 0
 
 
