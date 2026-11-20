@@ -90,6 +90,14 @@ class Runtime:
         self.event_log = EventLog(db=office.db, bus=self.bus)
         self.read = ReadModel(db_path=office.db.path, runtime=self)
 
+        self.office.event_log = self.event_log
+        if hasattr(self.office, "order_flow") and self.office.order_flow:
+            self.office.order_flow.event_log = self.event_log
+        if hasattr(self.office, "halt") and self.office.halt:
+            self.office.halt._event_log = self.event_log
+        if hasattr(self.office, "trade_manager") and self.office.trade_manager:
+            self.office.trade_manager.event_log = self.event_log
+
         self._ctx = RuntimeContext(
             office=self.office,
             event_log=self.event_log,

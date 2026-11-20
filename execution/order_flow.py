@@ -72,9 +72,15 @@ class BracketBroker(Protocol):
 class SystemHalt:
     """Manages system halt state stored durably in OfficeDB."""
 
-    def __init__(self, db: OfficeDB, broker: BracketBroker | None = None) -> None:
+    def __init__(
+        self,
+        db: OfficeDB,
+        broker: BracketBroker | None = None,
+        event_log: Any = None,
+    ) -> None:
         self._db = db
         self._broker = broker
+        self._event_log = event_log
         self._init_db()
 
     def _init_db(self) -> None:
@@ -115,6 +121,13 @@ class SystemHalt:
                 (ts,),
             )
             self._db.add_inbox("halt", "System halted: trading stopped", ts=ts)
+            if self._event_log is not None:
+                self._event_log.append(
+                    type="halt.changed",
+                    subject="halt",
+                    payload={"halted": True, "cancel_open": cancel_open},
+                    actor="system",
+                )
 
         if cancel_open and self._broker is not None:
             # Cancel open orders
@@ -155,6 +168,13 @@ class SystemHalt:
                 (ts,),
             )
             self._db.add_inbox("resume", "System resumed: trading allowed", ts=ts)
+            if self._event_log is not None:
+                self._event_log.append(
+                    type="halt.changed",
+                    subject="halt",
+                    payload={"halted": False},
+                    actor="system",
+                )
 
 
 @dataclass(frozen=True)
@@ -223,10 +243,12 @@ class OrderFlow:
         halt: SystemHalt | None = None,
         approval_mode: Literal["auto", "manual"] = "auto",
         is_market_open: Callable[[], bool] | None = None,
+        event_log: Any = None,
     ) -> None:
         self.db = db
         self.broker = broker
-        self.halt = halt or SystemHalt(db, broker)
+        self.event_log = event_log
+        self.halt = halt or SystemHalt(db, broker, event_log=event_log)
         self.approval_mode: Literal["auto", "manual"] = approval_mode
         self._is_market_open_fn = is_market_open
         self._lock = threading.RLock()
@@ -325,6 +347,19 @@ class OrderFlow:
                     "created",
                     {"approval_status": "pending", "draft_hash": draft.draft_hash},
                 )
+                if self.event_log is not None:
+                    self.event_log.append(
+                        type="order.created",
+                        subject=f"order:{order_id}",
+                        payload={
+                            "order_id": order_id,
+                            "ticker": ticker.upper(),
+                            "side": draft.side,
+                            "status": "pending_approval",
+                            "client_order_id": cid,
+                        },
+                        actor="order_flow",
+                    )
                 return Outcome(
                     status="pending",
                     order_id=order_id,
@@ -347,6 +382,19 @@ class OrderFlow:
                 "created",
                 {"approval_status": "auto", "draft_hash": draft.draft_hash},
             )
+            if self.event_log is not None:
+                self.event_log.append(
+                    type="order.created",
+                    subject=f"order:{order_id}",
+                    payload={
+                        "order_id": order_id,
+                        "ticker": ticker.upper(),
+                        "side": draft.side,
+                        "status": "pending",
+                        "client_order_id": cid,
+                    },
+                    actor="order_flow",
+                )
 
             return self._submit_order_locked(order_id, ticker, draft, cid, action)
 
@@ -644,9 +692,17 @@ class OrderFlow:
             )
             self.db.insert_order_event(order_id, "approved")
 
-            return self._submit_order_locked(
+            outcome = self._submit_order_locked(
                 order_id, order["ticker"], draft, order["client_order_id"], order["side"]
             )
+            if outcome.status in ("submitted", "approved") and self.event_log is not None:
+                self.event_log.append(
+                    type="order.approved",
+                    subject=f"order:{order_id}",
+                    payload={"order_id": order_id, "status": outcome.status},
+                    actor="order_flow",
+                )
+            return outcome
 
     def reject(self, order_id: int, reason: str = "") -> Outcome:
         """Reject a pending order in the approval queue."""
@@ -668,6 +724,13 @@ class OrderFlow:
                 f"Order {order['client_order_id']} rejected: {rej_reason}",
                 ts=ts,
             )
+            if self.event_log is not None:
+                self.event_log.append(
+                    type="order.rejected",
+                    subject=f"order:{order_id}",
+                    payload={"order_id": order_id, "reason": rej_reason},
+                    actor="order_flow",
+                )
             # US 62: Write Rimando with reason to PM chat so PM takes it into account
             pm_chat_id = self.db.get_or_create_chat("portfolio_manager", order["ticker"])
             self.db.append_message(

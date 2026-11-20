@@ -23,9 +23,15 @@ ExitReason = Literal["tp", "sl", "pm_sell", "expired"]
 class TradeManager:
     """Tracks Trade lifecycle from entry to exit, managing events and trailing stop adjustments."""
 
-    def __init__(self, db: OfficeDB, broker: BracketBroker) -> None:
+    def __init__(
+        self,
+        db: OfficeDB,
+        broker: BracketBroker,
+        event_log: Any = None,
+    ) -> None:
         self.db = db
         self.broker = broker
+        self.event_log = event_log
         self._trailing_states: dict[str, TrailingState] = {}
         self._trade_ids: dict[str, int] = {}
         self._trade_orders: dict[str, int] = {}
@@ -90,24 +96,35 @@ class TradeManager:
 
     def record_entry_fill(
         self,
-        order_id: int,
-        fill_price: Decimal | float | int | str,
-        qty: Decimal | float | int | str,
+        order_id: int | None = None,
+        fill_price: Decimal | float | int | str | None = None,
+        qty: Decimal | float | int | str = 0,
         atr: Decimal | float | int | str | None = None,
         k_trail_act: Decimal | float | int | str | None = None,
         k_trail: Decimal | float | int | str | None = None,
         stop_loss: Decimal | float | int | str | None = None,
         ts: str | None = None,
+        entry_order_id: int | None = None,
+        entry_price: Decimal | float | int | str | None = None,
+        opened_ts: str | None = None,
+        ticker: str | None = None,
     ) -> int:
         """Record entry fill for an order, opening a Trade and initiating trailing stop
         monitoring."""
-        order = self.db.get_order(order_id)
-        if not order:
-            raise KeyError(f"Order {order_id} not found in database")
+        oid = order_id if order_id is not None else entry_order_id
+        if oid is None:
+            raise ValueError("order_id or entry_order_id is required")
+        px = fill_price if fill_price is not None else entry_price
+        if px is None:
+            raise ValueError("fill_price or entry_price is required")
 
-        ticker = order["ticker"].upper()
-        now_ts = ts or utc_now_iso()
-        price_dec = Decimal(str(fill_price))
+        order = self.db.get_order(oid)
+        if not order:
+            raise KeyError(f"Order {oid} not found in database")
+
+        resolved_ticker = (ticker or order["ticker"]).upper()
+        now_ts = ts or opened_ts or utc_now_iso()
+        price_dec = Decimal(str(px))
         qty_dec = Decimal(str(qty))
 
         # Extract draft defaults if not supplied
@@ -145,8 +162,8 @@ class TradeManager:
         ]
 
         trade_id = self.db.insert_trade(
-            ticker=ticker,
-            entry_order_id=order_id,
+            ticker=resolved_ticker,
+            entry_order_id=oid,
             entry_price=float(price_dec),
             qty=float(qty_dec),
             opened_ts=now_ts,
@@ -163,38 +180,70 @@ class TradeManager:
             stop=stop_dec,
         )
 
-        self._trailing_states[ticker] = state
-        self._trade_ids[ticker] = trade_id
-        self._trade_orders[ticker] = order_id
+        self._trailing_states[resolved_ticker] = state
+        self._trade_ids[resolved_ticker] = trade_id
+        self._trade_orders[resolved_ticker] = oid
 
         # Update order status & events
-        self.db.update_order_status(order_id, status="filled")
+        self.db.update_order_status(oid, status="filled")
         self.db.insert_order_event(
-            order_id,
+            oid,
             "filled",
             {"price": str(price_dec), "qty": str(qty_dec)},
             ts=now_ts,
         )
         self.db.add_inbox(
             "order_executed",
-            f"Order {order_id} filled for {ticker}: {qty_dec} @ {price_dec}",
+            f"Order {oid} filled for {resolved_ticker}: {qty_dec} @ {price_dec}",
             ts=now_ts,
         )
+
+        if self.event_log is not None:
+            self.event_log.append(
+                type="trade.opened",
+                subject=f"trade:{trade_id}",
+                payload={
+                    "trade_id": trade_id,
+                    "ticker": resolved_ticker,
+                    "entry_order_id": oid,
+                    "entry_price": float(price_dec),
+                    "qty": float(qty_dec),
+                    "opened_ts": now_ts,
+                },
+                actor="trade_manager",
+            )
 
         return trade_id
 
     def record_exit_fill(
         self,
-        trade_id: int,
-        exit_price: Decimal | float | int | str,
-        exit_reason: ExitReason,
+        trade_id: int | None = None,
+        exit_price: Decimal | float | int | str = 0,
+        exit_reason: ExitReason = "tp",
         ts: str | None = None,
+        ticker: str | None = None,
+        closed_ts: str | None = None,
+        exit_order_id: int | None = None,
     ) -> None:
         """Record exit fill for an open Trade, closing it with specified exit reason."""
         if exit_reason not in ("tp", "sl", "pm_sell", "expired"):
             raise ValueError(f"Invalid exit reason: {exit_reason}")
 
-        trade = self.db.get_trade(trade_id)
+        tid = trade_id
+        if tid is None and ticker:
+            tid = self._trade_ids.get(ticker.upper())
+            if tid is None:
+                row = self.db.connection.execute(
+                    "SELECT id FROM trades WHERE ticker = ? AND closed_ts IS NULL ORDER BY id DESC LIMIT 1",
+                    (ticker.upper(),),
+                ).fetchone()
+                if row:
+                    tid = int(row["id"])
+
+        if tid is None:
+            raise ValueError("trade_id or active ticker is required")
+
+        trade = self.db.get_trade(tid)
         if not trade:
             raise KeyError(f"Trade {trade_id} not found")
 
@@ -214,7 +263,7 @@ class TradeManager:
         )
 
         self.db.close_trade(
-            trade_id=trade_id,
+            trade_id=tid,
             exit_price=float(price_dec),
             exit_reason=exit_reason,
             closed_ts=now_ts,
@@ -228,9 +277,23 @@ class TradeManager:
 
         self.db.add_inbox(
             "order_executed",
-            f"Trade {trade_id} on {ticker} closed via {exit_reason} at {price_dec}",
+            f"Trade {tid} on {ticker} closed via {exit_reason} at {price_dec}",
             ts=now_ts,
         )
+
+        if self.event_log is not None:
+            self.event_log.append(
+                type="trade.closed",
+                subject=f"trade:{tid}",
+                payload={
+                    "trade_id": tid,
+                    "ticker": ticker,
+                    "exit_price": float(price_dec),
+                    "exit_reason": exit_reason,
+                    "closed_ts": now_ts,
+                },
+                actor="trade_manager",
+            )
 
     def on_price(
         self,

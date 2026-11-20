@@ -96,6 +96,7 @@ class Office:
         settings: OfficeSettings | None = None,
         registry: RegistryWriter | None = None,
         sleep_fn: Callable[[float], None] = time.sleep,
+        event_log: Any = None,
     ) -> None:
         self.db = db
         self.backend = backend
@@ -108,8 +109,13 @@ class Office:
         self.settings = settings or OfficeSettings()
         self.registry = registry
         self.sleep_fn = sleep_fn
+        self.event_log = event_log
 
-        self.halt = getattr(order_flow, "halt", None) or SystemHalt(db)
+        self.halt = getattr(order_flow, "halt", None) or SystemHalt(db, event_log=event_log)
+        if getattr(self.order_flow, "event_log", None) is None and event_log is not None:
+            self.order_flow.event_log = event_log
+        if getattr(self.halt, "_event_log", None) is None and event_log is not None:
+            self.halt._event_log = event_log
         self._stop_event = threading.Event()
         self._cursor = DueCursor()
         self._lock = threading.RLock()
@@ -360,6 +366,14 @@ class Office:
         task = _to_scheduled_task(scheduled_task)
         now_iso = self.get_now_iso()
 
+        if self.event_log is not None:
+            self.event_log.append(
+                type="task.delivered",
+                subject=f"task:{task.task_id}",
+                payload={"task_id": task.task_id, "chat": task.chat, "agent": task.agent},
+                actor="office",
+            )
+
         # If Market Analyst activation outside cycles
         if self._is_market_analyst(task.agent):
             self._activate_market_analyst(task)
@@ -393,6 +407,13 @@ class Office:
                 budget_used={"messages": 0, "subagents": 0, "total": 0},
             )
             self._active_cycles_by_ticker[ticker] = cycle_id
+            if self.event_log is not None:
+                self.event_log.append(
+                    type="cycle.opened",
+                    subject=f"cycle:{cycle_id}",
+                    payload={"cycle_id": cycle_id, "ticker": ticker},
+                    actor="office",
+                )
 
         try:
             pm_chat_id = self.db.get_or_create_chat("portfolio_manager", ticker)
@@ -420,6 +441,7 @@ class Office:
                 ticker=ticker,
                 cycle_id=cycle_id,
                 sleep_fn=self.sleep_fn,
+                event_log=self.event_log,
             )
             outcome = runner.run()
             return outcome

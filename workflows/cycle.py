@@ -57,6 +57,7 @@ class CycleRunner:
         ticker: str,
         cycle_id: int,
         sleep_fn: Callable[[float], None] = time.sleep,
+        event_log: Any = None,
     ) -> None:
         self.db = db
         self.backend = backend
@@ -68,9 +69,20 @@ class CycleRunner:
         self.ticker = ticker.upper().strip()
         self.cycle_id = cycle_id
         self.sleep_fn = sleep_fn
+        self.event_log = event_log
 
         self._last_seen_message_id: dict[int, int] = {}
         self._init_last_seen()
+
+    def _close_cycle(self, outcome: str) -> None:
+        self.db.close_cycle(self.cycle_id, outcome=outcome, closed_ts=self.get_now_iso())
+        if self.event_log is not None:
+            self.event_log.append(
+                type="cycle.closed",
+                subject=f"cycle:{self.cycle_id}",
+                payload={"cycle_id": self.cycle_id, "ticker": self.ticker, "outcome": outcome},
+                actor="cycle",
+            )
 
     def get_now(self) -> datetime:
         if self.clock is not None:
@@ -450,7 +462,7 @@ class CycleRunner:
                     ts=self.get_now_iso(),
                 )
                 self._ensure_future_scheduled_task()
-                self.db.close_cycle(self.cycle_id, outcome="rimando", closed_ts=self.get_now_iso())
+                self._close_cycle("rimando")
                 return "rimando"
 
             # 2. Check PM decision in ticker_state
@@ -467,19 +479,13 @@ class CycleRunner:
                     if status in ("accepted", "deferred"):
                         if action == "defer":
                             self._ensure_future_scheduled_task()
-                            self.db.close_cycle(
-                                self.cycle_id, outcome="deferred", closed_ts=self.get_now_iso()
-                            )
+                            self._close_cycle("deferred")
                             return "deferred"
                         elif action in ("buy", "sell"):
                             outcome = self._process_order_flow(action, state_data)
                             self._ensure_future_scheduled_task()
                             if outcome.is_submitted or outcome.is_queued or outcome.is_pending:
-                                self.db.close_cycle(
-                                    self.cycle_id,
-                                    outcome="accepted",
-                                    closed_ts=self.get_now_iso(),
-                                )
+                                self._close_cycle("accepted")
                                 return "accepted"
                             else:
                                 reasons_str = (
@@ -498,11 +504,7 @@ class CycleRunner:
                                     cycle_id=self.cycle_id,
                                     ts=self.get_now_iso(),
                                 )
-                                self.db.close_cycle(
-                                    self.cycle_id,
-                                    outcome="rimando",
-                                    closed_ts=self.get_now_iso(),
-                                )
+                                self._close_cycle("rimando")
                                 return "rimando"
 
             # 3. Find agents with unread messages from other authors
@@ -538,7 +540,7 @@ class CycleRunner:
             if not agents_to_step:
                 # Nobody has unread messages -> default Rimando to prevent hanging
                 self._ensure_future_scheduled_task()
-                self.db.close_cycle(self.cycle_id, outcome="rimando", closed_ts=self.get_now_iso())
+                self._close_cycle("rimando")
                 return "rimando"
 
             # Step agents in turns
@@ -555,9 +557,7 @@ class CycleRunner:
                 if step_res is None:
                     if agent_name in ("pm", "portfolio_manager"):
                         self._ensure_future_scheduled_task()
-                        self.db.close_cycle(
-                            self.cycle_id, outcome="rimando", closed_ts=self.get_now_iso()
-                        )
+                        self._close_cycle("rimando")
                         return "rimando"
                     continue
 

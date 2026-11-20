@@ -391,6 +391,7 @@ def build_agent_spec(agent_name: str, settings: OfficeSettings) -> AgentSpec:
 def build_office(
     settings: OfficeSettings | None = None,
     env: Mapping[str, str] | None = None,
+    event_log: Any = None,
 ) -> Office:
     """Build production-grade Office instance wiring real components.
 
@@ -447,8 +448,9 @@ def build_office(
         db=db,
         broker=bracket_broker,
         approval_mode=settings.approval_mode,
+        event_log=event_log,
     )
-    trade_manager = TradeManager(db=db, broker=bracket_broker)
+    trade_manager = TradeManager(db=db, broker=bracket_broker, event_log=event_log)
 
     # 7. AgentEnvironment factory
     def env_factory(cycle_id: int | None = None) -> AgentEnvironment:
@@ -467,6 +469,7 @@ def build_office(
         order_flow=order_flow,
         settings=settings,
         registry=registry,
+        event_log=event_log,
     )
 
     # Attach convenience references for CLI
@@ -489,6 +492,7 @@ def build_test_office(
     clock: Callable[[], datetime] | datetime | None = None,
     approval_mode: str = "auto",
     sleep_fn: Callable[[float], None] | None = None,
+    event_log: Any = None,
 ) -> Office:
     """Build test Office wired with fakes for isolated, fast unit testing."""
     from tests.fakes.bracket_broker import FakeBracketBroker
@@ -516,8 +520,9 @@ def build_test_office(
         db=test_db,
         broker=test_broker,
         approval_mode=test_settings.approval_mode,
+        event_log=event_log,
     )
-    trade_manager = TradeManager(db=test_db, broker=test_broker)
+    trade_manager = TradeManager(db=test_db, broker=test_broker, event_log=event_log)
 
     def env_factory(cycle_id: int | None = None) -> AgentEnvironment:
         return AgentEnvironment(
@@ -537,6 +542,7 @@ def build_test_office(
         "order_flow": order_flow,
         "clock": clock,
         "settings": test_settings,
+        "event_log": event_log,
     }
     if sleep_fn is not None:
         kwargs["sleep_fn"] = sleep_fn
