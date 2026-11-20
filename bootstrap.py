@@ -451,6 +451,7 @@ def build_office(
         approval_mode=settings.approval_mode,
         event_log=event_log,
         trade_manager=trade_manager,
+        broker_reader=broker_reader,
     )
 
     # 7. AgentEnvironment factory
@@ -524,6 +525,7 @@ def build_test_office(
         approval_mode=test_settings.approval_mode,
         event_log=event_log,
         trade_manager=trade_manager,
+        broker_reader=test_reader,
     )
 
     def env_factory(cycle_id: int | None = None) -> AgentEnvironment:

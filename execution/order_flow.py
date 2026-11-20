@@ -245,9 +245,11 @@ class OrderFlow:
         is_market_open: Callable[[], bool] | None = None,
         event_log: Any = None,
         trade_manager: Any | None = None,
+        broker_reader: Any | None = None,
     ) -> None:
         self.db = db
         self.broker = broker
+        self.broker_reader = broker_reader
         self.event_log = event_log
         self.trade_manager = trade_manager
         self.halt = halt or SystemHalt(db, broker, event_log=event_log)
@@ -728,8 +730,8 @@ class OrderFlow:
         Returns the ids of orders whose status changed.
         """
         rows = self.db.connection.execute(
-            "SELECT id, status, broker_order_id FROM orders "
-            "WHERE status = 'submitted' AND broker_order_id IS NOT NULL"
+            "SELECT id, status, broker_order_id, client_order_id, ticker, side FROM orders "
+            "WHERE status IN ('submitted', 'submitting') AND broker_order_id IS NOT NULL"
         ).fetchall()
         changed: list[int] = []
         for row in rows:
@@ -743,15 +745,103 @@ class OrderFlow:
             raw = getattr(broker_order, "status", None)
             raw = str(getattr(raw, "value", raw)).split(".")[-1].lower()
             new_status = self._BROKER_STATUS_MAP.get(raw)
-            if new_status is None or new_status == row["status"]:
+            if new_status is None:
                 continue
-            self.db.update_order_status(row["id"], status=new_status)
-            self.db.insert_order_event(
-                row["id"],
-                "reconciled",
-                {"broker_order_id": row["broker_order_id"], "broker_status": raw},
+
+            fill_price = (
+                getattr(broker_order, "average_fill_price", None)
+                or getattr(broker_order, "filled_avg_price", None)
+                or getattr(broker_order, "price", None)
+                or getattr(broker_order, "limit_price", None)
             )
-            changed.append(int(row["id"]))
+            fill_qty = (
+                getattr(broker_order, "filled_quantity", None)
+                or getattr(broker_order, "filled_qty", None)
+                or getattr(broker_order, "quantity", None)
+                or getattr(broker_order, "qty", None)
+            )
+            fill_ts = (
+                getattr(broker_order, "filled_at", None)
+                or getattr(broker_order, "updated_at", None)
+                or utc_now_iso()
+            )
+
+            if raw in ("fill", "filled"):
+                if new_status != row["status"]:
+                    changed.append(int(row["id"]))
+                self.db.insert_order_event(
+                    row["id"],
+                    "reconciled",
+                    {"broker_order_id": row["broker_order_id"], "broker_status": raw},
+                )
+                update = {
+                    "event": "fill",
+                    "price": float(fill_price) if fill_price is not None else 0.0,
+                    "qty": float(fill_qty) if fill_qty is not None else 0.0,
+                    "timestamp": str(fill_ts),
+                    "order": {
+                        "id": row["broker_order_id"],
+                        "broker_order_id": row["broker_order_id"],
+                        "client_order_id": row["client_order_id"],
+                        "symbol": row["ticker"],
+                        "side": row["side"],
+                        "status": "filled",
+                        "type": "limit",
+                    },
+                }
+                self.apply_broker_update(update)
+            elif new_status != row["status"]:
+                changed.append(int(row["id"]))
+                self.db.insert_order_event(
+                    row["id"],
+                    "reconciled",
+                    {"broker_order_id": row["broker_order_id"], "broker_status": raw},
+                )
+                update = {
+                    "event": new_status,
+                    "price": float(fill_price) if fill_price is not None else 0.0,
+                    "qty": float(fill_qty) if fill_qty is not None else 0.0,
+                    "timestamp": str(fill_ts),
+                    "order": {
+                        "id": row["broker_order_id"],
+                        "broker_order_id": row["broker_order_id"],
+                        "client_order_id": row["client_order_id"],
+                        "symbol": row["ticker"],
+                        "side": row["side"],
+                        "status": new_status,
+                    },
+                }
+                self.apply_broker_update(update)
+
+        # 2. Check open trades: if a trade is open in DB, but no position exists at broker, close trade!
+        reader = self.broker_reader or getattr(self.broker, "broker_reader", None) or (self.broker if hasattr(self.broker, "get_positions") else None)
+        if reader is not None and self.trade_manager is not None:
+            try:
+                positions = reader.get_positions()
+                pos_symbols = {
+                    str(getattr(p, "symbol", "") if hasattr(p, "symbol") else p.get("symbol", "")).upper()
+                    for p in positions
+                    if float(getattr(p, "quantity", 0) if hasattr(p, "quantity") else p.get("quantity", 0)) > 0
+                }
+                open_trades = self.db.connection.execute(
+                    "SELECT * FROM trades WHERE closed_ts IS NULL"
+                ).fetchall()
+                for trade in open_trades:
+                    ticker = str(trade["ticker"]).upper()
+                    if ticker not in pos_symbols:
+                        # Position was closed offline! Close the trade.
+                        close_price = float(trade["entry_price"])
+                        close_reason = "tp"
+                        self.trade_manager.record_exit_fill(
+                            trade_id=int(trade["id"]),
+                            exit_price=close_price,
+                            exit_reason=close_reason,
+                            ts=utc_now_iso(),
+                            ticker=ticker,
+                        )
+            except Exception as exc:
+                logger.warning("Error checking open trade positions during sync: %s", exc)
+
         return changed
 
     def _find_open_bracket_order_id(self, ticker: str) -> str | None:
