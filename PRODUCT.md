@@ -22,25 +22,28 @@ Not an approval queue and not a generic trading terminal. It is a shared workspa
 Operates on desktop workstations and responsive displays alongside the Python engine running continuously (Docker/local). Active during US market sessions (NYSE/NASDAQ 09:30–16:00 EST), pre-market preparation, and post-market review. Interfaces with Alpaca broker accounts (each with its own credentials), local SQLite WAL database, and OmniRoute LLM endpoints.
 
 ## Capabilities and Constraints
-- Office workspace: every agent chat and cycle (Portfolio Manager, Market, Sentiment, Technical, Fundamental, Risk), readable live, with the shared state behind each decision.
-- Bridge agent: a separate agent Luca talks to in natural language; it collaborates with all office agents and can query and operate the software on his behalf.
-- Human as office member: post into agent chats, brief or redirect agents, select and dispatch news, advise, enqueue tasks, manage the watchlist.
-- Shared charts: Luca and agents draw and write on the same charts (levels, zones, notes), and each side sees the other's annotations.
-- Terminal: charts, open and pending orders, bracket orders, trailing stops, watchlist.
-- Portfolio management: equity, cash, positions, trades, risk exposure.
-- Inbox: alerts, events and the few items that ask for Luca (including order approvals when an account runs in manual mode).
-- Settings and office configuration: agents, schedules, budgets, risk limits, accounts; views onto the database and agent memory.
-- Deterministic Risk Gate visible wherever orders appear (1% trade risk, 10% position, 30% sector, 5% cash reserve, R:R >= 1.5, 2-day earnings embargo).
-- Controls: halt/resume, reconcile, data refresh; LLM token and cost tracking; database size.
-- Broker accounts: one or more selectable accounts, active account always visible; no paper/live mode in the UI.
-- Explicit states: data freshness, Runtime and broker stream connectivity, empty, loading, error. Zero mock data in production surfaces.
-- Tabular numerals, keyboard operability, usable on phone.
-- Backend: the single-writer Runtime (HTTP /v1 commands and reads, SSE events). Bridge agent and shared chart annotations do not exist yet in the backend and must be added there.
+Five pages, one design system:
+
+1. **Assistente**: home. Natural-language conversation with the Bridge agent, Luca's peer: it reads everything, talks to every office agent and uses the same commands Luca has in the UI (capital-touching actions ask for confirmation).
+2. **Ufficio**: the agents (list or a better arrangement), each with its chats open to read and write into, and the live stream of the tools it calls. Luca can talk directly to any specialist agent, not only through the Bridge.
+3. **Terminale**: one dense page in the manner of professional finance software: chart (TradingView lightweight-charts), quote/order book, open and pending orders (approve or reject when an account runs in manual mode), the agents active on that instrument, and the watchlist shared with the agents, which Luca edits as a "wildcard colleague". Whatever an agent draws on a chart (levels, trend lines, indicators) appears there, and whatever Luca draws the agents can read.
+4. **Portafoglio**: portfolio management like a desktop banking app: statistics, how much is invested, allocation, positions, trades, performance; plus a section defining the financial metrics and risk constraints the portfolio must respect.
+5. **Configurazioni**: the technical side: agents, models and prompts, schedules, budgets, data providers, broker accounts, database and retention, Runtime health.
+
+Cross-cutting:
+- Input from Luca (messages, news, drawings, watchlist edits) is weighed by agents like a senior colleague's view: they may disagree and say why; the Risk Gate stays sovereign.
+- Deterministic Risk Gate visible wherever orders appear (1% trade risk, 10% position, 30% sector, 30 positions, 5% cash reserve, R:R >= 1.5, 2-day earnings embargo).
+- Inbox of alerts and events (including approvals for manual accounts), reachable from every page.
+- Broker accounts: one or more selectable accounts (one Runtime each), active account always visible; no paper/live mode in the UI.
+- Explicit states: data freshness, Runtime and broker stream connectivity, halt, empty, loading, error. Zero mock data in production surfaces.
+- Tabular numerals, keyboard operability, every page usable on phone.
+- Backend: the single-writer Runtime (HTTP /v1, SSE). Still missing there: Bridge agent, shared chart annotations (table, agent tools, events), tool-call stream in events, OHLCV and equity-history reads, editable portfolio constraints and configuration. US equities on Alpaca expose quotes (NBBO) and trades, not full depth: the "order book" is bid/ask plus time and sales unless a depth vendor is added.
 
 ## Brand Commitments
-- Visual authority: professional trading terminal aesthetic (dense, structured, high-contrast, distraction-free) adhering to `docs/frontend.md`.
-- Component foundations: shadcn/ui component system with 21st.dev component discovery; Figma as source of truth for approved design comps.
-- Semantic consistency: unambiguous, standard financial color semantics for PnL and order statuses; minimal gratuitous motion or decorative styling.
+- Convention is the commitment: the cockpit looks and behaves like the best software of each kind it contains (professional finance terminal, desktop banking app, assistant chat, agent workspace), executed at full craft, with no metaphor or theme imposed on the pages. Chosen explicitly by Luca on 2026-11-20 after two direction rounds.
+- Single dark theme; dense, high-contrast, calm at rest.
+- shadcn/ui foundation, 21st.dev for component discovery, Figma for approved references; standard tools, no custom stack.
+- Standard financial colour semantics for PnL and order states; motion only for state.
 
 ## Evidence on Hand
 - `docs/frontend.md`: binding frontend design, trading-specific UX, and quality assurance rules.
