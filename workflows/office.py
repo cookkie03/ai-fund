@@ -154,12 +154,12 @@ class Office:
         equity_val = getattr(account, "equity", None)
         if equity_val is None and isinstance(account, dict):
             equity_val = account.get("equity")
-        equity = Decimal(str(equity_val or "100000.0"))
+        equity = Decimal(str(equity_val)) if equity_val is not None else Decimal("100000.0")
 
         cash_val = getattr(account, "cash", None)
         if cash_val is None and isinstance(account, dict):
             cash_val = account.get("cash")
-        cash = Decimal(str(cash_val or "50000.0"))
+        cash = Decimal(str(cash_val)) if cash_val is not None else Decimal("50000.0")
 
         pos_dict: dict[str, Decimal] = {}
         for p in positions:
