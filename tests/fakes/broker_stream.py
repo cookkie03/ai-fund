@@ -18,6 +18,10 @@ class FakeBrokerStream:
         self.on_reconnect = on_reconnect
         self.running = False
 
+    @property
+    def connected(self) -> bool:
+        return self.running
+
     def start(self) -> None:
         self.running = True
         if self.on_reconnect is not None:
