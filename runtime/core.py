@@ -254,37 +254,73 @@ class Runtime:
                 if existing is not None:
                     return existing
 
-            # 2. Execute handler, then log result in a database transaction
+            # 2. Execute handler:
+            # Network commands (ApproveOrder, Halt, ReconcileBroker, RefreshData) manage their
+            # own split transactions to avoid holding SQLite lock during network calls.
+            # Purely local commands run in a single atomic transaction with command.accepted.
+            is_network_cmd = isinstance(cmd, (ApproveOrder, Halt, ReconcileBroker, RefreshData))
+
             try:
-                result = handler(self._ctx, cmd, actor)
-                with self.office.db.transaction():
-                    if result.ok:
-                        self.event_log.append(
-                            type="command.accepted",
-                            subject=f"command:{cmd.__class__.__name__}",
-                            payload={
-                                "command": cmd.__class__.__name__,
-                                "ok": True,
-                                "data": result.data,
-                                "reasons": result.reasons,
-                            },
-                            actor=actor,
-                            command_id=command_id,
-                        )
-                    else:
-                        self.event_log.append(
-                            type="command.rejected",
-                            subject=f"command:{cmd.__class__.__name__}",
-                            payload={
-                                "command": cmd.__class__.__name__,
-                                "ok": False,
-                                "data": result.data,
-                                "reasons": result.reasons,
-                            },
-                            actor=actor,
-                            command_id=command_id,
-                        )
-                return result
+                if is_network_cmd:
+                    result = handler(self._ctx, cmd, actor)
+                    with self.office.db.transaction():
+                        if result.ok:
+                            self.event_log.append(
+                                type="command.accepted",
+                                subject=f"command:{cmd.__class__.__name__}",
+                                payload={
+                                    "command": cmd.__class__.__name__,
+                                    "ok": True,
+                                    "data": result.data,
+                                    "reasons": result.reasons,
+                                },
+                                actor=actor,
+                                command_id=command_id,
+                            )
+                        else:
+                            self.event_log.append(
+                                type="command.rejected",
+                                subject=f"command:{cmd.__class__.__name__}",
+                                payload={
+                                    "command": cmd.__class__.__name__,
+                                    "ok": False,
+                                    "data": result.data,
+                                    "reasons": result.reasons,
+                                },
+                                actor=actor,
+                                command_id=command_id,
+                            )
+                    return result
+                else:
+                    with self.office.db.transaction():
+                        result = handler(self._ctx, cmd, actor)
+                        if result.ok:
+                            self.event_log.append(
+                                type="command.accepted",
+                                subject=f"command:{cmd.__class__.__name__}",
+                                payload={
+                                    "command": cmd.__class__.__name__,
+                                    "ok": True,
+                                    "data": result.data,
+                                    "reasons": result.reasons,
+                                },
+                                actor=actor,
+                                command_id=command_id,
+                            )
+                        else:
+                            self.event_log.append(
+                                type="command.rejected",
+                                subject=f"command:{cmd.__class__.__name__}",
+                                payload={
+                                    "command": cmd.__class__.__name__,
+                                    "ok": False,
+                                    "data": result.data,
+                                    "reasons": result.reasons,
+                                },
+                                actor=actor,
+                                command_id=command_id,
+                            )
+                    return result
             except Exception as exc:
                 logger.exception("Error executing command %s", cmd.__class__.__name__)
                 # Outside handler: log rejection
