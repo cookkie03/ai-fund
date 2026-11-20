@@ -18,7 +18,10 @@ def test_r10_second_runtime_refused_before_touching_db_with_clean_exit(tmp_path,
     lock_file = open(lock_path, "w")
     fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
-    monkeypatch.setenv("TRADING_AGENT_DB", str(db_path))
+    db_path.touch()
+    alias = tmp_path / "alias.db"
+    alias.symlink_to(db_path)
+    monkeypatch.setenv("TRADING_AGENT_DB", str(alias))
 
     build_called = False
 

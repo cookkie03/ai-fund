@@ -55,6 +55,15 @@ class RoutingBackend(AgentBackend):
         return backend.step(agent, chat_context, tools)
 
 
+def resolve_db_path(env: Mapping[str, str] | None = None) -> Path:
+    """Single unified resolver for the OfficeDB database file path."""
+    env_map = os.environ if env is None else env
+    path_str = env_map.get("TRADING_AGENT_DB", "data/trading-agent.db")
+    if path_str == ":memory:":
+        return Path(":memory:")
+    return Path(path_str).resolve()
+
+
 class SafeBrokerReader:
     """Sanitizes broker account and positions so no paper/live details leak to agents."""
 
@@ -420,9 +429,10 @@ def build_office(
             settings = OfficeSettings()
 
     # 1. OfficeDB at configured DB path
-    db_path = env_map.get("TRADING_AGENT_DB", "data/trading-agent.db")
-    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    db = OfficeDB(db_path)
+    resolved_path = resolve_db_path(env_map)
+    if resolved_path != Path(":memory:"):
+        resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    db = OfficeDB(resolved_path)
 
     # 2. RegistryWriter
     registry = RegistryWriter(db)
