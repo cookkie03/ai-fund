@@ -70,27 +70,11 @@ class BracketBroker(Protocol):
 
 
 def _is_explicit_rejection(exc: Exception) -> bool:
-    """Check if exception represents an explicit broker rejection (e.g. 4xx HTTP error)."""
-    # 1. BrokerError with status_code
+    """Only classify structured, definitive client errors as rejection."""
     status = getattr(exc, "status_code", None)
-    if status is not None and 400 <= int(status) < 500:
-        return True
-
-    # 2. Check for Alpaca or HTTP response status_code attribute
-    resp = getattr(exc, "response", None)
-    if resp is not None:
-        resp_status = getattr(resp, "status_code", getattr(resp, "status", None))
-        if resp_status is not None and 400 <= int(resp_status) < 500:
-            return True
-
-    # 3. Check error string for common 4xx patterns or JSON error code
-    exc_str = str(exc).lower()
-    if any(pat in exc_str for pat in ("422", "400", "403", "sub-penny", "invalid", "insufficient")):
-        # Ensure it's not a 5xx or connection/timeout message
-        if not any(net in exc_str for net in ("timeout", "connection", "500", "502", "503", "504")):
-            return True
-
-    return False
+    if status is None:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+    return isinstance(status, int) and 400 <= status < 500 and status not in (408, 409, 425, 429)
 
 
 class SystemHalt:

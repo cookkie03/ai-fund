@@ -445,7 +445,12 @@ def test_cancel_entry_if_unfilled(db, broker, valid_buy_draft, valid_gate_ctx):
 
 class _RejectingBroker(FakeBracketBroker):
     def submit_bracket(self, *args, **kwargs) -> str:
-        raise RuntimeError('{"code":42210000,"message":"sub-penny increment"}')
+        from alpaca.common.exceptions import APIError
+        from requests import HTTPError, Response
+
+        response = Response()
+        response.status_code = 422
+        raise APIError('sub-penny increment', HTTPError(response=response))
 
 
 def test_broker_error_rejects_order_instead_of_leaving_it_pending(
@@ -464,6 +469,17 @@ def test_broker_error_rejects_order_instead_of_leaving_it_pending(
     assert db.get_order(outcome.order_id)["status"] == "rejected"
     events = [e["event"] for e in db.list_order_events(outcome.order_id)]
     assert "broker_error" in events
+
+
+def test_untyped_submit_error_is_not_an_explicit_rejection(db, valid_buy_draft, valid_gate_ctx):
+    broker = FakeBracketBroker()
+
+    def submit(**kwargs):
+        raise RuntimeError("invalid upstream response")
+
+    broker.submit_bracket = submit
+    flow = OrderFlow(db=db, broker=broker, approval_mode="auto")
+    assert flow.process_accepted_order("AAPL", "accept", valid_buy_draft, valid_gate_ctx).status == "submitting"
 
 
 def test_sync_broker_orders_marks_cancelled_and_filled(db, broker, valid_buy_draft, valid_gate_ctx):
