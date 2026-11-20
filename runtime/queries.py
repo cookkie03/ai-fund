@@ -166,7 +166,9 @@ class ReadModel:
             halted = self._runtime.office.halt.is_halted()
             db_size = self._runtime.office.db.db_size_bytes()
             broker_configured = getattr(self._runtime, "broker_configured", False)
-            if hasattr(self._runtime, "broker_stream_connected"):
+            if self._runtime.broker_stream is not None and hasattr(self._runtime.broker_stream, "connected"):
+                stream_connected = bool(self._runtime.broker_stream.connected)
+            elif hasattr(self._runtime, "broker_stream_connected"):
                 stream_connected = self._runtime.broker_stream_connected
 
         return HealthDTO(
