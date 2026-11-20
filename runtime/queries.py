@@ -313,7 +313,7 @@ class ReadModel:
                     id=int(r["id"]),
                     ticker=str(r["ticker"]),
                     entry_order_id=int(r["entry_order_id"]),
-                    exit_order_id=int(r["exit_order_id"]) if r["exit_order_id"] is not None else None,
+                    exit_order_id=int(r["exit_order_id"]) if "exit_order_id" in r.keys() and r["exit_order_id"] is not None else None,
                     entry_price=float(r["entry_price"]),
                     exit_price=float(r["exit_price"]) if r["exit_price"] is not None else None,
                     qty=float(r["qty"]),

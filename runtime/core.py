@@ -84,6 +84,17 @@ _HANDLER_MAP = {
 class Runtime:
     """The single-writer, event-driven runtime process."""
 
+    @classmethod
+    def from_settings(
+        cls,
+        settings: Any = None,
+        env: Any = None,
+    ) -> Runtime:
+        from bootstrap import build_office
+
+        office = build_office(settings=settings, env=env)
+        return cls(office=office)
+
     def __init__(self, office: Office) -> None:
         self.office = office
         self.bus = EventBus()
