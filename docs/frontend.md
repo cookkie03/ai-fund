@@ -43,7 +43,8 @@ Direzione visiva: lo standard di ogni genere (terminale finanziario, app bancari
 
 ## Workflow Impeccable
 1. `shape`: un brief per pagina (job, dati reali dal Runtime, stati, interazioni), in `.impeccable/` come surface brief.
-2. Riferimenti: due o tre prodotti per genere fissano il livello di qualità; niente giro di direzioni con metafore.
+2. Riferimenti di qualità (non da copiare): Terminale come TradingView e IBKR TWS; Assistente e Ufficio come app di Claude, Linear e Slack; Portafoglio professionale nelle informazioni e moderno nell'uso (Revolut, Trade Republic, ma più densi). Niente giro di direzioni con metafore.
+   Ordine: shell comune + Terminale per primi.
 3. Sistema condiviso: shell, token e componenti shadcn una volta sola, poi le pagine.
 4. Build in codice pagina per pagina (le superfici operative sono code-led), con i gap di backend chiusi prima della pagina che li usa.
 5. Per ogni pagina: `critique`, `audit`, screenshot Playwright desktop e mobile, finish review.

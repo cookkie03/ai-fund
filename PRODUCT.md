@@ -41,6 +41,7 @@ Cross-cutting:
 
 ## Brand Commitments
 - Convention is the commitment: the cockpit looks and behaves like the best software of each kind it contains (professional finance terminal, desktop banking app, assistant chat, agent workspace), executed at full craft, with no metaphor or theme imposed on the pages. Chosen explicitly by Luca on 2026-11-20 after two direction rounds.
+- Craft references (the bar, not the look to copy): Terminale beside TradingView and Interactive Brokers TWS; Assistente and Ufficio beside the Claude app, Linear and Slack; Portafoglio professional first in the information it shows, then pleasant to use, with the modern feel of Revolut and Trade Republic but without their thin information density.
 - Single dark theme; dense, high-contrast, calm at rest.
 - shadcn/ui foundation, 21st.dev for component discovery, Figma for approved references; standard tools, no custom stack.
 - Standard financial colour semantics for PnL and order states; motion only for state.
