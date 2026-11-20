@@ -35,4 +35,5 @@ nohup.out
 *.db
 *.db-shm
 *.db-wal
+*.db.lock
 frontend/tsconfig.tsbuildinfo

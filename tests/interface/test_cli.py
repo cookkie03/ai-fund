@@ -381,4 +381,4 @@ def test_cli_run_stops_gracefully(runtime):
     runtime.office.stop()
     t.join(timeout=2.0)
     assert not t.is_alive()
-    assert "Starting Agent Office loop" in out.getvalue()
+    assert "Starting" in out.getvalue()

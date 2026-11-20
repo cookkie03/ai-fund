@@ -180,7 +180,7 @@ class Runtime:
             return
 
         db_path = self.office.db.path
-        if db_path != Path(":memory:"):
+        if db_path != Path(":memory:") and self._lock_file is None:
             lock_path = db_path.with_suffix(".db.lock")
             self._lock_file = open(lock_path, "w")
             try:

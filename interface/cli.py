@@ -36,7 +36,9 @@ def _format_table(headers: Sequence[str], rows: Sequence[Sequence[Any]]) -> str:
 
 
 def _cmd_run(runtime_factory: Callable[[], Any] | None, args: argparse.Namespace, out: TextIO) -> int:
+    import fcntl
     import threading
+    from pathlib import Path
 
     import uvicorn
 
@@ -47,13 +49,40 @@ def _cmd_run(runtime_factory: Callable[[], Any] | None, args: argparse.Namespace
     port = int(getattr(args, "port", None) or os.environ.get("TRADING_AGENT_API_PORT", "8765"))
     token = getattr(args, "token", None) or os.environ.get("TRADING_AGENT_API_TOKEN")
 
-    poll_interval = getattr(args, "poll_interval", 0.5)
+    # Early process lock check before building office or touching DB
+    db_path_str = os.environ.get("TRADING_AGENT_DB", "data/trading-agent.db")
+    lock_file = None
+    if db_path_str != ":memory:":
+        lock_path = Path(db_path_str).with_suffix(".db.lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            lock_file = open(lock_path, "w")
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            if lock_file is not None:
+                lock_file.close()
+            out.write(
+                f"Errore: un altro processo Runtime è già attivo sul database: {db_path_str}\n"
+            )
+            return 1
+
     out.write(
-        f"Starting Agent Office loop / Trading Agent Runtime on {host}:{port} (poll interval: {poll_interval}s)... Press Ctrl+C to stop.\n"
+        f"Starting Trading Agent Runtime on {host}:{port}... Press Ctrl+C to stop.\n"
     )
     out.flush()
 
-    rt: Runtime = runtime_factory() if runtime_factory is not None else Runtime.from_settings()
+    try:
+        rt: Runtime = runtime_factory() if runtime_factory is not None else Runtime.from_settings()
+        if lock_file is not None:
+            rt._lock_file = lock_file
+    except Exception:
+        if lock_file is not None:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                lock_file.close()
+            except Exception:
+                pass
+        raise
     app = create_app(rt, token=token, host=host)
 
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
@@ -434,8 +463,8 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # 1. run
-    p_run = subparsers.add_parser("run", help="Run the Agent Office scheduler loop")
-    p_run.add_argument("--poll-interval", type=float, default=0.5, help="Poll interval in seconds")
+    p_run = subparsers.add_parser("run", help="Run the Trading Agent Runtime process")
+    p_run.add_argument("--poll-interval", type=float, default=None, help=argparse.SUPPRESS)
     p_run.add_argument("--host", default=None, help="Host to bind API")
     p_run.add_argument("--port", type=int, default=None, help="Port to bind API")
     p_run.add_argument("--token", default=None, help="Bearer token for API auth")
