@@ -308,8 +308,23 @@ def _cmd_orders_list(client: RuntimeClient, args: argparse.Namespace, out: TextI
     return 0
 
 
+def _ask_confirm(prompt: str, auto_yes: bool = False) -> bool:
+    if auto_yes:
+        return True
+    try:
+        ans = input(f"{prompt} [y/N]: ")
+        return ans.strip().lower() in ("y", "yes", "s", "si", "sì")
+    except (EOFError, OSError):
+        return False
+
+
 def _cmd_orders_approve(client: RuntimeClient, args: argparse.Namespace, out: TextIO) -> int:
     order_id = args.order_id
+    auto_yes = getattr(args, "yes", False)
+    if not _ask_confirm(f"Confermi l'approvazione dell'ordine #{order_id}?", auto_yes):
+        out.write("Operazione annullata.\n")
+        return 1
+
     res = client.command("approve_order", {"order_id": order_id, "confirm": True})
     if res.ok:
         out.write(f"Order #{order_id} approved successfully: status={res.data.get('status')}\n")
@@ -438,12 +453,22 @@ def _cmd_inbox(client: RuntimeClient, args: argparse.Namespace, out: TextIO) -> 
 
 def _cmd_halt(client: RuntimeClient, args: argparse.Namespace, out: TextIO) -> int:
     cancel_open = getattr(args, "cancel_open", True)
+    auto_yes = getattr(args, "yes", False)
+    if not _ask_confirm("Confermi l'arresto del sistema di trading?", auto_yes):
+        out.write("Operazione annullata.\n")
+        return 1
+
     client.command("halt", {"cancel_open": cancel_open, "confirm": True})
     out.write(f"System halted. Trading stopped (cancel_open={cancel_open}).\n")
     return 0
 
 
 def _cmd_resume(client: RuntimeClient, args: argparse.Namespace, out: TextIO) -> int:
+    auto_yes = getattr(args, "yes", False)
+    if not _ask_confirm("Confermi la ripresa delle operazioni di trading?", auto_yes):
+        out.write("Operazione annullata.\n")
+        return 1
+
     client.command("resume", {"confirm": True})
     out.write("System resumed. Trading allowed.\n")
     return 0
@@ -550,6 +575,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp_ord_app = sp_ord.add_parser("approve", help="Approve a pending order")
     sp_ord_app.add_argument("order_id", type=int, help="Order ID to approve")
+    sp_ord_app.add_argument("-y", "--yes", action="store_true", help="Confirm approval without interactive prompt")
     sp_ord_app.set_defaults(handler=_cmd_orders_approve)
 
     sp_ord_rej = sp_ord.add_parser("reject", help="Reject a pending order")
@@ -599,9 +625,11 @@ def build_parser() -> argparse.ArgumentParser:
     # 13. halt & resume
     p_halt = subparsers.add_parser("halt", help="Emergency halt: stop all trading")
     p_halt.add_argument("--no-cancel-open", dest="cancel_open", action="store_false", default=True)
+    p_halt.add_argument("-y", "--yes", action="store_true", help="Confirm halt without interactive prompt")
     p_halt.set_defaults(handler=_cmd_halt)
 
     p_resume = subparsers.add_parser("resume", help="Resume trading after halt")
+    p_resume.add_argument("-y", "--yes", action="store_true", help="Confirm resume without interactive prompt")
     p_resume.set_defaults(handler=_cmd_resume)
 
     # 14. config check

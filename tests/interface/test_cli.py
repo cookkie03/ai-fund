@@ -327,7 +327,7 @@ def test_cli_inbox(client_factory, test_db):
 
 def test_cli_halt_and_resume(client_factory, test_db):
     # Halt
-    code, out = run_cli(["halt"], client_factory=client_factory)
+    code, out = run_cli(["halt", "--yes"], client_factory=client_factory)
     assert code == 0
     assert "System halted" in out
 
@@ -335,7 +335,7 @@ def test_cli_halt_and_resume(client_factory, test_db):
     assert row is not None and row["value"] == "1"
 
     # Resume
-    code, out = run_cli(["resume"], client_factory=client_factory)
+    code, out = run_cli(["resume", "--yes"], client_factory=client_factory)
     assert code == 0
     assert "System resumed" in out
 
@@ -358,7 +358,7 @@ def test_cli_help_and_invalid_command(client_factory):
 
 
 def test_cli_halt_options(client_factory, test_db):
-    code, out = run_cli(["halt", "--no-cancel-open"], client_factory=client_factory)
+    code, out = run_cli(["halt", "--no-cancel-open", "--yes"], client_factory=client_factory)
     assert code == 0
     assert "cancel_open=False" in out
 
