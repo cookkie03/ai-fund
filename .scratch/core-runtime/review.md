@@ -116,3 +116,58 @@ Lo stream sta in `execution/alpaca_stream.py` invece che in `runtime/broker_stre
 - **Telegram**: il bridge diventa client di `RuntimeClient`.
 - **Frontend**: riparte usando le letture e `/v1/events` come fonte dati.
 - **Smoke reale**: LLM e Alpaca paper sul Minisforum, con il container `engine` aggiornato.
+
+---
+
+# Secondo giro — verifica delle correzioni R1–R12 (2026-11-20, base `f44fa20`)
+
+## Goal (da incollare in `/goal`)
+
+> Correggi N1–N3 di `.scratch/core-runtime/review.md` (§«Secondo giro»), test-first. Fai anche N4–N6 se restano semplici. Ogni test deve usare le **forme reali di produzione**: `SafeBrokerReader`, che restituisce dizionari con `qty`, e il wiring di `bootstrap.build_office`/`_lazy_init_alpaca_broker` dove possibile, non mock con attributi inventati. Hai finito quando suite e ruff sono verdi, la riproduzione di N1 qui sotto non chiude più il Trade, `report.md` ha un §«Secondo giro» con hash e scelte prese, e codice e wiki sono pushati senza ahead/behind.
+
+## Verificato
+
+- 336 test passati, 2 saltati; ruff pulito.
+- Smoke con Office di test: un solo `halt.changed` per comando (R6 ok); secondo Runtime rifiutato con exit 1 e messaggio pulito (R10 ok); `say` produce consegna immediata e ciclo completo; nessun log di «poll interval».
+- Controllate nel codice e risolte: R1 (credenziali `ALPACA_*` centralizzate, riconciliazione all'avvio), R3 (riconnessione con backoff, `paper` derivato dall'URL), R5 (scadenze reali, `job.ran` persistiti), R6, R7, R8, R10, R11, R12.
+
+## Problemi nuovi
+
+### N1 — Bloccante: la riconciliazione chiude tutti i Trade aperti
+
+`OrderFlow.sync_broker_orders()`, parte 2, legge la quantità delle posizioni con `p.get("quantity", 0)`. In produzione però il reader è `SafeBrokerReader` (`bootstrap.py:_lazy_init_alpaca_broker`), che restituisce dizionari con la chiave **`qty`**. Ogni posizione risulta quindi a 0, e **a ogni riconciliazione** (avvio, riconnessione dello stream, comando `ReconcileBroker`) ogni Trade aperto viene chiuso nel DB anche se la posizione è ancora aperta al broker. I test passavano perché usavano mock con `quantity`.
+
+Riproduzione, eseguita in questa review: `build_test_office(broker_reader=SafeBrokerReader(reader con AAPL qty=10))` + `record_entry_fill`, poi `sync_broker_orders()`. Risultato: Trade chiuso, `exit_price=150.0` (= entrata), `exit_reason='tp'`.
+
+Il bug corrompe anche i dati: la chiusura avviene **inventata**, al prezzo di entrata e con motivo «tp». Il log dei Trade è il registro delle performance (decisione Q68).
+
+Correzione:
+- normalizzare le posizioni con un solo modello (`qty`), in un solo punto;
+- chiudere un Trade solo se il broker conferma davvero che la posizione non c'è più;
+- usare il fill reale di uscita (ordine gamba TP/SL chiuso, o attività FILL del conto). Se non è ricostruibile, motivo `reconciled_unknown` + voce in Inbox, mai «tp» con prezzo di entrata;
+- se la lettura delle posizioni fallisce, non toccare i Trade.
+
+### N2 — Alto: un errore di rete all'invio può lasciare un ordine orfano al broker
+
+In `_submit_order_locked`, qualsiasi eccezione di `submit_bracket` imposta lo stato `rejected`. Con un timeout l'ordine può essere già stato accettato da Alpaca: localmente risulta rifiutato, e la riconciliazione cerca solo `submitted`/`submitting` con `broker_order_id IS NOT NULL`, quindi non lo vedrà mai. Lo stato `submitting` introdotto da R2 viene sovrascritto e non serve allo scopo.
+
+Correzione:
+- in caso di eccezione, chiamare `broker.find_by_client_id(client_order_id)`: se l'ordine esiste → `submitted` con il suo id; se il broker non è raggiungibile → resta `submitting` senza `broker_order_id`;
+- la riconciliazione deve cercare anche i `submitting` per `client_order_id`;
+- `rejected` solo per un rifiuto esplicito del broker (errore 4xx).
+
+### N3 — Medio: l'audit del comando non è più atomico con l'effetto
+
+Dopo R2, l'handler gira in autocommit e `command.accepted` viene scritto in una transazione successiva. Se il processo cade tra le due, resta l'effetto senza audit, e un retry con la stessa `Idempotency-Key` riesegue il comando: per esempio `Say` duplica il messaggio. La spec §5 chiedeva un'unica transazione.
+
+Correzione: gli handler solo locali (`EnqueueTask`, `Say`, watchlist, `MarkInboxRead`, `IngestAlert`, `Reject`) tornano in un'unica transazione con l'audit. Lo split resta solo per i comandi con chiamate di rete, e la deviazione va documentata nel report.
+
+### Minori
+
+- **N4**: lo scheduler non si sveglia su `order.created` e `order.status_changed`, quindi le scadenze di `expire_pending`/`release_queued` calcolate su un ordine nuovo possono slittare fino al risveglio successivo (≤ 1 h, grazie a `data_refresh`). Correzione: aggiungerli alla lista di wake.
+- **N5**: il backoff di R9 è un polling a 1 s finché resta un task scaduto non consegnabile. Correzione: escludere quel task dal calcolo della scadenza, o marcarlo, invece di ripetere il controllo ogni secondo.
+- **N6**: `interface/cli.py` prende il lock sul percorso DB letto dalla config, non su quello del DB effettivamente aperto dal Runtime. Sono due fonti diverse, coincidenti in produzione ma non con `runtime_factory`. Correzione: un'unica funzione che risolve il percorso DB, usata sia dal lock sia da `build_office`.
+
+## Lezione per i prossimi goal
+
+I test con mock costruiti a mano hanno nascosto N1. Per tutto ciò che legge dati del broker, almeno un test deve passare dal wiring di produzione (`SafeBrokerReader` e gli adapter reali con client finto).
