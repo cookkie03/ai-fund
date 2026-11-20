@@ -1,11 +1,11 @@
-"""HTTP and Server-Sent Events (SSE) transport layer for the Runtime."""
+"""FastAPI application exposing Command, Read, and Event ports over HTTP and SSE."""
 
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
-from queue import Empty
 from typing import TYPE_CHECKING, Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
@@ -29,31 +29,23 @@ from runtime.commands import (
 
 if TYPE_CHECKING:
     from runtime.core import Runtime
+    from runtime.events import Event
 
 logger = logging.getLogger(__name__)
 
-_COMMAND_MAP: dict[str, type] = {
+_COMMAND_MAP = {
     "enqueue_task": EnqueueTask,
-    "enqueuetask": EnqueueTask,
     "say": Say,
     "add_watchlist": AddWatchlist,
-    "addwatchlist": AddWatchlist,
     "remove_watchlist": RemoveWatchlist,
-    "removewatchlist": RemoveWatchlist,
     "approve_order": ApproveOrder,
-    "approveorder": ApproveOrder,
     "reject_order": RejectOrder,
-    "rejectorder": RejectOrder,
     "halt": Halt,
     "resume": Resume,
     "reconcile_broker": ReconcileBroker,
-    "reconcilebroker": ReconcileBroker,
     "refresh_data": RefreshData,
-    "refreshdata": RefreshData,
     "mark_inbox_read": MarkInboxRead,
-    "markinboxread": MarkInboxRead,
     "ingest_alert": IngestAlert,
-    "ingestalert": IngestAlert,
 }
 
 
@@ -69,17 +61,17 @@ def create_app(
 
     app = FastAPI(title="Trading Agent Runtime API", version="0.1.0")
 
-    async def verify_token(request: Request) -> None:
+    def verify_token(request: Request) -> None:
         if token is not None:
             auth = request.headers.get("Authorization")
             if not auth or not auth.startswith("Bearer "):
                 raise HTTPException(status_code=401, detail="Missing or invalid Bearer token")
             provided = auth.removeprefix("Bearer ").strip()
-            if provided != token:
+            if not hmac.compare_digest(provided, token):
                 raise HTTPException(status_code=401, detail="Unauthorized")
 
     @app.get("/v1/health", dependencies=[Depends(verify_token)])
-    async def get_health() -> dict[str, Any]:
+    def get_health() -> dict[str, Any]:
         return runtime.read.health().model_dump()
 
     @app.post("/v1/commands/{name}", dependencies=[Depends(verify_token)])
@@ -107,7 +99,7 @@ def create_app(
         return JSONResponse(status_code=200, content=res.model_dump())
 
     @app.get("/v1/read/{name}", dependencies=[Depends(verify_token)])
-    async def execute_read(name: str, request: Request) -> Any:
+    def execute_read(name: str, request: Request) -> Any:
         q = request.query_params
         norm = name.lower().replace("-", "_")
 
@@ -170,28 +162,52 @@ def create_app(
         last_id_hdr = request.headers.get("Last-Event-ID")
         after_id = int(after_param) if after_param is not None else (int(last_id_hdr) if last_id_hdr else None)
 
-        async def event_generator():
-            # 1. Replay past events
-            if after_id is not None:
-                past_events = await asyncio.to_thread(runtime.event_log.since, after_id=after_id)
-                for pe in past_events:
-                    payload_json = json.dumps(pe.payload, default=str)
-                    yield f"id: {pe.id}\nevent: {pe.type}\ndata: {payload_json}\n\n"
+        queue: asyncio.Queue[Event | None] = asyncio.Queue(maxsize=100)
+        loop = asyncio.get_running_loop()
 
-            # 2. Live event bus stream
-            sub = runtime.bus.subscribe()
+        def _on_bus_event(event: Event) -> None:
+            def _put():
+                try:
+                    queue.put_nowait(event)
+                except asyncio.QueueFull:
+                    # Client is too slow: push None sentinel to trigger disconnect and client replay
+                    try:
+                        queue.put_nowait(None)
+                    except asyncio.QueueFull:
+                        pass
+            loop.call_soon_threadsafe(_put)
+
+        async def event_generator():
+            runtime.bus.add_listener(_on_bus_event)
+            seen_ids: set[int] = set()
             try:
+                # 1. Replay past events
+                if after_id is not None:
+                    past_events = await asyncio.to_thread(runtime.event_log.since, after_id=after_id)
+                    for pe in past_events:
+                        seen_ids.add(pe.id)
+                        payload_json = json.dumps(pe.payload, default=str)
+                        yield f"id: {pe.id}\nevent: {pe.type}\ndata: {payload_json}\n\n"
+
+                # 2. Async queue consumer without blocking threadpool
                 while True:
                     if await request.is_disconnected():
                         break
                     try:
-                        event = await asyncio.to_thread(sub.get, timeout=15.0)
+                        event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                        if event is None:
+                            # Queue was full: close connection so client reconnects with Last-Event-ID
+                            logger.warning("SSE queue full for client, closing connection to force replay")
+                            break
+                        if event.id in seen_ids:
+                            continue
+                        seen_ids.add(event.id)
                         payload_json = json.dumps(event.payload, default=str)
                         yield f"id: {event.id}\nevent: {event.type}\ndata: {payload_json}\n\n"
-                    except Empty:
+                    except TimeoutError:
                         yield ": ping\n\n"
             finally:
-                sub.unsubscribe()
+                runtime.bus.remove_listener(_on_bus_event)
 
         return StreamingResponse(
             event_generator(),
