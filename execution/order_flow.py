@@ -951,62 +951,27 @@ class OrderFlow:
         Returns (exit_price, exit_reason, exit_ts).
         If not reconstructable, returns (None, 'reconciled_unknown', None).
         """
-        ticker = str(trade["ticker"]).upper()
-        # 1. Check parent order legs if parent broker_order_id exists
-        entry_order = self.db.get_order(trade["entry_order_id"]) if trade["entry_order_id"] else None
+        entry_order = self.db.get_order(trade["entry_order_id"])
         parent_id = entry_order["broker_order_id"] if entry_order else None
-        if parent_id and hasattr(self.broker, "get_order"):
+        if parent_id:
             try:
-                parent_order = self.broker.get_order(parent_id)
-                legs = getattr(parent_order, "legs", None) or []
-                for leg in legs:
-                    leg_status = str(getattr(leg, "status", "")).lower()
-                    if leg_status in ("fill", "filled"):
-                        price = (
-                            getattr(leg, "average_fill_price", None)
-                            or getattr(leg, "filled_avg_price", None)
-                            or getattr(leg, "limit_price", None)
-                            or getattr(leg, "price", None)
-                        )
-                        order_type = str(getattr(leg, "order_type", getattr(leg, "type", ""))).lower()
-                        reason = "sl" if "stop" in order_type else "tp"
-                        ts = str(getattr(leg, "filled_at", None) or getattr(leg, "updated_at", None) or "")
-                        return (float(price) if price is not None else None, reason, ts or None)
+                parent = self.broker.get_order(parent_id)
+                for leg in getattr(parent, "legs", None) or ():
+                    status = getattr(leg, "status", None)
+                    if getattr(status, "value", status) not in ("fill", "filled"):
+                        continue
+                    price = getattr(leg, "filled_avg_price", None) or getattr(leg, "average_fill_price", None)
+                    if price is None:
+                        continue
+                    order_type = getattr(leg, "order_type", None) or getattr(leg, "type", None)
+                    order_type = getattr(order_type, "value", order_type)
+                    if order_type not in ("limit", "stop", "stop_limit"):
+                        continue
+                    filled_at = getattr(leg, "filled_at", None)
+                    return float(price), "tp" if order_type == "limit" else "sl", str(filled_at) if filled_at else None
             except Exception as exc:
                 logger.debug("Error checking parent order legs for trade %s: %s", trade["id"], exc)
-
-        # 2. Check broker's recent closed orders or get_orders
-        reader = (
-            self.broker_reader
-            or getattr(self.broker, "broker_reader", None)
-            or (self.broker if hasattr(self.broker, "get_orders") else None)
-        )
-        if reader is not None and hasattr(reader, "get_orders"):
-            try:
-                orders = reader.get_orders()
-                for o in orders:
-                    o_sym = str(getattr(o, "symbol", "") if hasattr(o, "symbol") else o.get("symbol", "")).upper()
-                    o_status = str(getattr(o, "status", "") if hasattr(o, "status") else o.get("status", "")).lower()
-                    o_side = str(getattr(o, "side", "") if hasattr(o, "side") else o.get("side", "")).lower()
-                    if o_sym == ticker and o_side == "sell" and o_status in ("fill", "filled"):
-                        price = (
-                            getattr(o, "average_fill_price", None)
-                            or getattr(o, "filled_avg_price", None)
-                            or (o.get("filled_avg_price") if isinstance(o, dict) else None)
-                            or (o.get("limit_price") if isinstance(o, dict) else None)
-                        )
-                        raw_type = getattr(o, "order_type", getattr(o, "type", None)) or (
-                            o.get("order_type") if isinstance(o, dict) else None
-                        ) or (o.get("type") if isinstance(o, dict) else "")
-                        o_type = str(raw_type).lower()
-                        reason = "sl" if "stop" in o_type else "tp"
-                        ts = str(getattr(o, "filled_at", None) or (o.get("filled_at") if isinstance(o, dict) else "") or "")
-                        return (float(price) if price is not None else None, reason, ts or None)
-            except Exception as exc:
-                logger.debug("Error checking get_orders for trade %s: %s", trade["id"], exc)
-
-        # 3. Not reconstructable
-        return (None, "reconciled_unknown", None)
+        return None, "reconciled_unknown", None
 
     def _find_open_bracket_order_id(self, ticker: str) -> str | None:
         """Find the broker order ID of the active bracket order for a ticker."""

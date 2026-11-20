@@ -151,11 +151,16 @@ def test_n1_closed_position_reconstructs_real_exit_fill_from_legs(tmp_path):
     tm.record_entry_fill(order_id=order_id, fill_price=150.0, qty=10.0, ticker="AAPL")
 
     # Parent order has a filled take_profit leg at 175.0
-    tp_leg = MagicMock()
-    tp_leg.status = "filled"
-    tp_leg.order_type = "limit"
-    tp_leg.average_fill_price = 175.0
-    tp_leg.filled_at = "2026-11-20T12:00:00Z"
+    from types import SimpleNamespace
+
+    from alpaca.trading.enums import OrderStatus, OrderType
+
+    tp_leg = SimpleNamespace(
+        status=OrderStatus.FILLED,
+        order_type=OrderType.LIMIT,
+        filled_avg_price="175.0",
+        filled_at="2026-11-20T12:00:00Z",
+    )
 
     parent_order = MagicMock()
     parent_order.legs = [tp_leg]

@@ -19,11 +19,18 @@ class _Client:
             ],
         )
 
-    def get_order_by_id(self, order_id):
+    def get_order_by_id(self, order_id, filter=None):
+        self.order_filter = filter
         return self.parent
 
     def replace_order_by_id(self, order_id, request):
         self.replaced.append((order_id, request))
+
+
+def test_reconciliation_requests_nested_bracket_legs():
+    client = _Client()
+    assert AlpacaBracketAdapter(client).get_order("parent") is client.parent
+    assert client.order_filter is not None and client.order_filter.nested
 
 
 def test_modify_stop_targets_stop_leg():

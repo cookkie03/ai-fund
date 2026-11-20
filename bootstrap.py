@@ -293,8 +293,10 @@ class AlpacaBracketAdapter:
             return None
 
     def get_order(self, broker_order_id: str) -> Any | None:
+        from alpaca.trading.requests import GetOrderByIdRequest
+
         try:
-            return self._client.get_order_by_id(broker_order_id)
+            return self._client.get_order_by_id(broker_order_id, filter=GetOrderByIdRequest(nested=True))
         except Exception:
             return None
 
