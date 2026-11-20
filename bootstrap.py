@@ -444,13 +444,14 @@ def build_office(
     bracket_broker, broker_reader = _lazy_init_alpaca_broker(env_map)
 
     # 6. OrderFlow & TradeManager
+    trade_manager = TradeManager(db=db, broker=bracket_broker, event_log=event_log)
     order_flow = OrderFlow(
         db=db,
         broker=bracket_broker,
         approval_mode=settings.approval_mode,
         event_log=event_log,
+        trade_manager=trade_manager,
     )
-    trade_manager = TradeManager(db=db, broker=bracket_broker, event_log=event_log)
 
     # 7. AgentEnvironment factory
     def env_factory(cycle_id: int | None = None) -> AgentEnvironment:
@@ -516,13 +517,14 @@ def build_test_office(
     test_backend = backend or ScriptedBackend([])
     test_settings = settings or OfficeSettings(approval_mode=approval_mode)  # type: ignore[arg-type]
 
+    trade_manager = TradeManager(db=test_db, broker=test_broker, event_log=event_log)
     order_flow = OrderFlow(
         db=test_db,
         broker=test_broker,
         approval_mode=test_settings.approval_mode,
         event_log=event_log,
+        trade_manager=trade_manager,
     )
-    trade_manager = TradeManager(db=test_db, broker=test_broker, event_log=event_log)
 
     def env_factory(cycle_id: int | None = None) -> AgentEnvironment:
         return AgentEnvironment(

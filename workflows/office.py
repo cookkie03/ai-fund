@@ -102,7 +102,6 @@ class Office:
         self.backend = backend
         self.env_factory = env_factory
         self.order_flow = order_flow
-        self.order_sync_interval = 30.0
         self.retention_interval = 7 * 86400.0  # 7 days (weekly)
         self.data_refresh_interval = 3600.0  # 1 hour
         self.clock = clock

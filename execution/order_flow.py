@@ -244,10 +244,12 @@ class OrderFlow:
         approval_mode: Literal["auto", "manual"] = "auto",
         is_market_open: Callable[[], bool] | None = None,
         event_log: Any = None,
+        trade_manager: Any | None = None,
     ) -> None:
         self.db = db
         self.broker = broker
         self.event_log = event_log
+        self.trade_manager = trade_manager
         self.halt = halt or SystemHalt(db, broker, event_log=event_log)
         self.approval_mode: Literal["auto", "manual"] = approval_mode
         self._is_market_open_fn = is_market_open
@@ -541,6 +543,9 @@ class OrderFlow:
         "submitted": "submitted",
         "open": "submitted",
         "partially_filled": "submitted",
+        "partial_fill": "submitted",
+        "replaced": "submitted",
+        "fill": "filled",
         "filled": "filled",
         "canceled": "cancelled",
         "cancelled": "cancelled",
@@ -548,6 +553,169 @@ class OrderFlow:
         "rejected": "rejected",
         "done_for_day": "cancelled",
     }
+
+    def apply_broker_update(self, update: Any) -> None:
+        """Handle a broker TradeUpdate from the websocket stream.
+
+        - Idempotent on (broker_order_id, event, timestamp).
+        - Updates local order status, records order_event, emits order.status_changed.
+        - Entry fill: calls trade_manager.record_entry_fill (emits trade.opened).
+        - Exit fill (TP/SL/sell): calls trade_manager.record_exit_fill (emits trade.closed).
+        - Handles 'canceled', 'expired', 'rejected', 'replaced', 'partial_fill'.
+        """
+        import json
+
+        event_raw = getattr(update, "event", None)
+        if event_raw is None and isinstance(update, dict):
+            event_raw = update.get("event")
+        event_str = str(getattr(event_raw, "value", event_raw) or "").lower().strip()
+
+        order_obj = getattr(update, "order", None)
+        if order_obj is None and isinstance(update, dict):
+            order_obj = update.get("order")
+
+        def _get_val(field: str, default: Any = None) -> Any:
+            if isinstance(order_obj, dict):
+                return order_obj.get(field, default)
+            return getattr(order_obj, field, default)
+
+        broker_order_id = str(_get_val("id") or _get_val("broker_order_id") or "")
+        client_order_id = _get_val("client_order_id")
+        symbol = str(_get_val("symbol") or "").upper()
+        raw_side = _get_val("side")
+        side = str(getattr(raw_side, "value", raw_side) or "").lower()
+        raw_type = _get_val("type") or _get_val("order_type")
+        order_type = str(getattr(raw_type, "value", raw_type) or "").lower()
+        explicit_exit_reason = _get_val("exit_reason") or getattr(update, "exit_reason", None)
+        if explicit_exit_reason is None and isinstance(update, dict):
+            explicit_exit_reason = update.get("exit_reason")
+
+        ts = getattr(update, "timestamp", None)
+        if ts is None and isinstance(update, dict):
+            ts = update.get("timestamp")
+        ts_str = str(ts) if ts is not None else utc_now_iso()
+
+        price = getattr(update, "price", None)
+        if price is None and isinstance(update, dict):
+            price = update.get("price")
+        if price is None:
+            price = _get_val("filled_avg_price") or _get_val("limit_price")
+
+        qty = getattr(update, "qty", None)
+        if qty is None and isinstance(update, dict):
+            qty = update.get("qty")
+        if qty is None:
+            qty = _get_val("filled_qty") or _get_val("quantity") or _get_val("qty")
+
+        # 1. Find local order
+        local_order = None
+        if client_order_id:
+            local_order = self.db.connection.execute(
+                "SELECT * FROM orders WHERE client_order_id = ?", (str(client_order_id),)
+            ).fetchone()
+        if not local_order and broker_order_id:
+            local_order = self.db.connection.execute(
+                "SELECT * FROM orders WHERE broker_order_id = ?", (str(broker_order_id),)
+            ).fetchone()
+
+        # Idempotency check for local order:
+        if local_order:
+            order_id = int(local_order["id"])
+            existing_event = self.db.connection.execute(
+                "SELECT id FROM order_events WHERE order_id = ? AND event = ? AND ts = ?",
+                (order_id, event_str, ts_str),
+            ).fetchone()
+            if existing_event:
+                return
+
+        # 2. Update order if found
+        if local_order:
+            order_id = int(local_order["id"])
+            new_status = self._BROKER_STATUS_MAP.get(event_str)
+            if not new_status:
+                raw_status = str(
+                    getattr(_get_val("status"), "value", _get_val("status")) or ""
+                ).lower()
+                new_status = self._BROKER_STATUS_MAP.get(raw_status, local_order["status"])
+
+            with self.db.transaction():
+                if new_status and new_status != local_order["status"]:
+                    self.db.update_order_status(order_id, status=new_status)
+                self.db.insert_order_event(
+                    order_id,
+                    event_str,
+                    {
+                        "broker_order_id": broker_order_id,
+                        "broker_event": event_str,
+                        "price": float(price) if price is not None else None,
+                        "qty": float(qty) if qty is not None else None,
+                    },
+                    ts=ts_str,
+                )
+                if self.event_log is not None:
+                    self.event_log.append(
+                        type="order.status_changed",
+                        subject=f"order:{order_id}",
+                        payload={
+                            "order_id": order_id,
+                            "status": new_status or local_order["status"],
+                            "broker_order_id": broker_order_id,
+                            "event": event_str,
+                            "price": float(price) if price is not None else None,
+                            "qty": float(qty) if qty is not None else None,
+                            "ts": ts_str,
+                        },
+                        actor="broker_stream",
+                    )
+
+            # Check if this fill is an entry fill
+            if event_str == "fill" and (side == "buy" or local_order["side"] == "buy"):
+                if self.trade_manager is not None:
+                    existing_trade = self.db.connection.execute(
+                        "SELECT id FROM trades WHERE entry_order_id = ?", (order_id,)
+                    ).fetchone()
+                    if not existing_trade:
+                        self.trade_manager.record_entry_fill(
+                            order_id=order_id,
+                            fill_price=price if price is not None else 0.0,
+                            qty=qty if qty is not None else 0.0,
+                            ts=ts_str,
+                            ticker=symbol or local_order["ticker"],
+                        )
+                return
+
+        # 3. Check for exit fill (TP / SL / sell) closing an open trade
+        if event_str == "fill" and (side == "sell" or explicit_exit_reason is not None):
+            ticker_to_find = symbol or (local_order["ticker"] if local_order else "")
+            if ticker_to_find and self.trade_manager is not None:
+                open_trade = self.db.connection.execute(
+                    "SELECT * FROM trades WHERE ticker = ? AND closed_ts IS NULL ORDER BY id DESC LIMIT 1",
+                    (ticker_to_find.upper(),),
+                ).fetchone()
+                if open_trade:
+                    trade_events = (
+                        json.loads(open_trade["events_json"]) if open_trade["events_json"] else []
+                    )
+                    if any(e.get("ts") == ts_str for e in trade_events):
+                        return
+
+                    reason = "tp"
+                    if explicit_exit_reason in ("tp", "sl", "pm_sell", "expired"):
+                        reason = explicit_exit_reason
+                    elif order_type in ("stop", "stop_limit"):
+                        reason = "sl"
+                    elif price is not None and float(price) <= float(open_trade["entry_price"]):
+                        reason = "sl"
+                    else:
+                        reason = "tp"
+
+                    self.trade_manager.record_exit_fill(
+                        trade_id=int(open_trade["id"]),
+                        exit_price=price if price is not None else 0.0,
+                        exit_reason=reason,
+                        ts=ts_str,
+                        ticker=ticker_to_find.upper(),
+                    )
 
     def sync_broker_orders(self) -> list[int]:
         """Align local orders still marked submitted with the broker's current state.

@@ -90,13 +90,47 @@ class Runtime:
         settings: Any = None,
         env: Any = None,
     ) -> Runtime:
+        import os
+
         from bootstrap import build_office
 
         office = build_office(settings=settings, env=env)
-        return cls(office=office)
+        stream = None
+        env_dict = env or {}
+        api_key = env_dict.get("APCA_API_KEY_ID") or os.environ.get("APCA_API_KEY_ID")
+        secret_key = env_dict.get("APCA_API_SECRET_KEY") or os.environ.get("APCA_API_SECRET_KEY")
+        if api_key and secret_key:
+            from execution.alpaca_stream import AlpacaTradeUpdateStream
 
-    def __init__(self, office: Office) -> None:
+            paper = True
+            if settings and hasattr(settings, "broker"):
+                paper = getattr(settings.broker, "paper", True)
+
+            def _reconcile() -> None:
+                if hasattr(office, "order_flow") and office.order_flow:
+                    office.order_flow.sync_broker_orders()
+                try:
+                    office.refresh_data(force=False, kinds=["portfolio"])
+                except Exception:
+                    pass
+
+            stream = AlpacaTradeUpdateStream(
+                api_key=api_key,
+                secret_key=secret_key,
+                paper=paper,
+                on_trade_update=office.order_flow.apply_broker_update,
+                on_reconnect=_reconcile,
+            )
+
+        return cls(office=office, broker_stream=stream)
+
+    def __init__(
+        self,
+        office: Office,
+        broker_stream: Any | None = None,
+    ) -> None:
         self.office = office
+        self.broker_stream = broker_stream
         self.bus = EventBus()
         self.event_log = EventLog(db=office.db, bus=self.bus)
         self.read = ReadModel(db_path=office.db.path, runtime=self)
@@ -148,6 +182,13 @@ class Runtime:
                 ) from err
 
         self._running = True
+        if self.broker_stream is not None:
+            try:
+                self.broker_stream.start()
+                self.broker_stream_connected = True
+            except Exception:
+                logger.exception("Failed to start broker stream")
+
         self.event_log.append(
             type="runtime.started",
             subject="runtime",
@@ -159,6 +200,13 @@ class Runtime:
         """Stop background services and release single-writer lock."""
         if not self._running:
             return
+
+        if self.broker_stream is not None:
+            try:
+                self.broker_stream.stop()
+            except Exception:
+                pass
+            self.broker_stream_connected = False
 
         try:
             self.event_log.append(
