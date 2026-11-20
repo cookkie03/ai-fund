@@ -97,7 +97,7 @@ class Scheduler:
             return
 
         # 2. Run due tasks in Office
-        self.runtime.office.run_once()
+        delivered = self.runtime.office.run_once()
 
         # 3. Run due jobs
         for job in self.jobs:
@@ -131,7 +131,12 @@ class Scheduler:
         else:
             diff = (earliest_due_dt - now_after).total_seconds()
             if diff <= 0:
-                self.waiter.wait(timeout=0.0)
+                if not delivered:
+                    # Overdue tasks exist but were not deliverable (e.g. filtered by cursor/limits).
+                    # Avoid 0.0s busy-loop by applying a safe minimum backoff.
+                    self.waiter.wait(timeout=1.0)
+                else:
+                    self.waiter.wait(timeout=0.0)
             else:
                 self.waiter.wait(timeout=diff)
 
