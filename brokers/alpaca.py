@@ -2,7 +2,7 @@
 
 import json
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -27,6 +27,22 @@ PAPER_TRADING_URL = "https://paper-api.alpaca.markets/v2"
 
 def _sdk_base_url(trading_url: str) -> str:
     return trading_url.rstrip("/").removesuffix("/v2")
+
+
+def get_alpaca_credentials(env: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """Legge le credenziali Alpaca in modo centralizzato."""
+    env_map = os.environ if env is None else env
+    api_key = env_map.get("ALPACA_API_KEY") or env_map.get("APCA_API_KEY_ID") or ""
+    secret_key = env_map.get("ALPACA_SECRET_KEY") or env_map.get("APCA_API_SECRET_KEY") or ""
+    trading_url = env_map.get("ALPACA_TRADING_URL", PAPER_TRADING_URL)
+    is_paper = "paper" in trading_url.lower()
+    return {
+        "api_key": api_key.strip(),
+        "secret_key": secret_key.strip(),
+        "trading_url": trading_url.strip(),
+        "paper": is_paper,
+        "configured": bool(api_key.strip() and secret_key.strip()),
+    }
 
 
 class AlpacaBroker:

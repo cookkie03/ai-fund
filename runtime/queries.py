@@ -18,6 +18,7 @@ class HealthDTO(BaseModel):
     runtime_version: str = "0.1.0"
     halted: bool = False
     broker_stream_connected: bool = False
+    broker_configured: bool = False
     next_scheduler_due_ts: str | None = None
     db_size_bytes: int = 0
     last_event_id: int = 0
@@ -159,10 +160,12 @@ class ReadModel:
         halted = False
         db_size = 0
         stream_connected = False
+        broker_configured = False
 
         if self._runtime and self._runtime.office:
             halted = self._runtime.office.halt.is_halted()
             db_size = self._runtime.office.db.db_size_bytes()
+            broker_configured = getattr(self._runtime, "broker_configured", False)
             if hasattr(self._runtime, "broker_stream_connected"):
                 stream_connected = self._runtime.broker_stream_connected
 
@@ -171,6 +174,7 @@ class ReadModel:
             runtime_version="0.1.0",
             halted=halted,
             broker_stream_connected=stream_connected,
+            broker_configured=broker_configured,
             next_scheduler_due_ts=next_due,
             db_size_bytes=db_size,
             last_event_id=last_event_id,

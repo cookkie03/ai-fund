@@ -90,22 +90,16 @@ class Runtime:
         settings: Any = None,
         env: Any = None,
     ) -> Runtime:
-        import os
-
         from bootstrap import build_office
+        from brokers.alpaca import get_alpaca_credentials
+        from runtime.broker_stream import AlpacaTradeUpdateStream
 
         office = build_office(settings=settings, env=env)
+        creds = get_alpaca_credentials(env=env)
         stream = None
-        env_dict = env or {}
-        api_key = env_dict.get("APCA_API_KEY_ID") or os.environ.get("APCA_API_KEY_ID")
-        secret_key = env_dict.get("APCA_API_SECRET_KEY") or os.environ.get("APCA_API_SECRET_KEY")
-        if api_key and secret_key:
-            from execution.alpaca_stream import AlpacaTradeUpdateStream
+        broker_configured = creds["configured"]
 
-            paper = True
-            if settings and hasattr(settings, "broker"):
-                paper = getattr(settings.broker, "paper", True)
-
+        if broker_configured:
             def _reconcile() -> None:
                 if hasattr(office, "order_flow") and office.order_flow:
                     office.order_flow.sync_broker_orders()
@@ -115,14 +109,17 @@ class Runtime:
                     pass
 
             stream = AlpacaTradeUpdateStream(
-                api_key=api_key,
-                secret_key=secret_key,
-                paper=paper,
-                on_trade_update=office.order_flow.apply_broker_update,
+                api_key=creds["api_key"],
+                secret_key=creds["secret_key"],
+                paper=creds["paper"],
+                trading_url=creds["trading_url"],
+                on_trade_update=office.order_flow.apply_broker_update if hasattr(office, "order_flow") and office.order_flow else None,
                 on_reconnect=_reconcile,
             )
 
-        return cls(office=office, broker_stream=stream)
+        rt = cls(office=office, broker_stream=stream)
+        rt.broker_configured = broker_configured
+        return rt
 
     def __init__(
         self,
@@ -152,7 +149,9 @@ class Runtime:
 
         self._lock_file: Any = None
         self._command_lock = threading.Lock()
+        self.broker_configured = broker_stream is not None
         self.broker_stream_connected = False
+        self.broker_stream_error: str | None = None
         self._running = False
 
         self.scheduler = Scheduler(runtime=self, clock=office.clock)
@@ -162,6 +161,18 @@ class Runtime:
         self.scheduler.register_job(ExpirePendingOrdersJob(self))
         self.scheduler.register_job(ReleaseQueuedOrdersJob(self))
         self.scheduler.bind_events()
+
+    def reconcile_broker(self) -> None:
+        """Run broker reconciliation: sync orders and refresh portfolio."""
+        if hasattr(self.office, "order_flow") and self.office.order_flow:
+            try:
+                self.office.order_flow.sync_broker_orders()
+            except Exception:
+                logger.exception("Broker order sync failed during reconciliation")
+        try:
+            self.office.refresh_data(force=False, kinds=["portfolio"])
+        except Exception:
+            logger.exception("Portfolio refresh failed during reconciliation")
 
     def start(self) -> None:
         """Acquire single-writer process lock and start internal services."""
@@ -182,11 +193,14 @@ class Runtime:
                 ) from err
 
         self._running = True
+        self.reconcile_broker()
         if self.broker_stream is not None:
             try:
                 self.broker_stream.start()
-                self.broker_stream_connected = True
-            except Exception:
+                self.broker_stream_connected = getattr(self.broker_stream, "connected", True)
+            except Exception as exc:
+                self.broker_stream_connected = False
+                self.broker_stream_error = str(exc)
                 logger.exception("Failed to start broker stream")
 
         self.event_log.append(
