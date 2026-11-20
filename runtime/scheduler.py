@@ -77,6 +77,8 @@ class Scheduler:
             "task.enqueued",
             "task.failed",
             "task.merged",
+            "order.created",
+            "order.status_changed",
             "halt.changed",
             "runtime.stopped",
         ):

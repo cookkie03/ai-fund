@@ -59,6 +59,14 @@ def test_setup(tmp_path):
     }
 
 
+@pytest.mark.parametrize("event_type", ["order.created", "order.status_changed"])
+def test_order_event_wakes_scheduler(test_setup, event_type):
+    scheduler = test_setup["scheduler"]
+    scheduler.bind_events()
+    test_setup["runtime"].event_log.append(type=event_type, subject="order:1", payload={}, actor="test")
+    assert test_setup["waiter"].wake_count == 1
+
+
 def test_office_db_next_due_ts(test_setup):
     db: OfficeDB = test_setup["db"]
     assert db.next_due_ts() is None
