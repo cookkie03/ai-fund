@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class CommandResult(BaseModel):
@@ -36,10 +36,27 @@ class RemoveWatchlist(BaseModel):
 
 
 class UpsertAnnotation(BaseModel):
-    id: str
-    ticker: str
+    id: str = Field(min_length=1)
+    ticker: str = Field(min_length=1)
     timeframe: str | None = None
-    drawing: dict
+    drawing: dict[str, Any]
+
+    @field_validator("drawing")
+    @classmethod
+    def validate_drawing(cls, value: dict[str, Any]) -> dict[str, Any]:
+        import math
+
+        points = value.get("points")
+        if not isinstance(value.get("type"), str) or not isinstance(points, list) or not points:
+            raise ValueError("drawing requires a type and points")
+        for point in points:
+            if not isinstance(point, dict):
+                raise ValueError("invalid drawing point")
+            for key in ("time", "price"):
+                number = point.get(key)
+                if isinstance(number, bool) or not isinstance(number, (int, float)) or not math.isfinite(number):
+                    raise ValueError("drawing points require finite numeric time and price")
+        return value
 
 
 class StrikeAnnotation(BaseModel):

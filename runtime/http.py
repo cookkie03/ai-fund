@@ -100,7 +100,7 @@ def create_app(
             body = await request.json() if await request.body() else {}
             cmd = cmd_cls.model_validate(body)
         except ValidationError as val_err:
-            raise HTTPException(status_code=422, detail=val_err.errors()) from val_err
+            raise HTTPException(status_code=422, detail=val_err.errors(include_context=False)) from val_err
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -154,7 +154,8 @@ def create_app(
         ticker: str, names: str = "ema20,rsi14,atr14", timeframe: str = "1h", limit: int = 100,
         start: datetime | None = None, end: datetime | None = None,
     ) -> dict[str, Any]:
-        bars = get_bars(ticker=ticker, timeframe=timeframe, start=start, end=end, limit=limit)
+        selected = get_bars(ticker=ticker, timeframe=timeframe, start=start, end=end, limit=limit)
+        bars = get_bars(ticker=ticker, timeframe=timeframe, end=end, limit=10000)
         highs = [Decimal(str(b["high"])) for b in bars]
         lows = [Decimal(str(b["low"])) for b in bars]
         closes = [Decimal(str(b["close"])) for b in bars]
@@ -213,11 +214,13 @@ def create_app(
                         out[k] = [None] * len(closes)
             else:
                 raise HTTPException(status_code=422, detail=f"Indicator '{name}' unsupported")
+        selected_times = {bar["time"] for bar in selected}
+        indexes = [i for i, ts in enumerate(series) if ts in selected_times]
         return {
             "ticker": ticker.strip().upper(),
             "timeframe": timeframe,
-            "series": series,
-            "indicators": out,
+            "series": [series[i] for i in indexes],
+            "indicators": {name: [values[i] for i in indexes] for name, values in out.items()},
         }
 
     @app.get("/v1/read/equity_history", dependencies=[Depends(verify_token)])

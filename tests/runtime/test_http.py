@@ -121,6 +121,24 @@ def test_annotation_lifecycle(runtime_setup):
     assert item["struck_by"] == "analyst"
 
 
+def test_annotation_rejects_invalid_drawing(runtime_setup):
+    response = runtime_setup["client"].post(
+        "/v1/commands/upsert_annotation",
+        json={"id": "bad", "ticker": "AAPL", "drawing": {"points": [{"time": "bad", "price": "bad"}]}},
+    )
+    assert response.status_code == 422
+
+
+def test_annotation_retry_without_key_does_not_emit_duplicate_event(runtime_setup):
+    client = runtime_setup["client"]
+    runtime = runtime_setup["runtime"]
+    payload = {"id": "same", "ticker": "AAPL", "drawing": {"type": "line", "points": [{"time": 1, "price": 2}]}}
+    client.post("/v1/commands/upsert_annotation", json=payload)
+    client.post("/v1/commands/upsert_annotation", json=payload)
+    events = runtime.event_log.since(after_id=0)
+    assert [event.type for event in events if event.type.startswith("annotation.")] == ["annotation.created"]
+
+
 def test_bars_are_chronological_utc_chart_data(runtime_setup):
     client = runtime_setup["client"]
     market = runtime_setup["runtime"].office.get_env().market_data
@@ -174,6 +192,15 @@ def test_indicator_range_matches_bars(runtime_setup):
     bars = client.get("/v1/read/bars", params=params).json()
     indicators = client.get("/v1/read/indicators", params=params).json()
     assert indicators["series"] == [bar["time"] for bar in bars]
+
+
+def test_indicator_window_uses_prior_history(runtime_setup):
+    client = runtime_setup["client"]
+    full = client.get("/v1/read/indicators", params={"ticker": "AAPL", "names": "ema20", "limit": 35}).json()
+    subset = client.get("/v1/read/indicators", params={"ticker": "AAPL", "names": "ema20", "limit": 5}).json()
+    assert subset["series"] == full["series"][-5:]
+    assert subset["indicators"]["ema20"] == full["indicators"]["ema20"][-5:]
+    assert subset["indicators"]["ema20"][0] is not None
 
 
 def test_indicators_supports_sma_macd_and_pivot(runtime_setup):

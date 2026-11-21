@@ -160,8 +160,10 @@ def handle_upsert_annotation(
     existing = conn.execute("SELECT * FROM chart_annotations WHERE id = ?", (cmd.id,)).fetchone()
     if existing and existing["status"] == "struck":
         return CommandResult(ok=False, reasons=["Annotation is struck"])
-    now = ctx.office.get_now_iso()
     ticker = cmd.ticker.strip().upper()
+    if existing and existing["ticker"] == ticker and existing["timeframe"] == cmd.timeframe and json.loads(existing["drawing_json"]) == cmd.drawing:
+        return CommandResult(ok=True, data={"id": cmd.id})
+    now = ctx.office.get_now_iso()
     conn.execute(
         """INSERT INTO chart_annotations (id, ticker, timeframe, drawing_json, author, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
