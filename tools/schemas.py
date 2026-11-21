@@ -164,7 +164,7 @@ class OHLCVInput(BaseModel):
     """Input for fetching historical OHLCV price bars."""
 
     ticker: str = Field(description="Ticker symbol")
-    interval: str = Field(default="1d", description="Bar interval (e.g. 1d, 1h)")
+    interval: str | None = Field(default=None, description="Bar interval; defaults to configured timeframe")
     limit: int = Field(default=100, ge=1, le=500, description="Number of bars")
 
 

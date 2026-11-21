@@ -487,6 +487,7 @@ def build_office(
             broker_reader=broker_reader,
             min_trading_days=settings.scheduled_task_min_days,
             max_trading_days=settings.scheduled_task_max_days,
+            bar_timeframe=settings.market.bar_timeframe,
         )
 
     office = Office(
@@ -562,6 +563,7 @@ def build_test_office(
             now=clock if not callable(clock) else None,
             min_trading_days=test_settings.scheduled_task_min_days,
             max_trading_days=test_settings.scheduled_task_max_days,
+            bar_timeframe=test_settings.market.bar_timeframe,
         )
 
     kwargs: dict[str, Any] = {

@@ -509,6 +509,29 @@ def test_technical_analyst_indicators(test_setup):
     assert "pivot" in res and res["pivot"]["pivot"] is not None
 
 
+def test_agent_market_tools_follow_office_timeframe(tmp_path):
+    from bootstrap import build_test_office
+    from config.office_settings import OfficeSettings
+    from storage.office_db import OfficeDB
+
+    settings = OfficeSettings(market={"bar_timeframe": "5m"})
+    office = build_test_office(db=OfficeDB(tmp_path / "office.db"), settings=settings)
+    env = office.get_env()
+    calls = []
+    original = env.market_data.ohlcv
+
+    def record(symbol, interval="1d", limit=100):
+        calls.append(interval)
+        return original(symbol, interval=interval, limit=limit)
+
+    env.market_data.ohlcv = record
+    tools = _get_tool_map(env.tools_for("technical_analyst", chat_id=1))
+    tools["ohlcv"].execute(ToolCall(id="1", name="ohlcv", args={"ticker": "AAPL"}))
+    tools["indicators"].execute(ToolCall(id="2", name="indicators", args={"ticker": "AAPL"}))
+    tools["ohlcv"].execute(ToolCall(id="3", name="ohlcv", args={"ticker": "AAPL", "interval": "1d"}))
+    assert calls == ["5m", "5m", "1d"]
+
+
 def test_fundamental_analyst_tools(test_setup):
     env: AgentEnvironment = test_setup["env"]
     tools = _get_tool_map(env.tools_for("fundamental_analyst", chat_id=1))

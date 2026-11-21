@@ -120,6 +120,7 @@ class AgentEnvironment:
         calendar: Any = None,
         min_trading_days: int = 1,
         max_trading_days: int = 60,
+        bar_timeframe: str = "1h",
     ) -> None:
         self.db = db
         self.market_data = market_data
@@ -132,6 +133,7 @@ class AgentEnvironment:
         self.calendar = calendar
         self.min_trading_days = min_trading_days
         self.max_trading_days = max_trading_days
+        self.bar_timeframe = bar_timeframe
 
     def get_now(self) -> datetime:
         """Return current UTC datetime from injected clock or system time."""
@@ -961,9 +963,9 @@ class AgentEnvironment:
                 )
             )
 
-            def handle_ohlcv(ticker: str, interval: str = "1d", limit: int = 100) -> Any:
+            def handle_ohlcv(ticker: str, interval: str | None = None, limit: int = 100) -> Any:
                 return _serialize(
-                    self.market_data.ohlcv(ticker.upper().strip(), interval=interval, limit=limit)
+                    self.market_data.ohlcv(ticker.upper().strip(), interval=interval or self.bar_timeframe, limit=limit)
                 )
 
             tools.append(
@@ -981,7 +983,7 @@ class AgentEnvironment:
                 ticker: str, indicators: list[str] | None = None
             ) -> dict[str, Any]:
                 sym = ticker.upper().strip()
-                bars = self.market_data.ohlcv(sym, interval="1d", limit=150)
+                bars = self.market_data.ohlcv(sym, interval=self.bar_timeframe, limit=150)
                 if not bars:
                     return {"ticker": sym, "error": "No OHLCV bars available"}
 
