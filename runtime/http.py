@@ -116,11 +116,12 @@ def create_app(
     @app.get("/v1/read/bars", dependencies=[Depends(verify_token)])
     def get_bars(
         ticker: str,
-        timeframe: str = "1h",
+        timeframe: str | None = None,
         start: datetime | None = None,
         end: datetime | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
+        timeframe = timeframe if timeframe is not None else runtime.office.settings.market.bar_timeframe
         if not ticker.strip() or not timeframe.strip() or limit < 1 or limit > 10000:
             raise HTTPException(status_code=422, detail="Invalid ticker, timeframe or limit")
         if (start and start.tzinfo is None) or (end and end.tzinfo is None):
@@ -151,9 +152,10 @@ def create_app(
 
     @app.get("/v1/read/indicators", dependencies=[Depends(verify_token)])
     def get_indicators(
-        ticker: str, names: str = "ema20,rsi14,atr14", timeframe: str = "1h", limit: int = 100,
+        ticker: str, names: str = "ema20,rsi14,atr14", timeframe: str | None = None, limit: int = 100,
         start: datetime | None = None, end: datetime | None = None,
     ) -> dict[str, Any]:
+        timeframe = timeframe if timeframe is not None else runtime.office.settings.market.bar_timeframe
         selected = get_bars(ticker=ticker, timeframe=timeframe, start=start, end=end, limit=limit)
         bars = get_bars(ticker=ticker, timeframe=timeframe, end=end, limit=10000)
         highs = [Decimal(str(b["high"])) for b in bars]

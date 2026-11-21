@@ -21,6 +21,11 @@ scheduled_task_min_days = 1
 scheduled_task_max_days = 60
 
 # ------------------------------------------------------------------------------
+# Timeframe predefinito del grafico (1m, 5m, 15m, 1h, 1d)
+[market]
+bar_timeframe = "1h"
+
+# ------------------------------------------------------------------------------
 # Orari e sessione di mercato (US / New York)
 # ------------------------------------------------------------------------------
 [schedule]

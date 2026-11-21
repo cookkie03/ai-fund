@@ -155,6 +155,21 @@ def test_bars_are_chronological_utc_chart_data(runtime_setup):
     assert bars[0]["time"] < bars[1]["time"]
 
 
+def test_chart_defaults_to_configured_timeframe(runtime_setup):
+    runtime = runtime_setup["runtime"]
+    runtime.office.settings.market.bar_timeframe = "1d"
+    intervals = []
+    market = runtime.office.get_env().market_data
+    market.ohlcv = lambda symbol, interval, limit: intervals.append(interval) or []
+    client = runtime_setup["client"]
+    assert client.get("/v1/read/bars?ticker=AAPL").status_code == 200
+    result = client.get("/v1/read/indicators?ticker=AAPL").json()
+    assert result["timeframe"] == "1d"
+    assert intervals and set(intervals) == {"1d"}
+    client.get("/v1/read/bars?ticker=AAPL&timeframe=5m")
+    assert intervals[-1] == "5m"
+
+
 def test_indicators_aligned_with_bars(runtime_setup):
     client = runtime_setup["client"]
     market = runtime_setup["runtime"].office.get_env().market_data

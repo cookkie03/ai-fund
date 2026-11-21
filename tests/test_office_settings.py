@@ -57,6 +57,18 @@ def test_load_default_office_toml() -> None:
     assert settings.get_agent("subagent").effort == "low"
 
 
+def test_market_timeframe_loaded_and_validated(tmp_path):
+    import pytest
+    from pydantic import ValidationError
+
+    path = tmp_path / "office.toml"
+    path.write_text('[market]\nbar_timeframe = "5m"\n')
+    assert load_office_settings(path).market.bar_timeframe == "5m"
+    path.write_text('[market]\nbar_timeframe = "2h"\n')
+    with pytest.raises(ValidationError):
+        load_office_settings(path)
+
+
 def test_agent_alias_lookup() -> None:
     settings = load_office_settings("config/office.toml")
 

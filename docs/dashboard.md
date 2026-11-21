@@ -50,7 +50,7 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
     - `/v1/read/chat?agent=&topic=&limit=`: Agent chat messages.
     - `/v1/read/ticker_state?ticker=`: Current analysis and state for symbol.
     - `/v1/read/watchlist`: Current watchlist symbols, notes and author (`added_by`).
-    - `/v1/read/bars?ticker=&timeframe=1h&start=&end=&limit=`: OHLCV bars for lightweight-charts (`time` as UTC epoch s).
+    - `/v1/read/bars?ticker=&timeframe=&start=&end=&limit=`: OHLCV bars for lightweight-charts (`time` as UTC epoch s). If omitted, `timeframe` uses `[market].bar_timeframe` in `config/office.toml` (default `1h`).
     - `/v1/read/indicators?ticker=&timeframe=1h&names=ema20,rsi14,atr14,sma20,macd,pivot`: Series aligned with bars.
     - `/v1/read/annotations?ticker=&include_struck=`: Chart annotations (shared environment).
     - `/v1/read/equity_history?from=&to=`: Portfolio equity history.

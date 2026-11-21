@@ -80,6 +80,10 @@ class RetentionConfig(BaseModel):
     llm_logs_days: int = 180  # 180 days, then keep metadata only
 
 
+class MarketConfig(BaseModel):
+    bar_timeframe: Literal["1m", "5m", "15m", "1h", "1d"] = "1h"
+
+
 _AGENT_ALIASES: dict[str, str] = {
     "pm": "portfolio_manager",
     "portfolio_manager": "portfolio_manager",
@@ -105,6 +109,7 @@ class OfficeSettings(BaseModel):
     schedule: ScheduleHours = Field(default_factory=ScheduleHours)
     budgets: BudgetsConfig = Field(default_factory=BudgetsConfig)
     retention: RetentionConfig = Field(default_factory=RetentionConfig)
+    market: MarketConfig = Field(default_factory=MarketConfig)
     max_parallel: int = 3
     db_size_alert_mb: int = 500
     approval_mode: ApprovalMode = "auto"
