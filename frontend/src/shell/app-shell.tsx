@@ -14,7 +14,7 @@ function UnreachableBanner() {
   const { connection } = useRuntime();
   const now = useNow(1000);
   return (
-    <div role="alert" className="flex shrink-0 items-center gap-3 border-b border-[oklch(0.67_0.195_20/0.35)] bg-[oklch(0.2_0.035_22)] px-3 py-2 text-xs">
+    <div role="alert" data-region="banner" className="flex shrink-0 items-center gap-3 border-b border-[oklch(0.67_0.195_20/0.35)] bg-[oklch(0.2_0.035_22)] px-3 py-2 text-xs">
       <CloudOff className="size-4 shrink-0 text-down" />
       <span className="font-medium text-fg">Runtime irraggiungibile.</span>
       <span className="min-w-0 truncate text-fg-muted">
@@ -37,7 +37,7 @@ function UnreachableBanner() {
 function HaltBanner() {
   const { writable } = useShell();
   return (
-    <div role="status" className="flex shrink-0 items-center gap-3 border-b border-[oklch(0.58_0.2_25/0.45)] bg-[oklch(0.205_0.045_22)] px-3 py-1.5 text-xs">
+    <div role="status" data-region="banner" className="flex shrink-0 items-center gap-3 border-b border-[oklch(0.58_0.2_25/0.45)] bg-[oklch(0.205_0.045_22)] px-3 py-1.5 text-xs">
       <OctagonPause className="size-4 shrink-0 text-down" />
       <span className="font-medium text-fg">Halt attivo: nessun ordine viene inviato al broker.</span>
       <span className="hidden min-w-0 truncate text-fg-muted md:inline">Gli agenti continuano ad analizzare. Approvazioni sospese finché non riprendi.</span>
@@ -53,20 +53,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   const down = !connection.booting && !connection.reachable;
 
   return (
-    <div className="flex h-dvh w-full overflow-hidden bg-ground">
+    <div data-region="shell" className="flex h-dvh w-full overflow-hidden bg-ground">
       <Rail />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div data-region="column" className="flex min-w-0 flex-1 flex-col">
         <TopBar />
         {down && <UnreachableBanner />}
         {halted && !down && <HaltBanner />}
-        <main className={cn("flex min-h-0 flex-1 transition-[filter,opacity] duration-300", down && "opacity-70 saturate-[0.35]")} aria-busy={connection.booting}>
+        <main data-region="canvas" className={cn("flex min-h-0 flex-1 transition-[filter,opacity] duration-300", down && "opacity-70 saturate-[0.35]")} aria-busy={connection.booting}>
           {children}
         </main>
         <BottomNav />
       </div>
       {wide ? (
         bridgeOpen && (
-          <div className="w-[340px] shrink-0 border-l border-line">
+          <div data-region="bridge" className="w-[340px] shrink-0 border-l border-line">
             <BridgePanel onClose={() => setBridgeOpen(false)} />
           </div>
         )

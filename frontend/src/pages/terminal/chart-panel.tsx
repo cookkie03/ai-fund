@@ -75,7 +75,7 @@ function AuthorLayers({
 }) {
   if (!authors.length) return null;
   return (
-    <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Livelli per autore">
+    <div data-part="layers" className="flex flex-wrap items-center gap-1" role="group" aria-label="Livelli per autore">
       {authors.map(({ author: a, count }) => {
         const off = hidden.includes(a.id);
         return (
@@ -226,16 +226,16 @@ export function ChartPanel({
   const effectiveHidden = drawingsVisible ? hiddenAll : authors.map((a) => a.author.id);
 
   return (
-    <section id="chart" aria-label="Grafico" className="flex min-h-0 min-w-0 flex-1 flex-col bg-ground">
+    <section id="chart" data-region="chart" aria-label="Grafico" className="flex min-h-0 min-w-0 flex-1 flex-col bg-ground">
       {/* toolbar */}
-      <div className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-2">
+      <div data-region="chart-toolbar" className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-2">
         <div className="mr-2 flex min-w-0 shrink-0 items-baseline gap-2 pl-1">
-          <span className="text-sm font-semibold text-fg">{symbol ?? "—"}</span>
-          {last && <span className="num text-sm text-fg">{fmtPrice(last.close)}</span>}
-          {dayChange !== null && <span className={cn("num text-xs", dayChange >= 0 ? "text-up" : "text-down")}>{fmtPct(dayChange)}</span>}
+          <span data-role="symbol" className="text-sm font-semibold text-fg">{symbol ?? "—"}</span>
+          {last && <span data-role="price" className="num text-sm text-fg">{fmtPrice(last.close)}</span>}
+          {dayChange !== null && <span data-role="change" data-dir={dayChange >= 0 ? "up" : "down"} className={cn("num text-xs", dayChange >= 0 ? "text-up" : "text-down")}>{fmtPct(dayChange)}</span>}
         </div>
-        <span className="h-4 w-px shrink-0 bg-line" aria-hidden />
-        <div role="radiogroup" aria-label="Timeframe" className="flex shrink-0 items-center gap-0.5 px-1">
+        <span data-part="vsep" className="h-4 w-px shrink-0 bg-line" aria-hidden />
+        <div data-part="segmented" role="radiogroup" aria-label="Timeframe" className="flex shrink-0 items-center gap-0.5 px-1">
           {TIMEFRAMES.map((tf) => {
             const active = timeframe === tf.id;
             return (
@@ -251,7 +251,7 @@ export function ChartPanel({
             );
           })}
         </div>
-        <span className="h-4 w-px shrink-0 bg-line" aria-hidden />
+        <span data-part="vsep" className="h-4 w-px shrink-0 bg-line" aria-hidden />
         <DropdownMenu>
           <DropdownMenuTrigger className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-fg-muted transition-colors hover:bg-hover hover:text-fg">
             <ChartNoAxesCombined className="size-3.5" /> Indicatori
@@ -270,7 +270,7 @@ export function ChartPanel({
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-        <span className="h-4 w-px shrink-0 bg-line" aria-hidden />
+        <span data-part="vsep" className="h-4 w-px shrink-0 bg-line" aria-hidden />
         <div className="flex shrink-0 items-center gap-0.5 px-1" role="toolbar" aria-label="Strumenti di disegno">
           <ToolButton label="Cursore" active={tool === null} onClick={() => setTool(null)} shortcut="Esc">
             <MousePointer2 className="size-3.5" />
@@ -309,7 +309,7 @@ export function ChartPanel({
       </div>
 
       {/* chart */}
-      <div className="relative min-h-0 flex-1">
+      <div data-region="chart-body" className="relative min-h-0 flex-1">
         {symbol && (
           <ChartView
             key={symbol}

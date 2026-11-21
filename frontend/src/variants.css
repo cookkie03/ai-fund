@@ -1,0 +1,219 @@
+/*
+ * Phase 1 exploration: three candidate "Apple-like" directions, active only with ?variant=a|b|c.
+ * Unlayered on purpose so it wins over Tailwind utilities; the shipped build (no data-variant) is untouched.
+ */
+
+/* ---------- shared across the three variants ------------------------------------------------ */
+:root[data-variant] {
+  --spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root[data-variant] [data-region="topbar"],
+:root[data-variant] [data-region="rail"],
+:root[data-variant] [data-part="panel-head"],
+:root[data-variant] [data-part="tabs"],
+:root[data-variant] [data-region="chart-toolbar"] {
+  border-color: transparent;
+}
+
+:root[data-variant] [data-part="row"] {
+  border-bottom-color: transparent;
+  margin: 1px 6px;
+  border-radius: 8px;
+  transition: background-color 160ms var(--ease), transform 160ms var(--ease);
+}
+:root[data-variant] [data-part="row"]:active { transform: scale(0.992); }
+:root[data-variant] [data-region="watchlist"] li[data-part="row"] { border-bottom-width: 0; }
+
+:root[data-variant] [data-region="dock"] th,
+:root[data-variant] [data-region="dock"] td { border-color: transparent; }
+:root[data-variant] [data-region="dock"] tbody tr { transition: background-color 140ms var(--ease); }
+:root[data-variant] [data-region="dock"] th { font-weight: 500; color: var(--fg-subtle); }
+
+:root[data-variant] [data-region="activity"] .border-line,
+:root[data-variant] [data-region="watchlist"] .border-line { border-color: color-mix(in oklch, var(--line) 55%, transparent); }
+
+:root[data-variant] [data-region="chart-toolbar"] [data-part="vsep"] { opacity: 0; width: 6px; }
+
+:root[data-variant] [data-region="chart-toolbar"] {
+  height: auto;
+  min-height: 56px;
+  padding: 8px 12px;
+  gap: 6px;
+}
+:root[data-variant] [data-role="symbol"] { font-size: 15px; letter-spacing: -0.01em; }
+:root[data-variant] [data-role="price"] { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; color: var(--fg); }
+:root[data-variant] [data-role="change"] {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 6px;
+  align-self: center;
+}
+:root[data-variant] [data-role="change"][data-dir="up"] { background: var(--up-soft); }
+:root[data-variant] [data-role="change"][data-dir="down"] { background: var(--down-soft); }
+
+/* buttons: a real material instead of a flat fill */
+:root[data-variant] [data-slot="button"] { transition: background-color 150ms var(--ease), transform 120ms var(--ease), box-shadow 150ms var(--ease); }
+:root[data-variant] [data-slot="button"]:active:not(:disabled) { transform: scale(0.97); }
+:root[data-variant] [data-slot="button"][data-variant="default"] {
+  background-image: linear-gradient(to bottom, oklch(1 0 0 / 0.1), oklch(1 0 0 / 0));
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.18), 0 1px 2px oklch(0 0 0 / 0.45), 0 0 0 0.5px oklch(0 0 0 / 0.4);
+  border-radius: 7px;
+}
+
+/* the author's mark: an avatar, not a tag */
+:root[data-variant] [data-part="monogram"] {
+  box-shadow: none !important;
+  font-weight: 650;
+}
+
+/* tabs: underline slides in instead of popping */
+:root[data-variant] [data-part="tab"]::after { transform: scaleX(0.4); transition: opacity 180ms var(--ease), transform 220ms var(--spring); }
+:root[data-variant] [data-part="tab"][data-state="active"]::after { transform: scaleX(1); }
+
+/* panels and floating layers arrive instead of appearing */
+@keyframes v-panel-in { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+@keyframes v-rise { from { opacity: 0; transform: translateY(6px) scale(0.985); } to { opacity: 1; transform: none; } }
+:root[data-variant] [data-region="activity"] { animation: v-panel-in 280ms var(--spring) both; }
+:root[data-variant] [role="dialog"],
+:root[data-variant] [data-slot="popover-content"],
+:root[data-variant] [data-slot="dropdown-menu-content"] {
+  border-radius: 14px;
+  animation: v-rise 220ms var(--spring) both;
+  box-shadow: 0 0 0 0.5px oklch(1 0 0 / 0.08), 0 12px 40px oklch(0 0 0 / 0.5), 0 2px 8px oklch(0 0 0 / 0.3);
+}
+:root[data-variant] [data-slot="tooltip-content"] { border-radius: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-variant] [data-region="activity"],
+  :root[data-variant] [role="dialog"],
+  :root[data-variant] [data-slot="popover-content"],
+  :root[data-variant] [data-slot="dropdown-menu-content"] { animation: none; }
+  :root[data-variant] [data-part="row"]:active,
+  :root[data-variant] [data-slot="button"]:active { transform: none; }
+}
+
+/* ---------- A · Calma (Linear): one receding surface, one card that advances ---------------- */
+:root[data-variant="a"] {
+  --panel: oklch(0.15 0.008 262);
+  --ground: oklch(0.19 0.009 262);
+  --raised: oklch(0.225 0.01 262);
+  --hover: oklch(0.225 0.01 262);
+  --selected: oklch(0.245 0.022 258);
+  --line: oklch(0.255 0.01 262);
+  --radius: 0.4375rem;
+}
+:root[data-variant="a"] [data-region="shell"],
+:root[data-variant="a"] [data-region="canvas"],
+:root[data-variant="a"] [data-region="topbar"]:not([data-halted]),
+:root[data-variant="a"] [data-region="rail"],
+:root[data-variant="a"] [data-region="watchlist"] { background: var(--panel); }
+:root[data-variant="a"] [data-region="watchlist"] { border-right-color: transparent; }
+:root[data-variant="a"] [data-region="stage"] {
+  margin: 0 8px 8px 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--ground);
+  box-shadow: 0 0 0 1px oklch(1 0 0 / 0.055), 0 1px 2px oklch(0 0 0 / 0.35), 0 10px 30px -10px oklch(0 0 0 / 0.5);
+}
+:root[data-variant="a"] [data-region="activity"],
+:root[data-variant="a"] [data-region="dock"] { background: var(--ground); border-color: color-mix(in oklch, var(--line) 70%, transparent); }
+:root[data-variant="a"] [data-part="row"][aria-selected="true"] { background: var(--selected); }
+:root[data-variant="a"] [data-part="row"]:hover { background: var(--hover); }
+:root[data-variant="a"] [data-part="monogram"] { border-radius: 999px !important; min-width: 18px; height: 18px; }
+
+/* ---------- B · Legend (Robinhood Legend): modules as tiles on a black desk ----------------- */
+:root[data-variant="b"] {
+  --desk: oklch(0.115 0.004 260);
+  --ground: oklch(0.168 0.006 260);
+  --panel: oklch(0.168 0.006 260);
+  --raised: oklch(0.215 0.008 260);
+  --hover: oklch(0.21 0.008 260);
+  --selected: oklch(0.23 0.012 260);
+  --line: oklch(0.23 0.008 260);
+  --up: oklch(0.8 0.17 152);
+  --up-soft: oklch(0.8 0.17 152 / 0.14);
+  --down: oklch(0.7 0.19 25);
+  --down-soft: oklch(0.7 0.19 25 / 0.15);
+  --radius: 0.5rem;
+}
+:root[data-variant="b"] [data-region="shell"],
+:root[data-variant="b"] [data-region="canvas"],
+:root[data-variant="b"] [data-region="topbar"]:not([data-halted]),
+:root[data-variant="b"] [data-region="rail"] { background: var(--desk); }
+:root[data-variant="b"] [data-region="canvas"] { padding: 0 10px 10px 2px; }
+:root[data-variant="b"] [data-region="workspace"],
+:root[data-variant="b"] [data-region="stage"],
+:root[data-variant="b"] [data-region="upper"] { gap: 10px; }
+:root[data-variant="b"] [data-region="watchlist"],
+:root[data-variant="b"] [data-region="chart"],
+:root[data-variant="b"] [data-region="activity"],
+:root[data-variant="b"] [data-region="dock"] {
+  border: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--ground);
+}
+:root[data-variant="b"] [data-region="chart-toolbar"] { min-height: 68px; }
+:root[data-variant="b"] [data-role="price"] { font-size: 30px; letter-spacing: -0.025em; }
+:root[data-variant="b"] [data-role="symbol"] { font-size: 13px; color: var(--fg-muted); font-weight: 500; }
+:root[data-variant="b"] [data-part="tab"] { margin: 5px 0; border-radius: 8px; padding: 0 10px; }
+:root[data-variant="b"] [data-part="tab"][data-state="active"] { background: var(--hover); }
+:root[data-variant="b"] [data-part="tab"]::after { display: none; }
+:root[data-variant="b"] [data-part="row"]:hover { background: var(--hover); }
+:root[data-variant="b"] [data-part="row"][aria-selected="true"] { background: var(--selected); box-shadow: inset 0 0 0 1px oklch(1 0 0 / 0.06); }
+:root[data-variant="b"] [data-part="badge"] { border-radius: 999px; padding: 0 9px; }
+:root[data-variant="b"] [data-part="monogram"] {
+  border-radius: 999px !important;
+  min-width: 18px;
+  height: 18px;
+  color: oklch(0.16 0.01 260) !important;
+  background: var(--author) !important;
+}
+:root[data-variant="b"] [data-slot="button"][data-variant="default"] { border-radius: 999px; }
+
+/* ---------- C · Borsa (macOS Stocks, Finder, Xcode): sidebar, inspector, big numbers -------- */
+:root[data-variant="c"] {
+  --sidebar: oklch(0.225 0.006 270);
+  --ground: oklch(0.172 0.004 270);
+  --panel: oklch(0.2 0.005 270);
+  --raised: oklch(0.25 0.006 270);
+  --hover: oklch(0.27 0.006 270);
+  --selected: oklch(0.55 0.17 255);
+  --line: oklch(0.1 0.004 270);
+  --fg-muted: oklch(0.76 0.008 270);
+  --radius: 0.5rem;
+}
+:root[data-variant="c"] [data-region="shell"],
+:root[data-variant="c"] [data-region="topbar"]:not([data-halted]),
+:root[data-variant="c"] [data-region="rail"],
+:root[data-variant="c"] [data-region="watchlist"] { background: var(--sidebar); }
+:root[data-variant="c"] [data-region="topbar"]:not([data-halted]) { box-shadow: 0 1px 0 var(--line); position: relative; z-index: 1; }
+:root[data-variant="c"] [data-region="rail"] { box-shadow: none; }
+:root[data-variant="c"] [data-region="watchlist"] { border-right: 1px solid var(--line); }
+:root[data-variant="c"] [data-region="activity"] { background: var(--panel); border-left: 1px solid var(--line); }
+:root[data-variant="c"] [data-region="dock"] { background: var(--panel); border-top: 1px solid var(--line); }
+:root[data-variant="c"] [data-region="chart-toolbar"] { min-height: 72px; }
+:root[data-variant="c"] [data-role="symbol"] { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+:root[data-variant="c"] [data-role="price"] { font-size: 30px; font-weight: 600; letter-spacing: -0.03em; }
+:root[data-variant="c"] [data-role="change"] { background: none !important; padding: 0; font-size: 15px; }
+:root[data-variant="c"] [data-part="row"] { padding-top: 10px; padding-bottom: 10px; border-radius: 7px; }
+:root[data-variant="c"] [data-part="row"]:hover { background: oklch(1 0 0 / 0.045); }
+:root[data-variant="c"] [data-part="row"][aria-selected="true"] { background: var(--selected); }
+:root[data-variant="c"] [data-part="row"][aria-selected="true"] * { color: oklch(0.99 0 0) !important; }
+:root[data-variant="c"] [data-part="row"][aria-selected="true"] svg path { stroke: oklch(0.99 0 0 / 0.9); }
+/* segmented control with a raised thumb */
+:root[data-variant="c"] [data-part="segmented"] { background: oklch(0 0 0 / 0.28); border-radius: 8px; padding: 2px; box-shadow: inset 0 0 0 0.5px oklch(1 0 0 / 0.06); }
+:root[data-variant="c"] [data-part="segmented"] [aria-checked="true"] {
+  background: oklch(0.36 0.006 270);
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.5), inset 0 0.5px 0 oklch(1 0 0 / 0.14);
+  border-radius: 6px;
+}
+:root[data-variant="c"] [data-part="tabs"] { padding: 6px 10px; height: auto; }
+:root[data-variant="c"] [data-part="tab"] { border-radius: 6px; padding: 3px 10px; transition: background-color 180ms var(--ease), color 180ms var(--ease); }
+:root[data-variant="c"] [data-part="tab"][data-state="active"] { background: oklch(1 0 0 / 0.09); }
+:root[data-variant="c"] [data-part="tab"]::after { display: none; }
+:root[data-variant="c"] [data-part="monogram"] { border-radius: 5px !important; }
+:root[data-variant="c"] [data-region="activity"] { animation-duration: 340ms; }

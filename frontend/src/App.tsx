@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
+import { VariantSwitcher } from "@/components/variant-switcher";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { RuntimeProvider } from "@/lib/runtime/provider";
 import { PendingPage } from "@/pages/pending";
@@ -35,7 +36,8 @@ export function App() {
               </Routes>
             </AppShell>
           </BrowserRouter>
-          <Toaster position="bottom-right" />
+          <VariantSwitcher />
+            <Toaster position="bottom-right" />
         </TooltipProvider>
       </ShellStateProvider>
     </RuntimeProvider>

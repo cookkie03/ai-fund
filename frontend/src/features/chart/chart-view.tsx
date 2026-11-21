@@ -19,6 +19,7 @@ import {
 import { DrawingManager, type Drawing, type DrawingKind } from "lightweight-charts-drawing";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { author as resolveAuthor, cssColor, withAlpha } from "@/lib/authors";
+import { chartLook as look } from "@/lib/variant";
 import { fmtPrice, fmtSigned, fmtVolume } from "@/lib/format";
 import type { Bar, IndicatorsResponse } from "@/lib/runtime/types";
 import { cn } from "@/lib/utils";
@@ -125,16 +126,16 @@ export function ChartView(props: ChartViewProps) {
         panes: { separatorColor: p.line, separatorHoverColor: withAlpha(p.accent, 0.25), enableResize: true },
       },
       grid: {
-        vertLines: { color: withAlpha(p.line, 0.45) },
-        horzLines: { color: withAlpha(p.line, 0.45) },
+        vertLines: { color: withAlpha(p.line, look.gridAlpha), visible: look.grid === "full" },
+        horzLines: { color: withAlpha(p.line, look.gridAlpha), visible: look.grid !== "none" },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: p.fgSubtle, width: 1, style: LineStyle.Dashed, labelBackgroundColor: p.raised },
-        horzLine: { color: p.fgSubtle, width: 1, style: LineStyle.Dashed, labelBackgroundColor: p.raised },
+        vertLine: { color: withAlpha(p.fgSubtle, look.crosshair === LineStyle.Solid ? 0.45 : 1), width: 1, style: look.crosshair, labelBackgroundColor: p.raised },
+        horzLine: { color: withAlpha(p.fgSubtle, look.crosshair === LineStyle.Solid ? 0.45 : 1), width: 1, style: look.crosshair, labelBackgroundColor: p.raised },
       },
-      rightPriceScale: { borderColor: p.line, scaleMargins: { top: 0.08, bottom: 0.2 } },
-      timeScale: { borderColor: p.line, rightOffset: 6, barSpacing: 7, minBarSpacing: 2, timeVisible: true, secondsVisible: false,
+      rightPriceScale: { borderColor: p.line, borderVisible: look.priceScaleBorder, scaleMargins: { top: 0.08, bottom: 0.2 } },
+      timeScale: { borderColor: p.line, borderVisible: look.priceScaleBorder, rightOffset: 6, barSpacing: look.barSpacing, minBarSpacing: 2, timeVisible: true, secondsVisible: false,
         tickMarkFormatter: (t: Time, type: TickMarkType) => {
         if (typeof t !== "number") return String(t);
         const d = new Date(t * 1000);
@@ -233,7 +234,7 @@ export function ChartView(props: ChartViewProps) {
     const range: LogicalRange | null = loadedKey.current === key ? chart.timeScale().getVisibleLogicalRange() : null;
     candles.setData(bars.map((b) => ({ time: b.time as UTCTimestamp, open: b.open, high: b.high, low: b.low, close: b.close })));
     volume.setData(
-      bars.map((b) => ({ time: b.time as UTCTimestamp, value: b.volume, color: withAlpha(b.close >= b.open ? p.up : p.down, 0.24) })),
+      bars.map((b) => ({ time: b.time as UTCTimestamp, value: b.volume, color: withAlpha(b.close >= b.open ? p.up : p.down, look.volumeAlpha) })),
     );
     if (range) chart.timeScale().setVisibleLogicalRange(range);
     else if (bars.length) {
@@ -289,7 +290,7 @@ export function ChartView(props: ChartViewProps) {
         const s = chart.addSeries(LineSeries, { color: INDICATOR_COLORS[spec.id], lineWidth: 1, priceLineVisible: false, lastValueVisible: true }, idx);
         s.setData(line(spec.request));
         if (spec.id === "rsi14") {
-          for (const level of [70, 30]) s.createPriceLine({ price: level, color: withAlpha(p.fgSubtle, 0.55), lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: "" });
+          if (look.rsiGuides) for (const level of [70, 30]) s.createPriceLine({ price: level, color: withAlpha(p.fgSubtle, 0.55), lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: "" });
           s.priceScale().applyOptions({ autoScale: false, scaleMargins: { top: 0.1, bottom: 0.1 } });
           s.applyOptions({ autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }) });
         }
@@ -327,14 +328,14 @@ export function ChartView(props: ChartViewProps) {
         const mine = a.kind === "human";
         const hl = highlightAuthor !== null && highlightAuthor === a.id;
         const dim = highlightAuthor !== null && highlightAuthor !== a.id;
-        const label = `${a.initials}${d.text ? ` · ${d.text}` : ""}`;
+        const label = look.fullLabels ? `${a.initials}${d.text ? ` · ${d.text}` : ""}` : a.initials;
         const style = {
           ...(manager.get(d.id)?.style ?? {}),
           ...(d.style ?? {}),
           color: dim ? withAlpha(color, 0.35) : color,
           textColor: dim ? withAlpha(color, 0.45) : color,
-          width: hl ? 3 : 2,
-          lineStyle: mine ? "solid" : d.kind === "horizontal-line" ? "dashed" : "solid",
+          width: hl ? look.drawingWidth + 1 : look.drawingWidth,
+          lineStyle: !look.dashedLevels || mine ? "solid" : d.kind === "horizontal-line" ? "dashed" : "solid",
           text: label,
           fontSize: 11,
           horzLabelsAlign: d.kind === "horizontal-line" ? "left" : undefined,
@@ -400,9 +401,9 @@ export function ChartView(props: ChartViewProps) {
       const color = m.tone === "tp" ? p.up : m.tone === "sl" ? p.down : m.tone === "trail" ? p.warn : m.tone === "pending" ? withAlpha(p.accent, 0.8) : p.accent;
       return candles.createPriceLine({
         price: m.price,
-        color,
+        color: look.markAlpha < 1 ? withAlpha(color, look.markAlpha) : color,
         lineWidth: 1,
-        lineStyle: m.tone === "pending" ? LineStyle.SparseDotted : LineStyle.Dashed,
+        lineStyle: look.markStyle === LineStyle.Solid ? (m.tone === "pending" ? LineStyle.Dotted : LineStyle.Solid) : m.tone === "pending" ? LineStyle.SparseDotted : LineStyle.Dashed,
         axisLabelVisible: true,
         title: m.title,
         axisLabelColor: color,

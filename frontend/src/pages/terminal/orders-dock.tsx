@@ -65,7 +65,7 @@ function StatusBadge({ order }: { order: Order }) {
           : ["cancelled", "canceled", "expired"].includes(s)
             ? "text-fg-subtle bg-hover"
             : "text-accent-c bg-accent-soft";
-  return <span className={cn("inline-flex h-5 items-center rounded px-1.5 text-2xs font-medium", tone)}>{s === "pending" ? "Da approvare" : (STATUS_LABEL[s] ?? s)}</span>;
+  return <span data-part="badge" className={cn("inline-flex h-5 items-center rounded px-1.5 text-2xs font-medium", tone)}>{s === "pending" ? "Da approvare" : (STATUS_LABEL[s] ?? s)}</span>;
 }
 
 function Empty({ children }: { children: ReactNode }) {
@@ -410,7 +410,7 @@ export function OrdersDock({ selected, onSelect, className }: { selected: string
     );
 
   return (
-    <section aria-label="Ordini e trade" className={cn("flex min-h-0 flex-col bg-panel", className)}>
+    <section data-region="dock" aria-label="Ordini e trade" className={cn("flex min-h-0 flex-col bg-panel", className)}>
       <PanelTabs value={activeTab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
         <PanelTabsList
           end={

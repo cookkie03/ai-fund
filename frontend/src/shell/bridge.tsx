@@ -110,7 +110,7 @@ export function BridgePanel({ onClose, className }: { onClose?: () => void; clas
   };
 
   return (
-    <aside aria-label="Bridge" className={cn("flex h-full min-h-0 flex-col bg-panel", className)}>
+    <aside data-region="bridge-panel" aria-label="Bridge" className={cn("flex h-full min-h-0 flex-col bg-panel", className)}>
       <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-3">
         <Sparkles className="size-4 text-accent-c" aria-hidden />
         <h2 className="text-sm font-medium">Bridge</h2>

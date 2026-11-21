@@ -7,7 +7,7 @@ export const PanelTabs = TabsPrimitive.Root;
 
 export function PanelTabsList({ className, children, end }: { className?: string; children: ReactNode; end?: ReactNode }) {
   return (
-    <div className={cn("flex h-9 shrink-0 items-stretch border-b border-line pl-1 pr-2", className)}>
+    <div data-part="tabs" className={cn("flex h-9 shrink-0 items-stretch border-b border-line pl-1 pr-2", className)}>
       <TabsPrimitive.List className="flex min-w-0 items-stretch gap-0.5 overflow-x-auto">{children}</TabsPrimitive.List>
       {end && <div className="ml-auto flex shrink-0 items-center gap-1 pl-2">{end}</div>}
     </div>
@@ -17,6 +17,7 @@ export function PanelTabsList({ className, children, end }: { className?: string
 export function PanelTab({ className, children, count, tone, ...props }: ComponentProps<typeof TabsPrimitive.Trigger> & { count?: number; tone?: "warn" }) {
   return (
     <TabsPrimitive.Trigger
+      data-part="tab"
       className={cn(
         "group relative inline-flex items-center gap-1.5 whitespace-nowrap px-2.5 text-xs font-medium text-fg-subtle transition-colors duration-150 outline-none",
         "hover:text-fg data-[state=active]:text-fg focus-visible:bg-hover",

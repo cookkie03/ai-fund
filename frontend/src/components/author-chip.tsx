@@ -21,11 +21,13 @@ export function AuthorChip({ actor, author, label = false, size = "sm", classNam
       aria-label={label ? undefined : `${a.name}${a.channel && a.kind === "human" ? ` (${a.channel})` : ""}`}
     >
       <span
+        data-part="monogram"
         className={cn(
           "inline-grid shrink-0 place-items-center rounded-[4px] font-semibold tracking-[0.02em]",
           size === "xs" ? "h-4 min-w-4 px-[3px] text-[9px] leading-none" : "h-[18px] min-w-[18px] px-1 text-[10px] leading-none",
         )}
         style={{
+          ["--author" as string]: a.color,
           color: a.color,
           backgroundColor: `color-mix(in oklch, ${a.color} 17%, transparent)`,
           boxShadow: `inset 0 0 0 1px color-mix(in oklch, ${a.color} 30%, transparent)`,

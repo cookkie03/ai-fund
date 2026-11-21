@@ -204,8 +204,8 @@ export function Watchlist({ selected, onSelect, className }: { selected: string 
   };
 
   return (
-    <section aria-label="Watchlist condivisa" className={cn("flex min-h-0 flex-col bg-panel", className)}>
-      <header className="flex h-9 shrink-0 items-center gap-2 border-b border-line pl-3 pr-1.5">
+    <section data-region="watchlist" aria-label="Watchlist condivisa" className={cn("flex min-h-0 flex-col bg-panel", className)}>
+      <header data-part="panel-head" className="flex h-9 shrink-0 items-center gap-2 border-b border-line pl-3 pr-1.5">
         <h2 className="text-xs font-medium text-fg">Watchlist</h2>
         {wl.data && <span className="num text-2xs text-fg-subtle">{items.length}</span>}
         <span className="text-2xs text-fg-subtle">· condivisa con gli agenti</span>
@@ -253,6 +253,7 @@ export function Watchlist({ selected, onSelect, className }: { selected: string 
                 data-ticker={item.ticker}
                 data-active={active}
                 role="option"
+                data-part="row"
                 aria-selected={active}
                 tabIndex={active || (!selected && i === 0) ? 0 : -1}
                 onClick={() => onSelect(item.ticker)}

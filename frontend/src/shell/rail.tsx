@@ -15,7 +15,7 @@ function Mark() {
 
 export function Rail() {
   return (
-    <nav aria-label="Pagine" className="hidden w-[52px] shrink-0 flex-col items-center gap-1 border-r border-line bg-panel py-2 md:flex">
+    <nav data-region="rail" aria-label="Pagine" className="hidden w-[52px] shrink-0 flex-col items-center gap-1 border-r border-line bg-panel py-2 md:flex">
       <div className="mb-2 grid size-9 place-items-center" title="Cockpit">
         <Mark />
       </div>
@@ -47,7 +47,7 @@ export function Rail() {
 
 export function BottomNav() {
   return (
-    <nav aria-label="Pagine" className="flex h-14 shrink-0 items-stretch border-t border-line bg-panel pb-[env(safe-area-inset-bottom)] md:hidden">
+    <nav data-region="bottomnav" aria-label="Pagine" className="flex h-14 shrink-0 items-stretch border-t border-line bg-panel pb-[env(safe-area-inset-bottom)] md:hidden">
       {NAV.map((item) => (
         <NavLink
           key={item.path}

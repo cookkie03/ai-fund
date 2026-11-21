@@ -138,10 +138,10 @@ export function TerminalPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-1">
+    <div data-region="workspace" className="flex h-full min-h-0 min-w-0 flex-1">
       <Watchlist selected={selected} onSelect={select} className="w-[272px] shrink-0 border-r border-line" />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex min-h-0 flex-1">
+      <div data-region="stage" className="flex min-w-0 flex-1 flex-col">
+        <div data-region="upper" className="flex min-h-0 flex-1">
           <ChartPanel
             symbol={selected}
             focusDrawing={focus}

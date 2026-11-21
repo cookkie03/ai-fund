@@ -286,7 +286,7 @@ export function ActivityPanel({
 }) {
   const [tab, setTab] = useState("agents");
   return (
-    <aside aria-label="Attività sullo strumento" className={cn("flex min-h-0 flex-col bg-panel", className)}>
+    <aside data-region="activity" aria-label="Attività sullo strumento" className={cn("flex min-h-0 flex-col bg-panel", className)}>
       <PanelTabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
         <PanelTabsList
           end={

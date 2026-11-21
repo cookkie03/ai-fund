@@ -86,7 +86,7 @@ function EquityReadout() {
   return (
     <div className="flex items-baseline gap-3 text-xs">
       <span className="hidden text-fg-subtle md:inline">Equity</span>
-      <span className="num text-sm font-medium text-fg">{fmtMoney(figures.equity)}</span>
+      <span data-role="equity" className="num text-sm font-medium text-fg">{fmtMoney(figures.equity)}</span>
       <span className={cn("num hidden sm:inline", tone)}>
         {fmtMoney(figures.pnl, { sign: true })} <span className="opacity-80">{fmtPct(figures.pct)}</span>
       </span>
@@ -164,6 +164,8 @@ export function TopBar() {
   const { halted, bridgeOpen, setBridgeOpen } = useShell();
   return (
     <header
+      data-region="topbar"
+      data-halted={halted || undefined}
       className={cn(
         "flex h-11 shrink-0 items-center gap-1 border-b px-2 transition-colors duration-200",
         halted ? "border-[oklch(0.58_0.2_25/0.55)] bg-halt-ground" : "border-line bg-panel",
