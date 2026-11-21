@@ -3,39 +3,33 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
 
-from bootstrap import build_test_office
-from runtime.commands import AddWatchlist, UpsertAnnotation
-from runtime.core import Runtime
-from runtime.http import create_app
-from storage.office_db import OfficeDB
-from tests.workflows.test_office import FakeMarketData
+if __package__ in (None, ""):
+    # `python scripts/dev_cockpit_server.py` from the repo root: make the root importable.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from bootstrap import build_test_office  # noqa: E402
+from runtime.core import Runtime  # noqa: E402
+from runtime.http import create_app  # noqa: E402
+from scripts.dev_cockpit_scenario import ScenarioMarketData, seed_scenario  # noqa: E402
+from storage.office_db import OfficeDB  # noqa: E402
 
 
-def create_dev_app(db_path: str = "data/dev-cockpit.db") -> FastAPI:
+def create_dev_app(db_path: str = "data/dev-cockpit.db", approval_mode: str = "manual") -> FastAPI:
+    if db_path != ":memory:":
+        # The scenario is regenerated on every start, relative to the current time.
+        for suffix in ("", "-wal", "-shm", ".lock"):
+            Path(db_path + suffix).unlink(missing_ok=True)
     db = OfficeDB(db_path)
-    office = build_test_office(db=db, market_data=FakeMarketData())
+    market = ScenarioMarketData()
+    office = build_test_office(db=db, market_data=market, approval_mode=approval_mode)
     rt = Runtime(office=office, account_label="dev-cockpit")
-    rt.execute(AddWatchlist(ticker="AAPL", note="Mock leader"), actor="dev-seed")
-    rt.execute(AddWatchlist(ticker="NVDA", note="Mock AI"), actor="dev-seed")
-    rt.execute(
-        UpsertAnnotation(
-            id="demo-trend-1",
-            ticker="AAPL",
-            timeframe="1h",
-            drawing={
-                "type": "trendline",
-                "points": [
-                    {"time": 1700000000, "price": 100.0},
-                    {"time": 1700086400, "price": 110.0},
-                ],
-            },
-        ),
-        actor="user",
-    )
+    seed_scenario(rt, market)
     return create_app(rt, token=None, host="127.0.0.1")
 
 
@@ -44,8 +38,9 @@ def main() -> None:
     parser.add_argument("--host", choices=("127.0.0.1", "localhost", "::1"), default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--db", default="data/dev-cockpit.db")
+    parser.add_argument("--approval-mode", choices=("manual", "auto"), default="manual")
     args = parser.parse_args()
-    app = create_dev_app(db_path=args.db)
+    app = create_dev_app(db_path=args.db, approval_mode=args.approval_mode)
     uvicorn.run(app, host=args.host, port=args.port)
 
 

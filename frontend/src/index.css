@@ -1,0 +1,228 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/inter";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Cockpit: single dark theme. Graphite tinted cool (hue 255), one azure accent,
+   standard market colours, and one identity colour per author. */
+:root {
+  color-scheme: dark;
+
+  /* surfaces */
+  --ground: oklch(0.172 0.009 255); /* work area: chart, tables */
+  --panel: oklch(0.152 0.009 255); /* rail, side panels, docks */
+  --raised: oklch(0.212 0.011 255); /* popovers, menus, inputs */
+  --hover: oklch(0.235 0.012 255);
+  --selected: oklch(0.26 0.03 252);
+  --line: oklch(0.262 0.011 255); /* hairline dividers */
+  --line-strong: oklch(0.33 0.012 255);
+
+  /* text */
+  --fg: oklch(0.94 0.004 255);
+  --fg-muted: oklch(0.74 0.012 255);
+  --fg-subtle: oklch(0.64 0.013 255);
+  --fg-faint: oklch(0.5 0.012 255); /* decorative only, never body text */
+
+  /* accent + semantics */
+  --accent-c: oklch(0.7 0.15 251);
+  --accent-strong: oklch(0.62 0.17 252);
+  --accent-soft: oklch(0.7 0.15 251 / 0.16);
+  --up: oklch(0.74 0.135 168);
+  --up-soft: oklch(0.74 0.135 168 / 0.14);
+  --down: oklch(0.67 0.195 20);
+  --down-soft: oklch(0.67 0.195 20 / 0.15);
+  --warn: oklch(0.82 0.14 78);
+  --warn-soft: oklch(0.82 0.14 78 / 0.14);
+  --halt: oklch(0.58 0.2 25);
+  --halt-ground: oklch(0.24 0.06 22);
+
+  /* authors */
+  --author-luca: oklch(0.82 0.135 72);
+  --author-pm: oklch(0.74 0.13 302);
+  --author-technical: oklch(0.78 0.11 206);
+  --author-market: oklch(0.8 0.13 138);
+  --author-sentiment: oklch(0.76 0.13 352);
+  --author-fundamental: oklch(0.8 0.075 58);
+  --author-risk: oklch(0.74 0.1 276);
+  --author-system: oklch(0.7 0.01 255);
+
+  --radius: 0.375rem;
+
+  /* shadcn mapping */
+  --background: var(--ground);
+  --foreground: var(--fg);
+  --card: var(--panel);
+  --card-foreground: var(--fg);
+  --popover: var(--raised);
+  --popover-foreground: var(--fg);
+  --primary: var(--accent-strong);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: var(--hover);
+  --secondary-foreground: var(--fg);
+  --muted: var(--hover);
+  --muted-foreground: var(--fg-muted);
+  --accent: var(--hover);
+  --accent-foreground: var(--fg);
+  --destructive: var(--down);
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--accent-c);
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.05rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.2rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.35rem;
+
+  --color-ground: var(--ground);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-hover: var(--hover);
+  --color-selected: var(--selected);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-faint: var(--fg-faint);
+  --color-accent-c: var(--accent-c);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-up: var(--up);
+  --color-up-soft: var(--up-soft);
+  --color-down: var(--down);
+  --color-down-soft: var(--down-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-halt: var(--halt);
+  --color-halt-ground: var(--halt-ground);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-ground text-fg font-sans text-sm antialiased;
+    font-feature-settings: "cv11", "ss03";
+    overflow: hidden;
+  }
+  ::selection {
+    background: oklch(0.7 0.15 251 / 0.35);
+    color: var(--fg);
+  }
+  input,
+  textarea {
+    caret-color: var(--accent-c);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent-c);
+    outline-offset: 1px;
+  }
+  /* themed scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  a {
+    text-underline-offset: 3px;
+  }
+}
+
+@layer utilities {
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum", "cv11", "ss03";
+  }
+  .flash-up {
+    animation: flash-up 900ms var(--ease-out-quint);
+  }
+  .flash-down {
+    animation: flash-down 900ms var(--ease-out-quint);
+  }
+}
+
+@keyframes flash-up {
+  from {
+    background-color: var(--up-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+@keyframes flash-down {
+  from {
+    background-color: var(--down-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

@@ -1,148 +1,34 @@
-import { useEffect, useRef, useState } from 'react'
-
-type Portfolio = {
-  available: boolean
-  reason: string | null
-  cash: string | null
-  equity: string | null
-  positions: Array<Record<string, string>>
-  orders: Array<Record<string, string>>
-}
-
-type ControlSurface = {
-  observed_at: string
-  source: string
-  freshness: string
-  modules: Array<{ name: string; status: string; last_run: string | null; error_summary: string | null }>
-  runtime: Record<string, string>
-  config: Record<string, unknown>
-  events: Array<Record<string, string>>
-}
-
-type Snapshot = {
-  observed_at: string
-  source: string
-  freshness: string
-  portfolio: Portfolio
-  watchlist: Array<Record<string, string>>
-  events: Array<Record<string, string>>
-  modules: Record<string, string>
-  decisions: Array<{
-    symbol: string
-    status: string
-    direction: string
-    conviction: string
-    observed_at: string
-    rationale: string
-  }>
-}
-
-const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
-
-function StatusPill({ children, tone = 'quiet' }: { children: string; tone?: 'quiet' | 'good' | 'warn' }) {
-  return <span className={`pill pill-${tone}`}><span className="dot" />{children}</span>
-}
-
-function EmptyPanel({ title, reason }: { title: string; reason: string }) {
-  return <div className="empty"><strong>{title}</strong><span>{reason}</span></div>
-}
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { RuntimeProvider } from "@/lib/runtime/provider";
+import { PendingPage } from "@/pages/pending";
+import { TerminalPage } from "@/pages/terminal/terminal-page";
+import { AppShell } from "@/shell/app-shell";
+import { NAV } from "@/shell/nav";
+import { ShellStateProvider } from "@/shell/shell-state";
 
 export function App() {
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
-  const [controlSurface, setControlSurface] = useState<ControlSurface | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [controlError, setControlError] = useState<string | null>(null)
-  const [updatedAt, setUpdatedAt] = useState<Date | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [stale, setStale] = useState(false)
-  const [refreshToken, setRefreshToken] = useState(0)
-  const hasSnapshot = useRef(false)
-
-  useEffect(() => {
-    let active = true
-    const refresh = async () => {
-      if (active && !hasSnapshot.current) setLoading(true)
-      const [dashboardResult, controlResult] = await Promise.allSettled([
-        fetch(`${apiBase}/api/dashboard`),
-        fetch(`${apiBase}/api/control-surface`),
-      ])
-      if (!active) return
-
-      if (dashboardResult.status === 'fulfilled' && dashboardResult.value.ok) {
-        const nextSnapshot = (await dashboardResult.value.json()) as Snapshot
-        setSnapshot(nextSnapshot)
-        hasSnapshot.current = true
-        setError(null)
-        setStale(false)
-        setUpdatedAt(new Date())
-      } else {
-        const reason = dashboardResult.status === 'rejected'
-          ? dashboardResult.reason instanceof Error ? dashboardResult.reason.message : 'Backend unavailable'
-          : `Dashboard responded ${dashboardResult.value.status}`
-        setError(reason)
-        setStale(hasSnapshot.current)
-      }
-
-      if (controlResult.status === 'fulfilled' && controlResult.value.ok) {
-        setControlSurface((await controlResult.value.json()) as ControlSurface)
-        setControlError(null)
-      } else {
-        const reason = controlResult.status === 'rejected'
-          ? controlResult.reason instanceof Error ? controlResult.reason.message : 'Control surface unavailable'
-          : `Control surface responded ${controlResult.value.status}`
-        setControlError(reason)
-      }
-      setLoading(false)
-    }
-    refresh()
-    const timer = window.setInterval(refresh, 15_000)
-    return () => { active = false; window.clearInterval(timer) }
-  }, [refreshToken])
-
-  const portfolio = snapshot?.portfolio
   return (
-    <main>
-      <header className="topbar">
-        <a className="brand" href="/">TA<span>/</span>cockpit</a>
-        <div className="top-meta"><StatusPill tone={error ? 'warn' : snapshot ? 'good' : 'quiet'}>{error ? 'backend offline' : snapshot ? 'read-only link' : 'connecting'}</StatusPill><span>refresh 15s</span></div>
-      </header>
-      <section className="hero">
-        <div><p className="kicker">Trading Agent · observability</p><h1>See what is true<br /><em>before you act.</em></h1><p className="lede">A quiet surface for portfolio state, source freshness, and the work still waiting to be connected.</p></div>
-        <div className="signal"><span className="signal-line" /><span>paper system<br /><b>read only</b></span></div>
-      </section>
-      {loading && <div className="alert" role="status"><strong>Loading read models.</strong><span>Connecting to the local read-only backend.</span></div>}
-      {error && <div className="alert" role="alert"><strong>{stale ? 'Showing the last successful snapshot.' : 'Data source unavailable.'}</strong><span>{error}. The view stays honest and does not substitute demo values.</span><button type="button" onClick={() => setRefreshToken((value) => value + 1)}>Retry</button></div>}
-      {stale && !error && <div className="alert"><strong>Data may be stale.</strong><span>Last successful snapshot checked {updatedAt?.toLocaleTimeString() ?? 'earlier'}.</span></div>}
-      <section className="section-grid">
-        <div className="section-head"><span>Portfolio</span><StatusPill tone={portfolio?.available ? 'good' : 'quiet'}>{portfolio?.available ? 'connected' : 'not connected'}</StatusPill></div>
-        <div className="metric-grid">
-          <article className="metric"><span>Equity</span><strong>{portfolio?.equity ?? '—'}</strong><small>{snapshot?.freshness ?? 'waiting for source'}</small></article>
-          <article className="metric"><span>Cash</span><strong>{portfolio?.cash ?? '—'}</strong><small>cash, not buying power</small></article>
-          <article className="metric"><span>Positions</span><strong>{portfolio?.positions.length ?? '—'}</strong><small>open holdings</small></article>
-        </div>
-        {!portfolio?.available && <EmptyPanel title="Portfolio read model is not connected" reason={portfolio?.reason ?? 'Loading the Python backend read model.'} />}
-        {portfolio?.available && <div className="portfolio-details">
-          <h3>Positions</h3>
-          {portfolio.positions.length ? <div className="table-wrap" tabIndex={0} role="region" aria-label="Positions"><table><thead><tr><th>Symbol</th><th>Side</th><th>Quantity</th><th>Entry price</th><th>Current price</th><th>Market value</th><th>Unrealized P/L</th></tr></thead><tbody>{portfolio.positions.map((position, index) => <tr key={`${position.symbol}-${index}`}><td>{position.symbol ?? '—'}</td><td>{position.side ?? '—'}</td><td>{position.quantity ?? '—'}</td><td>{position.average_entry_price ?? '—'}</td><td>{position.current_price ?? '—'}</td><td>{position.market_value ?? '—'}</td><td>{position.unrealized_profit_loss ?? '—'}</td></tr>)}</tbody></table></div> : <EmptyPanel title="No positions reported" reason="The latest portfolio snapshot contains no positions." />}
-          <h3>Orders</h3>
-          {portfolio.orders.length ? <div className="table-wrap" tabIndex={0} role="region" aria-label="Orders"><table><thead><tr><th>Symbol</th><th>Side</th><th>Type</th><th>Status</th><th>Quantity</th><th>Filled</th><th>Submitted</th></tr></thead><tbody>{portfolio.orders.map((order, index) => <tr key={`${order.id}-${index}`}><td>{order.symbol ?? '—'}</td><td>{order.side ?? '—'}</td><td>{order.order_type ?? '—'}</td><td>{order.status ?? '—'}</td><td>{order.quantity ?? '—'}</td><td>{order.filled_quantity ?? '—'}</td><td>{order.submitted_at ?? '—'}</td></tr>)}</tbody></table></div> : <EmptyPanel title="No orders reported" reason="The latest portfolio snapshot contains no orders." />}
-        </div>}
-      </section>
-      <section className="split-grid">
-        <article className="panel"><div className="section-head"><span>Watchlist</span><span className="muted">universe</span></div>{snapshot?.watchlist.length ? <ul className="decision-list">{snapshot.watchlist.map((item) => <li key={`${item.symbol}-${item.interval}`}><div><strong>{item.symbol}</strong><span>{item.close} USD · {item.interval}</span><small>{item.source} · <time dateTime={item.timestamp}>{new Date(item.timestamp).toLocaleString()}</time></small></div></li>)}</ul> : <EmptyPanel title="No watchlist data" reason="The persistent read model will provide symbols and their last analysis." />}</article>
-        <article className="panel"><div className="section-head"><span>Decision history</span><span className="muted">read-only</span></div>{snapshot?.decisions.length ? <ul className="decision-list">{snapshot.decisions.map((decision) => <li key={`${decision.symbol}-${decision.observed_at}`}><div><strong>{decision.symbol}</strong><span>{decision.rationale}</span><small>{decision.direction} · {decision.conviction} · <time dateTime={decision.observed_at}>{new Date(decision.observed_at).toLocaleString()}</time></small></div><StatusPill tone={decision.status === 'risk_approved' ? 'good' : 'quiet'}>{decision.status.replace('_', ' ')}</StatusPill></li>)}</ul> : <EmptyPanel title="No decisions available" reason={snapshot?.modules.decisions === 'available' ? 'No persisted research or risk decisions yet. Risk approval is not a fill confirmation.' : 'The decision history source is unavailable.'} />}</article>
-        <article className="panel"><div className="section-head"><span>System map</span><span className="muted">capabilities</span></div><ul className="capabilities">{Object.entries(snapshot?.modules ?? {portfolio: 'loading', decisions: 'loading', benchmark: 'loading'}).map(([name, state]) => <li key={name}><span>{name.replace('_', ' ')}</span><StatusPill tone={state === 'unavailable' || state === 'post-mvp' ? 'quiet' : 'good'}>{state}</StatusPill></li>)}</ul></article>
-      </section>
-      <section className="section-grid">
-        <div className="section-head"><span>Control surface</span><StatusPill tone={controlError ? 'warn' : controlSurface ? 'quiet' : 'quiet'}>{controlError ? 'unavailable' : controlSurface?.runtime.status ?? 'loading'}</StatusPill></div>
-        {controlError && <div className="alert"><strong>Control plane unavailable.</strong><span>{controlError}. Observation only; no controls are exposed.</span></div>}
-        <div className="split-grid control-grid">
-          <article className="panel"><div className="section-head"><span>Modules</span><span className="muted">runtime</span></div>{controlSurface?.modules.length ? <ul className="capabilities">{controlSurface.modules.map((module) => <li key={module.name}><span>{module.name}</span><StatusPill tone={module.status === 'healthy' ? 'good' : 'quiet'}>{module.status}</StatusPill></li>)}</ul> : <EmptyPanel title="No module health yet" reason={controlSurface?.runtime.reason ?? 'Waiting for the runtime read model.'} />}</article>
-          <article className="panel"><div className="section-head"><span>Recent events</span><span className="muted">observed</span></div>{controlSurface?.events.length ? <p>{controlSurface.events.length} events</p> : <EmptyPanel title="No events available" reason="Events will appear when the persisted read model is connected." />}</article>
-        </div>
-        <p className="source-note">source: {controlSurface?.source ?? 'not available'} · freshness: {controlSurface?.freshness ?? 'not available'} · configuration is observed, never changed here</p>
-      </section>
-      <footer><span>source: {snapshot?.source ?? 'not available'}</span><span>{updatedAt ? `checked ${updatedAt.toLocaleTimeString()}` : 'waiting for first check'}</span><span>no broker writes</span></footer>
-    </main>
-  )
+    <RuntimeProvider>
+      <ShellStateProvider>
+        <TooltipProvider>
+          <BrowserRouter>
+            <AppShell>
+              <Routes>
+                {/* Home is the Assistente; until it is built the cockpit opens on the Terminale. */}
+                <Route path="/" element={<Navigate to="/terminale" replace />} />
+                <Route path="/terminale" element={<TerminalPage />} />
+                {NAV.filter((n) => !n.built).map((n) => (
+                  <Route key={n.path} path={n.path} element={<PendingPage item={n} />} />
+                ))}
+                <Route path="*" element={<Navigate to="/terminale" replace />} />
+              </Routes>
+            </AppShell>
+          </BrowserRouter>
+          <Toaster position="bottom-right" />
+        </TooltipProvider>
+      </ShellStateProvider>
+    </RuntimeProvider>
+  );
 }
