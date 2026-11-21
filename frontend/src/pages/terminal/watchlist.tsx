@@ -286,7 +286,7 @@ export function Watchlist({ selected, onSelect, className }: { selected: string 
                 <div className="mt-1 flex items-center gap-1.5 text-2xs text-fg-subtle">
                   <AuthorChip author={a} size="xs" tooltip={`Aggiunto da ${a.name}${a.kind === "human" && a.channel ? ` via ${a.channel}` : ""}`} />
                   <span className="min-w-0 flex-1 truncate" title={item.note ?? undefined}>
-                    {item.note || <span className="italic text-fg-faint">nessuna nota</span>}
+                    {item.note || <span className="italic text-fg-subtle">nessuna nota</span>}
                   </span>
                   <span className="num shrink-0" title={new Date(parseTs(item.added_ts) ?? 0).toLocaleString("it-IT")}>
                     {fmtAge(parseTs(item.added_ts), now)}

@@ -233,7 +233,7 @@ export function ChartView(props: ChartViewProps) {
     const range: LogicalRange | null = loadedKey.current === key ? chart.timeScale().getVisibleLogicalRange() : null;
     candles.setData(bars.map((b) => ({ time: b.time as UTCTimestamp, open: b.open, high: b.high, low: b.low, close: b.close })));
     volume.setData(
-      bars.map((b) => ({ time: b.time as UTCTimestamp, value: b.volume, color: withAlpha(b.close >= b.open ? p.up : p.down, 0.32) })),
+      bars.map((b) => ({ time: b.time as UTCTimestamp, value: b.volume, color: withAlpha(b.close >= b.open ? p.up : p.down, 0.24) })),
     );
     if (range) chart.timeScale().setVisibleLogicalRange(range);
     else if (bars.length) {

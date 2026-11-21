@@ -91,7 +91,7 @@ function AuthorLayers({
             title={`${off ? "Mostra" : "Nascondi"} i disegni di ${a.name}`}
             className={cn(
               "inline-flex h-6 items-center gap-1.5 rounded-md border bg-ground/85 pl-1 pr-1.5 text-2xs backdrop-blur-[2px] transition-colors",
-              off ? "border-line text-fg-faint" : "border-line-strong text-fg-muted hover:border-fg-faint hover:text-fg",
+              off ? "border-line text-fg-subtle" : "border-line-strong text-fg-muted hover:border-fg-faint hover:text-fg",
             )}
           >
             <span className={cn(off && "opacity-40 grayscale")}>

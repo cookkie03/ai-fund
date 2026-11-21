@@ -44,13 +44,9 @@ function Section({ title, children, end }: { title: string; children: ReactNode;
 
 function Conviction({ s }: { s: Suggestion }) {
   const d = DIRECTION[s.direction] ?? { label: s.direction, tone: "text-fg-muted" };
-  const pct = Math.round(Math.max(0, Math.min(1, s.conviction)) * 100);
   return (
     <span className="flex items-center gap-2">
       <span className={cn("w-14 text-xs font-medium", d.tone)}>{d.label}</span>
-      <span className="relative h-1 w-8 overflow-hidden rounded-full bg-hover" aria-hidden>
-        <span className={cn("absolute inset-y-0 left-0 rounded-full", s.direction === "buy" ? "bg-up" : s.direction === "sell" ? "bg-down" : "bg-fg-subtle")} style={{ width: `${pct}%` }} />
-      </span>
       <span className="num w-7 text-right text-xs text-fg-muted">{s.conviction.toFixed(2).replace(".", ",")}</span>
     </span>
   );

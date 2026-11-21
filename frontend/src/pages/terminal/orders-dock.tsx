@@ -1,5 +1,6 @@
-import { Check, CircleAlert, ShieldCheck, ShieldX, X } from "lucide-react";
+import { Check, ChevronRight, CircleAlert, ShieldCheck, ShieldX, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
+import { AuthorChip } from "@/components/author-chip";
 import { PanelTab, PanelTabContent, PanelTabs, PanelTabsList } from "@/components/panel-tabs";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,6 +12,29 @@ import { cn } from "@/lib/utils";
 import { useShell } from "@/shell/shell-state";
 
 type Scope = "ticker" | "all";
+
+/** Who signed the order: the PM drafts every order; Luca approves it, or the account approves on its own. */
+function Signature({ order }: { order: Order }) {
+  const a = order.approval_status;
+  return (
+    <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+      <AuthorChip actor="portfolio_manager" size="xs" tooltip="Bozza del Portfolio Manager" />
+      {a === "approved" && (
+        <>
+          <ChevronRight className="size-3 text-fg-faint" aria-hidden />
+          <AuthorChip actor="cockpit" size="xs" tooltip="Approvato da Luca" />
+        </>
+      )}
+      {a === "rejected" && (
+        <>
+          <ChevronRight className="size-3 text-fg-faint" aria-hidden />
+          <AuthorChip actor="cockpit" size="xs" tooltip="Rifiutato da Luca" />
+        </>
+      )}
+      {a === "auto" && <span className="text-2xs text-fg-subtle" title="Approvazione automatica dell'account">auto</span>}
+    </span>
+  );
+}
 
 function Th({ children, right, className }: { children?: ReactNode; right?: boolean; className?: string }) {
   return (
@@ -237,6 +261,7 @@ function OrdersTable({ orders, pending, onSelect, selected }: { orders: Order[];
             <Th right>Rischio</Th>
             <Th right>Nozionale</Th>
             <Th>Stato</Th>
+            <Th>Firma</Th>
             <Th right>Creato</Th>
             <Th right className="pr-3">{pending ? "Azioni" : "ID"}</Th>
           </tr>
@@ -264,6 +289,9 @@ function OrdersTable({ orders, pending, onSelect, selected }: { orders: Order[];
                 <Td right>{fmtMoney(f.notional, { decimals: 0 })}</Td>
                 <Td>
                   <StatusBadge order={o} />
+                </Td>
+                <Td>
+                  <Signature order={o} />
                 </Td>
                 <Td right className="text-fg-muted">{fmtWhen(o.created_ts)}</Td>
                 <Td right className="pr-3">
