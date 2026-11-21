@@ -63,3 +63,13 @@ Direzione visiva: lo standard di ogni genere eseguito al livello dei migliori pr
 - Il grafico resta TradingView lightweight-charts con lightweight-charts-drawing: cambia solo lo stile.
 - Stato unico del grafico (approvato): ticker, timeframe, indicatori, disegni con autore e stato, note vivono nel Runtime. UI e agenti leggono e scrivono lo stesso stato con comandi ed eventi; la libreria è solo una vista.
 - Flusso: varianti di direzione servite a Luca sul Mac, poi applicazione a shell e Terminale, critique, audit e aggiornamento di `DESIGN.md`.
+
+### Stile scelto: Legend (2026-11-21)
+
+Tra tre varianti — A Calma ispirata a Linear, B Legend ispirata a Robinhood Legend e C Borsa ispirata a macOS — Luca ha scelto B Legend. Ha approvato il risultato applicato: «così va bene». Il commit è `3167eac` sul branch `claude/cockpit-frontend-opus-54052e`, non ancora unito.
+
+Il fondo è quasi nero. I moduli sono tessere grafite separate da 10 px. Il prezzo è grande, a 30 px. I controlli sono segmentati, gli avatar degli autori sono pieni e il grafico è senza griglia.
+
+Il layout funziona come VS Code. La watchlist si nasconde con Ctrl/⌘ B, il pannello attività con Ctrl/⌘ Alt B e gli ordini con Ctrl/⌘ J. I pannelli si ridimensionano trascinando lo spazio tra le tessere. Il layout resta salvato nel browser.
+
+I raggi sono concentrici: 12 px per la tessera, 8 px per il controllo, 6 px per l'elemento e 4 px per il tag. I cerchi sono riservati agli avatar e ai pallini di stato. Il sistema completo è descritto in `DESIGN.md` sul branch della build.
