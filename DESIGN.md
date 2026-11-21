@@ -111,7 +111,7 @@ components:
     backgroundColor: "{colors.author-technical}"
     textColor: "{colors.desk}"
     rounded: "{rounded.full}"
-    size: "18px"
+    size: "20px"
   badge:
     rounded: "{rounded.tag}"
     height: "20px"
@@ -195,7 +195,7 @@ Desktop (1440 x 900): a 56 px icon rail and a 48 px top bar on the desk, then th
 - **Bridge** (340 px): a tile on the far right from 1280 px, a sheet below that; it starts open from 1600 px.
 
 ### Named Rules
-**The VS Code Rule.** Every tile around the chart can be hidden and resized. Toggles live in the top bar (and as a close button in each tile header) with the VS Code shortcuts: Ctrl/⌘ B watchlist, Ctrl/⌘ Alt B activity, Ctrl/⌘ J orders. Dragging a gap resizes the tile next to it, arrow keys step 16 px (48 with Shift), double click restores the default. Sizes and visibility persist per browser (`cockpit.layout`). When the orders tile is hidden and orders wait for approval, the toggle carries a warn count.
+**The VS Code Rule.** Every tile around the chart can be hidden and resized. Toggles live in the top bar (solid icon while the tile is shown, dashed while hidden) and as a close button in each tile header, with the VS Code shortcuts: Ctrl/⌘ B watchlist, Ctrl/⌘ Alt B activity, Ctrl/⌘ J orders. Dragging a gap resizes the tile next to it, arrow keys step 16 px (48 with Shift), double click restores the default. Sizes and visibility persist per browser (`cockpit.layout`). When the orders tile is hidden and orders wait for approval, the toggle carries a warn count. Below 1280 px the activity tile starts hidden unless a saved layout says otherwise.
 
 Phone (under 768 px): compact top bar, chart at 56 vh, an approval strip when orders wait, then a segmented control (Watchlist, Attività, Ordini) over one tile, and a bottom nav for the six pages. Drawing tools are hidden on phones.
 
@@ -222,7 +222,8 @@ Radii are tokens (`rounded-tile`, `rounded-control`, `rounded-item`, `rounded-ta
 - Tiles slide 10 px and fade in over 260 ms on the settle curve (`cubic-bezier(0.32, 0.72, 0, 1)`) when shown; hiding is instant.
 - Buttons and tool buttons scale to 0.94 to 0.97 while pressed; colours change over 150 ms.
 - Price cells flash once on change; the status dot pulses only while the stream reconnects.
-- Reduced motion collapses every animation and transition to 1 ms.
+- Reduced motion collapses every animation and transition to 1 ms, except the price flash, which is a colour fade and carries information.
+- A resize drag updates the layout at most once per frame.
 
 ## Components
 
@@ -233,10 +234,10 @@ Ground surface, 12 px radius, `overflow-hidden`. The header is 44 px, no divider
 Primary (azure, 32 px, 24 px in table rows) is reserved for the one action that commits: Approva, Approva e invia, Invia. Ghost buttons carry everything else; destructive actions (Halt, Rifiuta conferma) use the down colour. Disabled is 50% opacity and keeps a tooltip that names why (Halt attivo, Runtime irraggiungibile). Icon buttons are 28 px with a tooltip that shows the shortcut in a tag.
 
 ### Segmented controls
-A sunken track (black at 30%, 2 px inset, 8 px radius) with 24 px items at 6 px radius; the active item is `raised` with a material shadow. Used for timeframe, tile tabs, order scope, drawing tools and the phone tab bar.
+A sunken track (black at 30%, 2 px inset, 8 px radius) with 24 px items at 6 px radius (32 px under a coarse pointer); the active item is `raised` with a material shadow. Used for timeframe, tile tabs, order scope, drawing tools and the phone tab bar.
 
 ### Chips
-**Author avatar:** a filled circle in the author colour with the monogram in desk-dark bold text, optional short name, tooltip with full name and channel. **Status badge:** text on the semantic soft tint (Da approvare warn, Eseguito up, Rifiutato down, Annullato neutral), 4 px radius.
+**Author avatar:** a filled circle (20 px, 18 px in dense rows) in the author colour with the monogram in desk-dark bold text, optional short name, tooltip with full name and channel. **Status badge:** text on the semantic soft tint (Da approvare warn, Eseguito up, Rifiutato down, Annullato neutral), 4 px radius.
 
 ### Navigation
 Icon rail on the desk with tooltips; the active page is a ground-coloured 8 px square, like a tile seen from the side.

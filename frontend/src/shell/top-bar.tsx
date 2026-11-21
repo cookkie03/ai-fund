@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, MessagesSquare, OctagonPause, PanelBottom, PanelLeft, PanelRight, Play } from "lucide-react";
+import { Check, ChevronsUpDown, MessagesSquare, OctagonPause, PanelBottom, PanelBottomDashed, PanelLeft, PanelLeftDashed, PanelRight, PanelRightDashed, Play } from "lucide-react";
 import { useMemo, useState } from "react";
 import { IconButton } from "@/components/tile";
 import { Button } from "@/components/ui/button";
@@ -56,7 +56,7 @@ function MarketClock() {
   const m = marketSession(now);
   return (
     <Tooltip>
-      <TooltipTrigger className="hidden h-7 items-center gap-2 rounded-control px-2 text-xs text-fg-muted lg:inline-flex">
+      <TooltipTrigger className="hidden h-7 items-center gap-2 whitespace-nowrap rounded-control px-2 text-xs text-fg-muted xl:inline-flex">
         <span className={cn("size-1.5 rounded-full", m.session === "open" ? "bg-up" : m.session === "closed" ? "bg-fg-faint" : "bg-warn")} aria-hidden />
         <span className="text-fg">NYSE {m.label.toLowerCase()}</span>
         <span className="num text-fg-subtle">{m.clock} ET</span>
@@ -86,13 +86,13 @@ function EquityReadout() {
   if (!figures) return <span className="text-xs text-fg-subtle">Nessuno snapshot del portafoglio</span>;
   const tone = figures.pnl === null ? "text-fg-muted" : figures.pnl >= 0 ? "text-up" : "text-down";
   return (
-    <div className="flex items-baseline gap-3 text-xs">
+    <div className="flex items-baseline gap-3 whitespace-nowrap text-xs">
       <span className="hidden text-fg-subtle md:inline">Equity</span>
       <span data-role="equity" className="num text-sm font-medium text-fg">{fmtMoney(figures.equity)}</span>
       <span className={cn("num hidden sm:inline", tone)}>
         {fmtMoney(figures.pnl, { sign: true })} <span className="opacity-80">{fmtPct(figures.pct)}</span>
       </span>
-      <span className="hidden text-fg-subtle lg:inline">oggi</span>
+      <span className="hidden text-fg-subtle xl:inline">oggi</span>
     </div>
   );
 }
@@ -162,10 +162,11 @@ function HaltControl() {
   );
 }
 
-const LAYOUT_TOGGLES: { id: PanelId; icon: typeof PanelLeft; label: string }[] = [
-  { id: "left", icon: PanelLeft, label: "Watchlist" },
-  { id: "bottom", icon: PanelBottom, label: "Ordini e trade" },
-  { id: "right", icon: PanelRight, label: "Attività" },
+/** Solid icon while the tile is shown, dashed while it is hidden (VS Code's convention). */
+const LAYOUT_TOGGLES: { id: PanelId; icon: typeof PanelLeft; hiddenIcon: typeof PanelLeft; label: string }[] = [
+  { id: "left", icon: PanelLeft, hiddenIcon: PanelLeftDashed, label: "Watchlist" },
+  { id: "bottom", icon: PanelBottom, hiddenIcon: PanelBottomDashed, label: "Ordini e trade" },
+  { id: "right", icon: PanelRight, hiddenIcon: PanelRightDashed, label: "Attività" },
 ];
 
 /** VS Code's layout controls: show or hide each tile around the chart. */
@@ -175,9 +176,9 @@ function LayoutToggles() {
   const pending = (orders.data ?? []).filter((o) => orderBucket(o) === "pending").length;
   return (
     <div role="group" aria-label="Layout" className="hidden items-center gap-0.5 md:flex">
-      {LAYOUT_TOGGLES.map(({ id, icon, label }) => (
+      {LAYOUT_TOGGLES.map(({ id, icon, hiddenIcon, label }) => (
         <span key={id} className="relative">
-          <IconButton icon={icon} label={`${layout.open[id] ? "Nascondi" : "Mostra"} ${label.toLowerCase()}`} shortcut={PANEL_SHORTCUT[id]} active={layout.open[id]} onClick={() => togglePanel(id)} />
+          <IconButton icon={layout.open[id] ? icon : hiddenIcon} label={`${layout.open[id] ? "Nascondi" : "Mostra"} ${label.toLowerCase()}`} shortcut={PANEL_SHORTCUT[id]} active={layout.open[id]} onClick={() => togglePanel(id)} />
           {id === "bottom" && !layout.open.bottom && pending > 0 && (
             <span className="num pointer-events-none absolute -right-0.5 -top-0.5 grid h-3.5 min-w-3.5 place-items-center rounded-tag bg-warn px-0.5 text-[9px] font-semibold leading-none text-ground" aria-label={`${pending} da approvare`}>
               {pending}

@@ -27,6 +27,9 @@ export function Gutter({
   className?: string;
 }) {
   const drag = useRef<{ start: number; from: number } | null>(null);
+  // One layout update per frame, however fast the pointer reports.
+  const frame = useRef<number | null>(null);
+  const next = useRef(0);
   const vertical = orientation === "vertical";
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
@@ -38,11 +41,21 @@ export function Gutter({
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     if (!drag.current) return;
     const delta = (vertical ? e.clientX : e.clientY) - drag.current.start;
-    onResize(drag.current.from + direction * delta);
+    next.current = drag.current.from + direction * delta;
+    if (frame.current === null)
+      frame.current = requestAnimationFrame(() => {
+        frame.current = null;
+        onResize(next.current);
+      });
   };
   const end = (e: PointerEvent<HTMLDivElement>) => {
     if (!drag.current) return;
     drag.current = null;
+    if (frame.current !== null) {
+      cancelAnimationFrame(frame.current);
+      frame.current = null;
+      onResize(next.current);
+    }
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
     delete document.documentElement.dataset.resizing;
   };

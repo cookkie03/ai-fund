@@ -24,7 +24,7 @@ export function AuthorChip({ actor, author, label = false, size = "sm", classNam
         data-part="monogram"
         className={cn(
           "inline-grid shrink-0 place-items-center rounded-full font-bold tracking-[-0.01em] text-[oklch(0.16_0.01_260)]",
-          size === "xs" ? "size-4 text-[7.5px] leading-none" : "size-[18px] text-[8.5px] leading-none",
+          size === "xs" ? "size-[18px] text-[8.5px] leading-none" : "size-5 text-[9.5px] leading-none",
         )}
         style={{
           ["--author" as string]: a.color,

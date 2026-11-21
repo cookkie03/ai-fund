@@ -114,7 +114,7 @@ function AgentsTab({ ticker }: { ticker: string }) {
               <span className={cn("font-semibold", (DIRECTION[decision.action] ?? DIRECTION.hold).tone)}>{(DIRECTION[decision.action] ?? { label: decision.action }).label}</span>
               <span className="num ml-auto text-2xs text-fg-subtle">{fmtWhen(decision.decided_ts)}</span>
             </div>
-            <p className="mt-1.5 leading-relaxed text-fg-muted">{decision.reason}</p>
+            <p className="mt-1.5 text-pretty leading-relaxed text-fg-muted">{decision.reason}</p>
           </div>
         ) : (
           <p className="text-xs text-fg-subtle">Nessuna decisione in corso su {ticker}.</p>
@@ -184,7 +184,7 @@ function AgentsTab({ ticker }: { ticker: string }) {
               </div>
             ))}
           </dl>
-          <p className="mt-2 text-2xs leading-relaxed text-fg-subtle">Entry, stop e target si calcolano da questi coefficienti e dall'ATR: il Tecnico fissa stop e target, il Rischio entry e frazione di rischio.</p>
+          <p className="mt-2 text-pretty text-xs leading-relaxed text-fg-subtle">Entry, stop e target si calcolano da questi coefficienti e dall'ATR: il Tecnico fissa stop e target, il Rischio entry e frazione di rischio.</p>
         </Section>
       )}
 

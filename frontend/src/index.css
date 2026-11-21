@@ -293,6 +293,18 @@
     animation-duration: 1ms !important;
     transition-duration: 1ms !important;
   }
+  /* The price flash is information, not movement: keep the colour fade. */
+  .flash-up,
+  .flash-down {
+    animation-duration: 900ms !important;
+  }
+}
+
+/* Fingers need bigger targets than the pointer the dense desk is drawn for. */
+@media (pointer: coarse) {
+  .seg-item {
+    height: 32px;
+  }
 }
 
 /* Tiles arrive instead of popping in; a resize in progress keeps the cursor and stops text selection. */

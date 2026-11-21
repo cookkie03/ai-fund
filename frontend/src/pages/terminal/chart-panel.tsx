@@ -189,7 +189,7 @@ export function ChartPanel({
     for (const t of trades.data ?? []) {
       if (t.ticker !== symbol || t.closed_ts) continue;
       const entryOrder = all.find((o) => o.id === t.entry_order_id);
-      out.push({ id: `t${t.id}-e`, price: t.entry_price, title: `Entry ${t.qty}`, tone: "entry" });
+      out.push({ id: `t${t.id}-e`, price: t.entry_price, title: `Entry ×${t.qty}`, tone: "entry" });
       if (entryOrder) {
         const f = orderFigures(entryOrder);
         if (f.tp) out.push({ id: `t${t.id}-tp`, price: f.tp, title: "TP", tone: "tp" });

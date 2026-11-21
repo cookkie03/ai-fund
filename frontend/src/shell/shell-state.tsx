@@ -25,7 +25,8 @@ const LAYOUT_KEY = "cockpit.layout";
 
 function loadLayout(): Layout {
   const fallback: Layout = {
-    open: { left: true, right: true, bottom: true },
+    // Below 1280 px the chart needs the room: the activity tile starts hidden (Ctrl/⌘ Alt B brings it back).
+    open: { left: true, right: typeof window === "undefined" || window.innerWidth >= 1280, bottom: true },
     size: { left: PANEL_LIMITS.left.initial, right: PANEL_LIMITS.right.initial, bottom: PANEL_LIMITS.bottom.initial },
   };
   try {
