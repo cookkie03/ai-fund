@@ -1458,7 +1458,7 @@ class AgentEnvironment:
 
                 if act == "add":
                     for sym in syms:
-                        self.db.add_watchlist(sym, note=note, added_ts=self._now_iso())
+                        self.db.add_watchlist(sym, note=note, added_ts=self._now_iso(), added_by=agent_name)
                 elif act == "remove":
                     for sym in syms:
                         self.db.remove_watchlist(sym)
@@ -1468,7 +1468,7 @@ class AgentEnvironment:
                     for item in current:
                         self.db.remove_watchlist(item["ticker"])
                     for sym in syms:
-                        self.db.add_watchlist(sym, note=note, added_ts=self._now_iso())
+                        self.db.add_watchlist(sym, note=note, added_ts=self._now_iso(), added_by=agent_name)
                 else:
                     raise ValueError(f"Invalid watchlist action: {action}")
 

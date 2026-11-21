@@ -373,6 +373,25 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         PRAGMA foreign_keys = ON;
         """,
     ),
+    (
+        4,
+        "004_watchlist_author",
+        "ALTER TABLE watchlist ADD COLUMN added_by TEXT NOT NULL DEFAULT 'unknown';",
+    ),
+    (
+        5,
+        "005_chart_annotations",
+        """
+        CREATE TABLE chart_annotations (
+            id TEXT PRIMARY KEY, ticker TEXT NOT NULL, timeframe TEXT,
+            drawing_json TEXT NOT NULL, author TEXT NOT NULL,
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'struck')),
+            struck_by TEXT, struck_at TEXT
+        );
+        CREATE INDEX chart_annotations_ticker ON chart_annotations(ticker, status);
+    """,
+    ),
 ]
 
 
@@ -440,7 +459,7 @@ class OfficeDB:
     @contextmanager
     def transaction(self) -> Iterator[Self]:
         with self._lock:
-            is_outer = (self._tx_depth == 0)
+            is_outer = self._tx_depth == 0
             if is_outer:
                 self._connection.execute("BEGIN IMMEDIATE")
                 self._on_commit_callbacks = []
@@ -683,9 +702,7 @@ class OfficeDB:
         ).fetchone()
         return row[0] if row and row[0] is not None else None
 
-    def due_scheduled_tasks(
-        self, now_ts: str | None = None, limit: int = 50
-    ) -> list[dict]:
+    def due_scheduled_tasks(self, now_ts: str | None = None, limit: int = 50) -> list[dict]:
         ts = now_ts or utc_now_iso()
         rows = self._connection.execute(
             """
@@ -813,16 +830,17 @@ class OfficeDB:
 
     # --- Watchlist ---
 
-    def add_watchlist(self, ticker: str, note: str = "", added_ts: str | None = None) -> None:
+    def add_watchlist(
+        self, ticker: str, note: str = "", added_ts: str | None = None, added_by: str = "unknown"
+    ) -> None:
         added_ts = added_ts or utc_now_iso()
         self._connection.execute(
             """
-            INSERT INTO watchlist (ticker, added_ts, note)
-            VALUES (?, ?, ?)
-            ON CONFLICT(ticker) DO UPDATE SET
-                note = excluded.note
+            INSERT INTO watchlist (ticker, added_ts, note, added_by)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(ticker) DO UPDATE SET note = excluded.note
             """,
-            (ticker, added_ts, note),
+            (ticker, added_ts, note, added_by),
         )
 
     def remove_watchlist(self, ticker: str) -> bool:
@@ -1142,9 +1160,7 @@ class OfficeDB:
         )
         return int(cursor.lastrowid)
 
-    def log_cli_command(
-        self, command: str, args: dict | str = "{}", ts: str | None = None
-    ) -> int:
+    def log_cli_command(self, command: str, args: dict | str = "{}", ts: str | None = None) -> int:
         ts = ts or utc_now_iso()
         args_json = args if isinstance(args, str) else json.dumps(args)
         cursor = self._connection.execute(

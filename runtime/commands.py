@@ -35,6 +35,17 @@ class RemoveWatchlist(BaseModel):
     ticker: str
 
 
+class UpsertAnnotation(BaseModel):
+    id: str
+    ticker: str
+    timeframe: str | None = None
+    drawing: dict
+
+
+class StrikeAnnotation(BaseModel):
+    id: str
+
+
 class ApproveOrder(BaseModel):
     order_id: int
     confirm: Literal[True]

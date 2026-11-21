@@ -25,6 +25,8 @@ from runtime.commands import (
     RemoveWatchlist,
     Resume,
     Say,
+    StrikeAnnotation,
+    UpsertAnnotation,
 )
 from runtime.events import Event, EventBus, EventLog
 from runtime.handlers import (
@@ -40,6 +42,8 @@ from runtime.handlers import (
     handle_remove_watchlist,
     handle_resume,
     handle_say,
+    handle_strike_annotation,
+    handle_upsert_annotation,
 )
 from runtime.jobs import (
     DataRefreshJob,
@@ -68,6 +72,8 @@ class RuntimeContext:
 _HANDLER_MAP = {
     EnqueueTask: handle_enqueue_task,
     Say: handle_say,
+    UpsertAnnotation: handle_upsert_annotation,
+    StrikeAnnotation: handle_strike_annotation,
     AddWatchlist: handle_add_watchlist,
     RemoveWatchlist: handle_remove_watchlist,
     ApproveOrder: handle_approve_order,
@@ -100,6 +106,7 @@ class Runtime:
         broker_configured = creds["configured"]
 
         if broker_configured:
+
             def _reconcile() -> None:
                 if hasattr(office, "order_flow") and office.order_flow:
                     office.order_flow.sync_broker_orders()
@@ -113,7 +120,9 @@ class Runtime:
                 secret_key=creds["secret_key"],
                 paper=creds["paper"],
                 trading_url=creds["trading_url"],
-                on_trade_update=office.order_flow.apply_broker_update if hasattr(office, "order_flow") and office.order_flow else None,
+                on_trade_update=office.order_flow.apply_broker_update
+                if hasattr(office, "order_flow") and office.order_flow
+                else None,
                 on_reconnect=_reconcile,
             )
 
@@ -252,7 +261,9 @@ class Runtime:
     def execute(self, cmd: Any, actor: str, command_id: str | None = None) -> CommandResult:
         handler = _HANDLER_MAP.get(cmd.__class__)
         if not handler:
-            return CommandResult(ok=False, reasons=[f"Unknown command type: {cmd.__class__.__name__}"])
+            return CommandResult(
+                ok=False, reasons=[f"Unknown command type: {cmd.__class__.__name__}"]
+            )
 
         with self._command_lock:
             # 1. Idempotency check: if command_id exists, return saved result

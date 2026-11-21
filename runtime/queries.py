@@ -96,6 +96,7 @@ class CycleDTO(BaseModel):
 
 class WatchlistItemDTO(BaseModel):
     ticker: str
+    added_by: str
     added_ts: str
     note: str | None = None
 
@@ -166,7 +167,9 @@ class ReadModel:
             halted = self._runtime.office.halt.is_halted()
             db_size = self._runtime.office.db.db_size_bytes()
             broker_configured = getattr(self._runtime, "broker_configured", False)
-            if self._runtime.broker_stream is not None and hasattr(self._runtime.broker_stream, "connected"):
+            if self._runtime.broker_stream is not None and hasattr(
+                self._runtime.broker_stream, "connected"
+            ):
                 stream_connected = bool(self._runtime.broker_stream.connected)
             elif hasattr(self._runtime, "broker_stream_connected"):
                 stream_connected = self._runtime.broker_stream_connected
@@ -200,6 +203,25 @@ class ReadModel:
             if self.db_path != ":memory:":
                 conn.close()
 
+    def equity_history(
+        self, from_ts: str | None = None, to_ts: str | None = None
+    ) -> list[dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            sql = "SELECT ts, equity, cash FROM portfolio_snapshots WHERE 1=1"
+            params: list[Any] = []
+            if from_ts:
+                sql += " AND ts >= ?"
+                params.append(from_ts)
+            if to_ts:
+                sql += " AND ts <= ?"
+                params.append(to_ts)
+            sql += " ORDER BY ts ASC"
+            return [dict(r) for r in conn.execute(sql, params).fetchall()]
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
     def orders(self, status: str | None = None, limit: int = 50) -> list[OrderDTO]:
         conn = self._get_connection()
         try:
@@ -227,9 +249,15 @@ class ReadModel:
                         side=str(r["side"]),
                         qty=float(draft_data.get("qty") or 0.0),
                         order_type=str(draft_data.get("order_type") or "bracket"),
-                        limit_price=float(draft_data["limit_price"]) if draft_data.get("limit_price") is not None else None,
-                        stop_loss=float(draft_data["stop_loss"]) if draft_data.get("stop_loss") is not None else None,
-                        take_profit=float(draft_data["take_profit"]) if draft_data.get("take_profit") is not None else None,
+                        limit_price=float(draft_data["limit_price"])
+                        if draft_data.get("limit_price") is not None
+                        else None,
+                        stop_loss=float(draft_data["stop_loss"])
+                        if draft_data.get("stop_loss") is not None
+                        else None,
+                        take_profit=float(draft_data["take_profit"])
+                        if draft_data.get("take_profit") is not None
+                        else None,
                         client_order_id=str(r["client_order_id"]),
                         broker_order_id=r["broker_order_id"],
                         status=str(r["status"]),
@@ -277,9 +305,15 @@ class ReadModel:
                 side=str(row["side"]),
                 qty=float(draft_data.get("qty") or 0.0),
                 order_type=str(draft_data.get("order_type") or "bracket"),
-                limit_price=float(draft_data["limit_price"]) if draft_data.get("limit_price") is not None else None,
-                stop_loss=float(draft_data["stop_loss"]) if draft_data.get("stop_loss") is not None else None,
-                take_profit=float(draft_data["take_profit"]) if draft_data.get("take_profit") is not None else None,
+                limit_price=float(draft_data["limit_price"])
+                if draft_data.get("limit_price") is not None
+                else None,
+                stop_loss=float(draft_data["stop_loss"])
+                if draft_data.get("stop_loss") is not None
+                else None,
+                take_profit=float(draft_data["take_profit"])
+                if draft_data.get("take_profit") is not None
+                else None,
                 client_order_id=str(row["client_order_id"]),
                 broker_order_id=row["broker_order_id"],
                 status=str(row["status"]),
@@ -319,7 +353,9 @@ class ReadModel:
                     id=int(r["id"]),
                     ticker=str(r["ticker"]),
                     entry_order_id=int(r["entry_order_id"]),
-                    exit_order_id=int(r["exit_order_id"]) if "exit_order_id" in r.keys() and r["exit_order_id"] is not None else None,
+                    exit_order_id=int(r["exit_order_id"])
+                    if "exit_order_id" in r.keys() and r["exit_order_id"] is not None
+                    else None,
                     entry_price=float(r["entry_price"]),
                     exit_price=float(r["exit_price"]) if r["exit_price"] is not None else None,
                     qty=float(r["qty"]),
@@ -454,10 +490,29 @@ class ReadModel:
                 WatchlistItemDTO(
                     ticker=str(r["ticker"]),
                     added_ts=str(r["added_ts"]),
+                    added_by=str(r["added_by"]),
                     note=r["note"],
                 )
                 for r in rows
             ]
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def annotations(self, ticker: str, include_struck: bool = False) -> list[dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM chart_annotations WHERE ticker = ? AND (? OR status = 'active') "
+                "ORDER BY created_at, id",
+                (ticker.strip().upper(), include_struck),
+            )
+            result = []
+            for row in rows:
+                item = dict(row)
+                item["drawing"] = json.loads(item.pop("drawing_json"))
+                result.append(item)
+            return result
         finally:
             if self.db_path != ":memory:":
                 conn.close()

@@ -32,15 +32,26 @@ class FakeMarketData:
         return self._quotes.get(symbol, {"symbol": symbol, "price": 100.0, "atr": 2.0})
 
     def ohlcv(self, symbol: str, interval: str = "1d", limit: int = 100) -> list[dict[str, Any]]:
+        from datetime import datetime, timedelta
+
         bars = []
         base = 100.0
+        start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
         for i in range(35):
             o = base + i
             h = o + 2.0
             low = o - 1.5
             c = o + 1.0
+            dt = start + timedelta(days=i)
             bars.append(
-                {"ts": f"2026-01-{i+1:02d}T00:00:00Z", "o": o, "h": h, "l": low, "c": c, "v": 1000}
+                {
+                    "ts": dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "o": o,
+                    "h": h,
+                    "l": low,
+                    "c": c,
+                    "v": 1000,
+                }
             )
         return bars
 
@@ -308,7 +319,9 @@ def test_full_cycle_analysts_turn_and_pm_accept_submits_order(
                 ),
             ],
             outgoing_messages=[
-                OutgoingMessage(to_agent="portfolio_manager", chat="AAPL", text="Rischio approvato per AAPL")
+                OutgoingMessage(
+                    to_agent="portfolio_manager", chat="AAPL", text="Rischio approvato per AAPL"
+                )
             ],
             done=True,
         ),
@@ -326,7 +339,9 @@ def test_full_cycle_analysts_turn_and_pm_accept_submits_order(
                 ),
             ],
             outgoing_messages=[
-                OutgoingMessage(to_agent="portfolio_manager", chat="AAPL", text="Setup tecnico pronto per AAPL")
+                OutgoingMessage(
+                    to_agent="portfolio_manager", chat="AAPL", text="Setup tecnico pronto per AAPL"
+                )
             ],
             done=True,
         ),
@@ -335,12 +350,20 @@ def test_full_cycle_analysts_turn_and_pm_accept_submits_order(
                 ToolCall(
                     id="t_sched",
                     name="schedule_next_check",
-                    args={"ticker": "AAPL", "when": "2026-06-05T10:00:00Z", "note": "Post-entry check"},
+                    args={
+                        "ticker": "AAPL",
+                        "when": "2026-06-05T10:00:00Z",
+                        "note": "Post-entry check",
+                    },
                 ),
                 ToolCall(
                     id="t_acc",
                     name="accept_order",
-                    args={"ticker": "AAPL", "action": "buy", "reason": "Forte convergenza tecnica e di rischio"},
+                    args={
+                        "ticker": "AAPL",
+                        "action": "buy",
+                        "reason": "Forte convergenza tecnica e di rischio",
+                    },
                 ),
             ],
             done=True,
@@ -393,9 +416,7 @@ def test_full_cycle_analysts_turn_and_pm_accept_submits_order(
     assert b_order.take_profit is not None
 
     # Verify Orders table in DB
-    order_in_db = db.connection.execute(
-        "SELECT * FROM orders WHERE ticker = 'AAPL'"
-    ).fetchone()
+    order_in_db = db.connection.execute("SELECT * FROM orders WHERE ticker = 'AAPL'").fetchone()
     assert order_in_db is not None
     assert order_in_db["status"] == "submitted"
 
@@ -681,9 +702,7 @@ def test_market_analyst_activation_produces_scheduled_task_for_watchlist_ticker(
     assert market_tasks[0]["chat"] == "AAPL"
 
     # Verify cycle was opened for AAPL
-    cycle = db.connection.execute(
-        "SELECT * FROM cycles WHERE ticker = 'AAPL'"
-    ).fetchone()
+    cycle = db.connection.execute("SELECT * FROM cycles WHERE ticker = 'AAPL'").fetchone()
     assert cycle is not None
     assert cycle["outcome"] == "deferred"
 
@@ -757,9 +776,7 @@ def test_market_analyst_send_message_tool_call_activates_watchlist_ticker(
     assert market_tasks[0]["chat"] == "AAPL"
 
     # Verify cycle was opened for AAPL
-    cycle = db.connection.execute(
-        "SELECT * FROM cycles WHERE ticker = 'AAPL'"
-    ).fetchone()
+    cycle = db.connection.execute("SELECT * FROM cycles WHERE ticker = 'AAPL'").fetchone()
     assert cycle is not None
     assert cycle["outcome"] == "deferred"
 
@@ -795,9 +812,7 @@ def test_halt_stops_delivery(db, broker, env, order_flow, fixed_now):
     assert len(cycles) == 0
 
 
-def test_run_once_merges_tasks_delivers_and_advances_cursor(
-    db, broker, env, order_flow, fixed_now
-):
+def test_run_once_merges_tasks_delivers_and_advances_cursor(db, broker, env, order_flow, fixed_now):
     """Test scheduler loop run_once: merges same-chat tasks, delivers due tasks, and advances cursor."""
     # Enqueue two tasks for same ticker AAPL at different times
     t1_iso = fixed_now.isoformat().replace("+00:00", "Z")
@@ -912,9 +927,7 @@ def test_pm_sees_tool_results_on_next_step_within_same_turn(db, broker, env, ord
     assert seen_tool_messages[0].tool_call_id == "r1"
 
 
-def test_pm_cannot_decide_in_same_step_it_consults_analysts(
-    db, broker, env, order_flow, fixed_now
-):
+def test_pm_cannot_decide_in_same_step_it_consults_analysts(db, broker, env, order_flow, fixed_now):
     """Il PM scrive all'analista e prova a rimandare subito: la decisione viene rifiutata,
     l'analista risponde, il PM decide al turno dopo."""
     analyst_turns = {"n": 0}
@@ -934,7 +947,11 @@ def test_pm_cannot_decide_in_same_step_it_consults_analysts(
                     ToolCall(
                         id="m1",
                         name="send_message",
-                        args={"to_agent": "risk_analyst", "ticker_or_theme": "AAPL", "text": "Valuta"},
+                        args={
+                            "to_agent": "risk_analyst",
+                            "ticker_or_theme": "AAPL",
+                            "text": "Valuta",
+                        },
                     ),
                     ToolCall(
                         id="s1",
@@ -987,7 +1004,9 @@ def test_new_cycle_does_not_inherit_previous_decision(db, broker, env, order_flo
                     name="schedule_next_check",
                     args={"ticker": "AAPL", "when": "2026-06-05T10:00:00Z", "note": "n"},
                 ),
-                ToolCall(id=f"d{turn}", name="defer", args={"ticker": "AAPL", "reason": f"c{turn}"}),
+                ToolCall(
+                    id=f"d{turn}", name="defer", args={"ticker": "AAPL", "reason": f"c{turn}"}
+                ),
             ],
             done=True,
         )
@@ -1033,7 +1052,11 @@ def test_analyst_reply_is_relayed_to_pm_when_not_addressed(db, broker, env, orde
                     ToolCall(
                         id="m1",
                         name="send_message",
-                        args={"to_agent": "risk_analyst", "ticker_or_theme": "AAPL", "text": "Valuta"},
+                        args={
+                            "to_agent": "risk_analyst",
+                            "ticker_or_theme": "AAPL",
+                            "text": "Valuta",
+                        },
                     )
                 ],
                 done=True,
@@ -1099,7 +1122,9 @@ def test_office_db_size_alert_inbox(db, broker, env, order_flow, fixed_now):
 
     # Exceed limit
     dummy = "x" * (1024 * 1024 + 500)
-    db.connection.execute("INSERT INTO blobs (hash, compressed) VALUES ('big_blob', ?)", (dummy.encode(),))
+    db.connection.execute(
+        "INSERT INTO blobs (hash, compressed) VALUES ('big_blob', ?)", (dummy.encode(),)
+    )
     office.run_once()
 
     inbox = db.list_inbox(unread_only=True)
@@ -1127,7 +1152,24 @@ def test_office_periodic_data_refresh(db, broker, env, order_flow, fixed_now):
     from data.cache import DataCache
 
     db.add_watchlist("AAPL")
-    cache = DataCache(db=db, providers={"prices_ohlcv": lambda s, **kw: [{"symbol": s, "ts": "2026-11-18T10:00:00Z", "interval": "1d", "o": 100.0, "h": 105.0, "l": 99.0, "c": 104.0, "v": 1000.0, "source": "test"}]})
+    cache = DataCache(
+        db=db,
+        providers={
+            "prices_ohlcv": lambda s, **kw: [
+                {
+                    "symbol": s,
+                    "ts": "2026-11-18T10:00:00Z",
+                    "interval": "1d",
+                    "o": 100.0,
+                    "h": 105.0,
+                    "l": 99.0,
+                    "c": 104.0,
+                    "v": 1000.0,
+                    "source": "test",
+                }
+            ]
+        },
+    )
 
     office = Office(
         db=db,

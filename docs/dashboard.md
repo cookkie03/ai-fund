@@ -25,7 +25,8 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
   - Supported commands:
     - `enqueue_task`: Enqueue manual analysis task for an agent on a ticker.
     - `say`: Post a user message to an agent's chat topic (sending to PM automatically schedules a task).
-    - `add_watchlist` / `remove_watchlist`: Manage watchlist symbols.
+    - `add_watchlist` / `remove_watchlist`: Manage watchlist symbols. `added_by` is set from `X-Actor`.
+    - `upsert_annotation` / `strike_annotation`: Manage chart annotations (shared environment). `strike` marks them as struck without physical deletion.
     - `approve_order`: Approve a pending bracket order (requires `confirm: true`).
     - `reject_order`: Reject a pending order with a reason.
     - `halt` / `resume`: Emergency trading halt (blocks all orders) and resume.
@@ -48,7 +49,11 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
     - `/v1/read/cycle?id=`: Specific analysis cycle with full message audit trail.
     - `/v1/read/chat?agent=&topic=&limit=`: Agent chat messages.
     - `/v1/read/ticker_state?ticker=`: Current analysis and state for symbol.
-    - `/v1/read/watchlist`: Current watchlist symbols and notes.
+    - `/v1/read/watchlist`: Current watchlist symbols, notes and author (`added_by`).
+    - `/v1/read/bars?ticker=&timeframe=1h&start=&end=&limit=`: OHLCV bars for lightweight-charts (`time` as UTC epoch s).
+    - `/v1/read/indicators?ticker=&timeframe=1h&names=ema20,rsi14,atr14,sma20,macd,pivot`: Series aligned with bars.
+    - `/v1/read/annotations?ticker=&include_struck=`: Chart annotations (shared environment).
+    - `/v1/read/equity_history?from=&to=`: Portfolio equity history.
     - `/v1/read/inbox?unread_only=&limit=`: System alert notifications.
     - `/v1/read/scheduled_tasks?status=&limit=`: Scheduled tasks.
 
@@ -63,6 +68,7 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
     data: {"trade_id": 1, "ticker": "AAPL", "entry_price": 150.0, "qty": 10.0}
     ```
   - Includes `: ping\n\n` keepalive comments to prevent connection timeouts.
+  - New event types: `annotation.created`, `annotation.updated`, `annotation.struck`.
 
 ## 3. Frontend Integration
 
@@ -76,5 +82,5 @@ The Cockpit frontend connects to:
 - The Runtime has **no CORS middleware**. A browser app served from another origin (for example the Vite dev server) reaches the API through a same-origin proxy or needs CORS added to the Runtime.
 - The browser `EventSource` cannot send an `Authorization` header. On loopback without `TRADING_AGENT_API_TOKEN` this is not needed; with a token, the event stream needs another mechanism (for example a proxy that adds the header).
 - Multiple accounts: each Runtime has its own URL, and the UI selects an account by selecting the Runtime URL. There is no registry of Runtimes in the backend.
-- Development without a broker or LLM: `bootstrap.build_test_office` plus `Runtime` (see `tests/runtime/test_http.py`) serves the same API with fake broker and backend.
+- Development without a broker or LLM: run `uv run python -m scripts.dev_cockpit_server` to start a local server with synthetic data (bars, watchlist, annotations) for frontend development. It uses `build_test_office` and `Runtime`.
 

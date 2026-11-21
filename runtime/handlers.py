@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from typing import TYPE_CHECKING, Any
@@ -20,6 +21,8 @@ from runtime.commands import (
     RemoveWatchlist,
     Resume,
     Say,
+    StrikeAnnotation,
+    UpsertAnnotation,
 )
 from workflows.scheduling import TaskSource
 
@@ -48,7 +51,13 @@ def handle_enqueue_task(ctx: RuntimeContext, cmd: EnqueueTask, actor: str) -> Co
         ctx.event_log.append(
             type="task.enqueued",
             subject=f"task:{task_id}",
-            payload={"task_id": task_id, "agent": agent, "ticker": ticker, "reason": reason, "when_ts": when_ts},
+            payload={
+                "task_id": task_id,
+                "agent": agent,
+                "ticker": ticker,
+                "reason": reason,
+                "when_ts": when_ts,
+            },
             actor=actor,
         )
 
@@ -75,7 +84,13 @@ def handle_say(ctx: RuntimeContext, cmd: Say, actor: str) -> CommandResult:
         ctx.event_log.append(
             type="message.appended",
             subject=f"chat:{chat_id}",
-            payload={"chat_id": chat_id, "message_id": msg_id, "agent": agent, "topic": chat, "text": text},
+            payload={
+                "chat_id": chat_id,
+                "message_id": msg_id,
+                "agent": agent,
+                "topic": chat,
+                "text": text,
+            },
             actor=actor,
         )
         data = {"message_id": msg_id, "chat_id": chat_id}
@@ -93,7 +108,12 @@ def handle_say(ctx: RuntimeContext, cmd: Say, actor: str) -> CommandResult:
             ctx.event_log.append(
                 type="task.enqueued",
                 subject=f"task:{task_id}",
-                payload={"task_id": task_id, "agent": "portfolio_manager", "ticker": chat.upper(), "reason": text},
+                payload={
+                    "task_id": task_id,
+                    "agent": "portfolio_manager",
+                    "ticker": chat.upper(),
+                    "reason": text,
+                },
                 actor=actor,
             )
             data["task_id"] = task_id
@@ -105,7 +125,7 @@ def handle_add_watchlist(ctx: RuntimeContext, cmd: AddWatchlist, actor: str) -> 
     ticker = cmd.ticker.upper().strip()
     note = cmd.note or ""
     with ctx.office.db.transaction():
-        ctx.office.db.add_watchlist(ticker, note=note)
+        ctx.office.db.add_watchlist(ticker, note=note, added_by=actor)
 
         ctx.event_log.append(
             type="watchlist.changed",
@@ -133,18 +153,77 @@ def handle_remove_watchlist(ctx: RuntimeContext, cmd: RemoveWatchlist, actor: st
     return CommandResult(ok=ok, data={"ticker": ticker})
 
 
+def handle_upsert_annotation(
+    ctx: RuntimeContext, cmd: UpsertAnnotation, actor: str
+) -> CommandResult:
+    conn = ctx.office.db.connection
+    existing = conn.execute("SELECT * FROM chart_annotations WHERE id = ?", (cmd.id,)).fetchone()
+    if existing and existing["status"] == "struck":
+        return CommandResult(ok=False, reasons=["Annotation is struck"])
+    now = ctx.office.get_now_iso()
+    ticker = cmd.ticker.strip().upper()
+    conn.execute(
+        """INSERT INTO chart_annotations (id, ticker, timeframe, drawing_json, author, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
+        ticker=excluded.ticker, timeframe=excluded.timeframe, drawing_json=excluded.drawing_json,
+        updated_at=excluded.updated_at""",
+        (cmd.id, ticker, cmd.timeframe, json.dumps(cmd.drawing), actor, now, now),
+    )
+    ctx.event_log.append(
+        type="annotation.updated" if existing else "annotation.created",
+        subject=f"annotation:{cmd.id}",
+        payload={"id": cmd.id, "ticker": ticker},
+        actor=actor,
+    )
+    return CommandResult(ok=True, data={"id": cmd.id})
+
+
+def handle_strike_annotation(
+    ctx: RuntimeContext, cmd: StrikeAnnotation, actor: str
+) -> CommandResult:
+    conn = ctx.office.db.connection
+    existing = conn.execute(
+        "SELECT ticker, status FROM chart_annotations WHERE id = ?", (cmd.id,)
+    ).fetchone()
+    if not existing:
+        return CommandResult(ok=False, reasons=["Annotation not found"])
+    if existing["status"] == "active":
+        now = ctx.office.get_now_iso()
+        conn.execute(
+            "UPDATE chart_annotations SET status='struck', struck_by=?, struck_at=?, updated_at=? WHERE id=?",
+            (actor, now, now, cmd.id),
+        )
+        ctx.event_log.append(
+            type="annotation.struck",
+            subject=f"annotation:{cmd.id}",
+            payload={"id": cmd.id, "ticker": existing["ticker"]},
+            actor=actor,
+        )
+    return CommandResult(ok=True, data={"id": cmd.id})
+
+
 def handle_approve_order(ctx: RuntimeContext, cmd: ApproveOrder, actor: str) -> CommandResult:
     fresh_ctx = ctx.office.build_risk_gate_context()
     outcome = ctx.office.order_flow.approve(cmd.order_id, ctx=fresh_ctx)
     if outcome.status in ("submitted", "approved"):
-        return CommandResult(ok=True, data={"order_id": cmd.order_id, "status": outcome.status, "reasons": outcome.reasons})
+        return CommandResult(
+            ok=True,
+            data={"order_id": cmd.order_id, "status": outcome.status, "reasons": outcome.reasons},
+        )
     else:
-        return CommandResult(ok=False, data={"order_id": cmd.order_id, "status": outcome.status}, reasons=outcome.reasons)
+        return CommandResult(
+            ok=False,
+            data={"order_id": cmd.order_id, "status": outcome.status},
+            reasons=outcome.reasons,
+        )
 
 
 def handle_reject_order(ctx: RuntimeContext, cmd: RejectOrder, actor: str) -> CommandResult:
     outcome = ctx.office.order_flow.reject(cmd.order_id, reason=cmd.reason)
-    return CommandResult(ok=True, data={"order_id": cmd.order_id, "status": outcome.status, "reasons": outcome.reasons})
+    return CommandResult(
+        ok=True,
+        data={"order_id": cmd.order_id, "status": outcome.status, "reasons": outcome.reasons},
+    )
 
 
 def handle_halt(ctx: RuntimeContext, cmd: Halt, actor: str) -> CommandResult:
@@ -180,7 +259,12 @@ def handle_reconcile_broker(ctx: RuntimeContext, cmd: ReconcileBroker, actor: st
         ctx.event_log.append(
             type="portfolio.synced",
             subject="portfolio",
-            payload={"ts": now_ts, "equity": equity, "cash": cash, "positions_count": len(positions)},
+            payload={
+                "ts": now_ts,
+                "equity": equity,
+                "cash": cash,
+                "positions_count": len(positions),
+            },
             actor=actor,
         )
 
@@ -229,7 +313,12 @@ def handle_ingest_alert(ctx: RuntimeContext, cmd: IngestAlert, actor: str) -> Co
         ctx.event_log.append(
             type="task.enqueued",
             subject=f"task:{task_id}",
-            payload={"task_id": task_id, "ticker": cmd.ticker, "source": cmd.source, "reason": cmd.reason},
+            payload={
+                "task_id": task_id,
+                "ticker": cmd.ticker,
+                "source": cmd.source,
+                "reason": cmd.reason,
+            },
             actor=actor,
         )
     return CommandResult(ok=True, data={"task_id": task_id})
