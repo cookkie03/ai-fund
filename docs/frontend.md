@@ -50,3 +50,16 @@ Direzione visiva: lo standard di ogni genere eseguito al livello dei migliori pr
 4. Build in codice pagina per pagina (le superfici operative sono code-led), con i gap di backend chiusi prima della pagina che li usa.
 5. Per ogni pagina: `critique`, `audit`, screenshot Playwright desktop e mobile, finish review.
 6. A fine build: `DESIGN.md` dal codice costruito (documenter).
+
+## Prima build e rifinitura (2026-11-21)
+- Claude Opus 5.5 e GPT 6.1 Terra hanno eseguito lo stesso handoff di shell e Terminale. Luca ha scelto la build di Opus (branch `claude/cockpit-frontend-opus-54052e`, da unire solo con il suo ok).
+- La build è professionale ma non ancora bella. Segue una rifinitura "Apple-like", senza liquid glass:
+  - livelli al posto di grigio piatto e linee di 1 px: la barra laterale arretra, il contenuto avanza, più spazio;
+  - gerarchia tipografica: prezzo grande e protagonista, etichette che arretrano;
+  - grafico quieto: linee sottili, griglia appena visibile, niente etichette sovrapposte, colore solo dove serve;
+  - movimento morbido su transizioni, hover e pannelli;
+  - pulsanti, tabelle e badge degli agenti curati, mai di default.
+- Riferimenti di rifinitura: Robinhood Legend (il più vicino), app Borsa di macOS, Linear (redesign recente), Raycast, Things 3, Finder e pannelli di Xcode.
+- Il grafico resta TradingView lightweight-charts con lightweight-charts-drawing: cambia solo lo stile.
+- Stato unico del grafico (approvato): ticker, timeframe, indicatori, disegni con autore e stato, note vivono nel Runtime. UI e agenti leggono e scrivono lo stesso stato con comandi ed eventi; la libreria è solo una vista.
+- Flusso: varianti di direzione servite a Luca sul Mac, poi applicazione a shell e Terminale, critique, audit e aggiornamento di `DESIGN.md`.
