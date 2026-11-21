@@ -12,7 +12,7 @@ type Props = {
   tooltip?: string;
 };
 
-/** Monogram in the author's colour: the signature of every mark in the cockpit. */
+/** Filled round avatar in the author's colour: the signature of every mark in the cockpit. */
 export function AuthorChip({ actor, author, label = false, size = "sm", className, tooltip }: Props) {
   const a = author ?? resolveAuthor(actor);
   const chip = (
@@ -23,14 +23,13 @@ export function AuthorChip({ actor, author, label = false, size = "sm", classNam
       <span
         data-part="monogram"
         className={cn(
-          "inline-grid shrink-0 place-items-center rounded-[4px] font-semibold tracking-[0.02em]",
-          size === "xs" ? "h-4 min-w-4 px-[3px] text-[9px] leading-none" : "h-[18px] min-w-[18px] px-1 text-[10px] leading-none",
+          "inline-grid shrink-0 place-items-center rounded-full font-bold tracking-[-0.01em] text-[oklch(0.16_0.01_260)]",
+          size === "xs" ? "size-4 text-[7.5px] leading-none" : "size-[18px] text-[8.5px] leading-none",
         )}
         style={{
           ["--author" as string]: a.color,
-          color: a.color,
-          backgroundColor: `color-mix(in oklch, ${a.color} 17%, transparent)`,
-          boxShadow: `inset 0 0 0 1px color-mix(in oklch, ${a.color} 30%, transparent)`,
+          backgroundColor: a.color,
+          boxShadow: "inset 0 0.5px 0 oklch(1 0 0 / 0.3)",
         }}
       >
         {a.initials}

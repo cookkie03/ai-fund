@@ -1,7 +1,8 @@
-import { Check, ChevronRight, CircleAlert, ShieldCheck, ShieldX, X } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { Check, ChevronRight, CircleAlert, PanelBottomClose, ShieldCheck, ShieldX, X } from "lucide-react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { AuthorChip } from "@/components/author-chip";
 import { PanelTab, PanelTabContent, PanelTabs, PanelTabsList } from "@/components/panel-tabs";
+import { IconButton } from "@/components/tile";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { fmtMoney, fmtPrice, fmtQty, fmtWhen, toNum } from "@/lib/format";
@@ -9,7 +10,7 @@ import { EXIT_LABEL, RISK_LIMITS, STATUS_LABEL, orderBucket, orderFigures } from
 import { CommandRefused, useCommand, useOrders, usePortfolio, useTrades } from "@/lib/runtime/hooks";
 import type { Order, Trade } from "@/lib/runtime/types";
 import { cn } from "@/lib/utils";
-import { useShell } from "@/shell/shell-state";
+import { PANEL_SHORTCUT, useShell } from "@/shell/shell-state";
 
 type Scope = "ticker" | "all";
 
@@ -38,7 +39,7 @@ function Signature({ order }: { order: Order }) {
 
 function Th({ children, right, className }: { children?: ReactNode; right?: boolean; className?: string }) {
   return (
-    <th scope="col" className={cn("sticky top-0 z-[1] h-7 whitespace-nowrap bg-panel px-2.5 text-2xs font-medium text-fg-subtle", right ? "text-right" : "text-left", className)}>
+    <th scope="col" className={cn("sticky top-0 z-[1] h-7 whitespace-nowrap bg-ground px-2.5 text-2xs font-medium text-fg-subtle", right ? "text-right" : "text-left", className)}>
       {children}
     </th>
   );
@@ -65,7 +66,7 @@ function StatusBadge({ order }: { order: Order }) {
           : ["cancelled", "canceled", "expired"].includes(s)
             ? "text-fg-subtle bg-hover"
             : "text-accent-c bg-accent-soft";
-  return <span data-part="badge" className={cn("inline-flex h-5 items-center rounded px-1.5 text-2xs font-medium", tone)}>{s === "pending" ? "Da approvare" : (STATUS_LABEL[s] ?? s)}</span>;
+  return <span data-part="badge" className={cn("inline-flex h-5 items-center rounded-tag px-1.5 text-2xs font-medium", tone)}>{s === "pending" ? "Da approvare" : (STATUS_LABEL[s] ?? s)}</span>;
 }
 
 function Empty({ children }: { children: ReactNode }) {
@@ -76,7 +77,7 @@ function TableSkeleton() {
   return (
     <div className="space-y-2 p-3" aria-busy>
       {[0, 1, 2].map((i) => (
-        <div key={i} className="h-6 animate-pulse rounded bg-hover" />
+        <div key={i} className="h-6 animate-pulse rounded-item bg-hover" />
       ))}
     </div>
   );
@@ -160,7 +161,7 @@ function ApproveDialog({ order, onClose }: { order: Order; onClose: () => void }
             </li>
           </ul>
           {refusal && (
-            <div role="alert" className="mt-3 rounded-md border border-[oklch(0.67_0.195_20/0.4)] bg-down-soft px-3 py-2.5 text-xs">
+            <div role="alert" className="mt-3 rounded-control border border-[oklch(0.67_0.195_20/0.4)] bg-down-soft px-3 py-2.5 text-xs">
               <p className="flex items-center gap-1.5 font-medium text-down">
                 <ShieldX className="size-3.5" /> Rifiutato dal Runtime
               </p>
@@ -212,7 +213,7 @@ function RejectDialog({ order, onClose }: { order: Order; onClose: () => void })
         </DialogHeader>
         <div className="flex flex-wrap gap-1.5">
           {presets.map((p) => (
-            <button key={p} type="button" onClick={() => setReason(p)} className="h-6 rounded border border-line px-2 text-2xs text-fg-muted hover:bg-hover hover:text-fg">
+            <button key={p} type="button" onClick={() => setReason(p)} className="h-6 rounded-item border border-line px-2 text-2xs text-fg-muted hover:bg-hover hover:text-fg">
               {p}
             </button>
           ))}
@@ -227,7 +228,7 @@ function RejectDialog({ order, onClose }: { order: Order; onClose: () => void })
           onChange={(e) => setReason(e.target.value)}
           rows={3}
           placeholder="Ragione (obbligatoria)"
-          className="w-full resize-none rounded-md border border-line-strong bg-ground px-2.5 py-2 text-sm text-fg outline-none placeholder:text-fg-subtle focus:border-accent-c"
+          className="w-full resize-none rounded-control border border-line-strong bg-ground px-2.5 py-2 text-sm text-fg outline-none placeholder:text-fg-subtle focus:border-accent-c"
         />
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
@@ -248,9 +249,9 @@ function OrdersTable({ orders, pending, onSelect, selected }: { orders: Order[];
   const [rejecting, setRejecting] = useState<Order | null>(null);
   return (
     <>
-      <table className="w-full border-separate border-spacing-0">
+      <table className="tile-table w-full border-separate border-spacing-0 px-1.5">
         <thead>
-          <tr className="[&>th]:border-b [&>th]:border-line">
+          <tr>
             <Th>Ticker</Th>
             <Th>Lato</Th>
             <Th right>Qtà</Th>
@@ -274,7 +275,7 @@ function OrdersTable({ orders, pending, onSelect, selected }: { orders: Order[];
               <tr
                 key={o.id}
                 onClick={() => onSelect(o.ticker)}
-                className={cn("cursor-pointer transition-colors [&>td]:border-b [&>td]:border-line", o.ticker === selected ? "bg-selected/50 hover:bg-selected" : "hover:bg-hover")}
+                className={cn("cursor-pointer transition-colors duration-150", o.ticker === selected ? "bg-selected/60 hover:bg-selected" : "hover:bg-hover")}
               >
                 <Td className="font-semibold text-fg">{o.ticker}</Td>
                 <Td>
@@ -321,9 +322,9 @@ function OrdersTable({ orders, pending, onSelect, selected }: { orders: Order[];
 
 function TradesTable({ trades, prices, onSelect, selected }: { trades: Trade[]; prices: Map<string, number>; onSelect: (t: string) => void; selected: string | null }) {
   return (
-    <table className="w-full border-separate border-spacing-0">
+    <table className="tile-table w-full border-separate border-spacing-0 px-1.5">
       <thead>
-        <tr className="[&>th]:border-b [&>th]:border-line">
+        <tr>
           <Th>Ticker</Th>
           <Th>Stato</Th>
           <Th right>Qtà</Th>
@@ -346,11 +347,11 @@ function TradesTable({ trades, prices, onSelect, selected }: { trades: Trade[]; 
             <tr
               key={t.id}
               onClick={() => onSelect(t.ticker)}
-              className={cn("cursor-pointer transition-colors [&>td]:border-b [&>td]:border-line", t.ticker === selected ? "bg-selected/50 hover:bg-selected" : "hover:bg-hover")}
+              className={cn("cursor-pointer transition-colors duration-150", t.ticker === selected ? "bg-selected/60 hover:bg-selected" : "hover:bg-hover")}
             >
               <Td className="font-semibold text-fg">{t.ticker}</Td>
               <Td>
-                <span className={cn("inline-flex h-5 items-center rounded px-1.5 text-2xs font-medium", open ? "bg-accent-soft text-accent-c" : "bg-hover text-fg-subtle")}>{open ? "Aperto" : "Chiuso"}</span>
+                <span className={cn("inline-flex h-5 items-center rounded-tag px-1.5 text-2xs font-medium", open ? "bg-accent-soft text-accent-c" : "bg-hover text-fg-subtle")}>{open ? "Aperto" : "Chiuso"}</span>
               </Td>
               <Td right>{fmtQty(t.qty)}</Td>
               <Td right>{fmtPrice(t.entry_price)}</Td>
@@ -368,7 +369,19 @@ function TradesTable({ trades, prices, onSelect, selected }: { trades: Trade[]; 
   );
 }
 
-export function OrdersDock({ selected, onSelect, className }: { selected: string | null; onSelect: (t: string) => void; className?: string }) {
+export function OrdersDock({
+  selected,
+  onSelect,
+  onHide,
+  className,
+  style,
+}: {
+  selected: string | null;
+  onSelect: (t: string) => void;
+  onHide?: () => void;
+  className?: string;
+  style?: CSSProperties;
+}) {
   const orders = useOrders();
   const trades = useTrades();
   const portfolio = usePortfolio();
@@ -410,11 +423,12 @@ export function OrdersDock({ selected, onSelect, className }: { selected: string
     );
 
   return (
-    <section data-region="dock" aria-label="Ordini e trade" className={cn("flex min-h-0 flex-col bg-panel", className)}>
+    <section data-region="dock" aria-label="Ordini e trade" className={cn("flex min-h-0 flex-col bg-ground", className)} style={style}>
       <PanelTabs value={activeTab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
         <PanelTabsList
           end={
-            <div role="radiogroup" aria-label="Ambito" className="flex h-6 items-center rounded-md border border-line p-0.5 text-2xs">
+            <>
+            <div role="radiogroup" aria-label="Ambito" className="seg">
               {(["all", "ticker"] as const).map((s) => (
                 <button
                   key={s}
@@ -422,12 +436,14 @@ export function OrdersDock({ selected, onSelect, className }: { selected: string
                   aria-checked={scope === s}
                   onClick={() => setScope(s)}
                   disabled={s === "ticker" && !selected}
-                  className={cn("h-full rounded px-2 transition-colors", scope === s ? "bg-hover text-fg" : "text-fg-subtle hover:text-fg")}
+                  className="seg-item"
                 >
                   {s === "all" ? "Tutti" : tickerLabel}
                 </button>
               ))}
             </div>
+            {onHide && <IconButton icon={PanelBottomClose} label="Nascondi ordini" shortcut={PANEL_SHORTCUT.bottom} onClick={onHide} />}
+            </>
           }
         >
           <PanelTab value="open" count={groups.open.length}>

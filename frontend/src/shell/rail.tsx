@@ -15,7 +15,7 @@ function Mark() {
 
 export function Rail() {
   return (
-    <nav data-region="rail" aria-label="Pagine" className="hidden w-[52px] shrink-0 flex-col items-center gap-1 border-r border-line bg-panel py-2 md:flex">
+    <nav data-region="rail" aria-label="Pagine" className="hidden w-[56px] shrink-0 flex-col items-center gap-1 bg-desk pb-2.5 pt-2 md:flex">
       <div className="mb-2 grid size-9 place-items-center" title="Cockpit">
         <Mark />
       </div>
@@ -27,8 +27,8 @@ export function Rail() {
               aria-label={item.label}
               className={({ isActive }) =>
                 cn(
-                  "grid size-9 place-items-center rounded-md transition-colors duration-150",
-                  isActive ? "bg-selected text-accent-c" : "text-fg-subtle hover:bg-hover hover:text-fg",
+                  "grid size-9 place-items-center rounded-control transition-[background-color,color,transform] duration-150 active:scale-[0.94]",
+                  isActive ? "bg-ground text-fg shadow-[inset_0_0.5px_0_oklch(1_0_0/0.06)]" : "text-fg-subtle hover:bg-hover hover:text-fg",
                 )
               }
             >
@@ -47,7 +47,7 @@ export function Rail() {
 
 export function BottomNav() {
   return (
-    <nav data-region="bottomnav" aria-label="Pagine" className="flex h-14 shrink-0 items-stretch border-t border-line bg-panel pb-[env(safe-area-inset-bottom)] md:hidden">
+    <nav data-region="bottomnav" aria-label="Pagine" className="flex h-14 shrink-0 items-stretch bg-desk pb-[env(safe-area-inset-bottom)] md:hidden">
       {NAV.map((item) => (
         <NavLink
           key={item.path}

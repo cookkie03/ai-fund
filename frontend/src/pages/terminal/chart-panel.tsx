@@ -1,5 +1,5 @@
 import type { DrawingKind } from "lightweight-charts-drawing";
-import { ChartNoAxesCombined, Eye, EyeOff, Minus, MousePointer2, MoveUpRight, PanelRightOpen, RectangleHorizontal, RotateCw, Rows3, Slash } from "lucide-react";
+import { ChartNoAxesCombined, Eye, EyeOff, Minus, MousePointer2, MoveUpRight, RectangleHorizontal, RotateCw, Rows3, Slash } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AuthorChip } from "@/components/author-chip";
 import { Button } from "@/components/ui/button";
@@ -47,8 +47,8 @@ function ToolButton({ label, active, onClick, children, disabled, shortcut }: { 
           onClick={onClick}
           disabled={disabled}
           className={cn(
-            "grid size-7 place-items-center rounded-md transition-colors duration-100 disabled:opacity-35",
-            active ? "bg-accent-soft text-accent-c" : "text-fg-subtle hover:bg-hover hover:text-fg",
+            "grid size-6 place-items-center rounded-item transition-[background-color,color,transform] duration-150 active:scale-[0.92] disabled:opacity-35",
+            active ? "bg-raised text-fg shadow-[0_1px_2px_oklch(0_0_0/0.45),inset_0_0.5px_0_oklch(1_0_0/0.08)]" : "text-fg-subtle hover:text-fg",
           )}
         >
           {children}
@@ -56,7 +56,7 @@ function ToolButton({ label, active, onClick, children, disabled, shortcut }: { 
       </TooltipTrigger>
       <TooltipContent>
         {label}
-        {shortcut && <span className="ml-2 text-fg-subtle">{shortcut}</span>}
+        {shortcut && <kbd className="ml-2 rounded-tag bg-hover px-1 py-px font-sans text-2xs text-fg-subtle">{shortcut}</kbd>}
       </TooltipContent>
     </Tooltip>
   );
@@ -90,7 +90,7 @@ function AuthorLayers({
             onBlur={() => onHover(null)}
             title={`${off ? "Mostra" : "Nascondi"} i disegni di ${a.name}`}
             className={cn(
-              "inline-flex h-6 items-center gap-1.5 rounded-md border bg-ground/85 pl-1 pr-1.5 text-2xs backdrop-blur-[2px] transition-colors",
+              "inline-flex h-6 items-center gap-1.5 rounded-item border bg-ground/85 pl-1 pr-1.5 text-2xs backdrop-blur-[2px] transition-colors",
               off ? "border-line text-fg-subtle" : "border-line-strong text-fg-muted hover:border-fg-faint hover:text-fg",
             )}
           >
@@ -114,17 +114,15 @@ function Overlay({ children }: { children: ReactNode }) {
 export function ChartPanel({
   symbol,
   focusDrawing,
-  activityCollapsed,
-  onExpandActivity,
   onDrawings,
   compact = false,
+  className,
 }: {
   symbol: string | null;
   focusDrawing: { id: string; nonce: number } | null;
-  activityCollapsed?: boolean;
-  onExpandActivity?: () => void;
   onDrawings: (d: ChartDrawing[], strike: (id: string) => void) => void;
   compact?: boolean;
+  className?: string;
 }) {
   const { writable } = useShell();
   const freshness = useFreshness();
@@ -226,84 +224,81 @@ export function ChartPanel({
   const effectiveHidden = drawingsVisible ? hiddenAll : authors.map((a) => a.author.id);
 
   return (
-    <section id="chart" data-region="chart" aria-label="Grafico" className="flex min-h-0 min-w-0 flex-1 flex-col bg-ground">
-      {/* toolbar */}
-      <div data-region="chart-toolbar" className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-2">
-        <div className="mr-2 flex min-w-0 shrink-0 items-baseline gap-2 pl-1">
-          <span data-role="symbol" className="text-sm font-semibold text-fg">{symbol ?? "—"}</span>
-          {last && <span data-role="price" className="num text-sm text-fg">{fmtPrice(last.close)}</span>}
-          {dayChange !== null && <span data-role="change" data-dir={dayChange >= 0 ? "up" : "down"} className={cn("num text-xs", dayChange >= 0 ? "text-up" : "text-down")}>{fmtPct(dayChange)}</span>}
-        </div>
-        <span data-part="vsep" className="h-4 w-px shrink-0 bg-line" aria-hidden />
-        <div data-part="segmented" role="radiogroup" aria-label="Timeframe" className="flex shrink-0 items-center gap-0.5 px-1">
-          {TIMEFRAMES.map((tf) => {
-            const active = timeframe === tf.id;
-            return (
-              <button
-                key={tf.id}
-                role="radio"
-                aria-checked={active}
-                onClick={() => setPrefs((p) => ({ ...p, timeframe: tf.id }))}
-                className={cn("num h-7 rounded-md px-2 text-xs font-medium transition-colors", active ? "bg-hover text-fg" : "text-fg-subtle hover:bg-hover hover:text-fg")}
+    <section id="chart" data-region="chart" aria-label="Grafico" className={cn("@container flex min-h-0 min-w-0 flex-1 flex-col bg-ground", className)}>
+      {/* header: the instrument and its price lead, controls sit to the right */}
+      <div data-region="chart-toolbar" className={cn("flex shrink-0 items-center gap-2 overflow-x-auto px-4", compact ? "h-14" : "h-[68px]")}>
+        <div className="mr-3 flex min-w-0 shrink-0 flex-col justify-center">
+          <span data-role="symbol" className="text-[13px] font-semibold leading-4 tracking-[-0.005em] text-fg-muted">{symbol ?? "—"}</span>
+          <span className="flex items-baseline gap-2.5">
+            {last ? (
+              <span data-role="price" className={cn("num font-semibold leading-tight tracking-[-0.025em] text-fg", compact ? "text-[22px]" : "text-[30px]")}>{fmtPrice(last.close)}</span>
+            ) : (
+              <span className={cn("leading-tight text-fg-faint", compact ? "text-[22px]" : "text-[30px]")}>—</span>
+            )}
+            {dayChange !== null && (
+              <span
+                data-role="change"
+                data-dir={dayChange >= 0 ? "up" : "down"}
+                className={cn("num -translate-y-1 rounded-tag px-1.5 py-0.5 text-xs font-semibold", dayChange >= 0 ? "bg-up-soft text-up" : "bg-down-soft text-down")}
               >
+                {fmtPct(dayChange)}
+              </span>
+            )}
+          </span>
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <div role="radiogroup" aria-label="Timeframe" className="seg">
+            {TIMEFRAMES.map((tf) => (
+              <button key={tf.id} role="radio" aria-checked={timeframe === tf.id} onClick={() => setPrefs((p) => ({ ...p, timeframe: tf.id }))} className="seg-item num px-2.5">
                 {tf.label}
               </button>
-            );
-          })}
-        </div>
-        <span data-part="vsep" className="h-4 w-px shrink-0 bg-line" aria-hidden />
-        <DropdownMenu>
-          <DropdownMenuTrigger className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-fg-muted transition-colors hover:bg-hover hover:text-fg">
-            <ChartNoAxesCombined className="size-3.5" /> Indicatori
-            <span className="num text-fg-subtle">{prefs.indicators.length}</span>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-72 border-line-strong bg-raised">
-            <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">Calcolati dal Runtime, gli stessi valori che leggono gli agenti</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {INDICATORS.map((s) => (
-              <DropdownMenuCheckboxItem key={s.id} checked={prefs.indicators.includes(s.id)} onCheckedChange={() => toggleIndicator(s.id)} onSelect={(e) => e.preventDefault()} className="text-xs">
-                <span className="flex flex-col">
-                  <span className="text-fg">{s.label}</span>
-                  <span className="text-2xs text-fg-subtle">{s.description}</span>
-                </span>
-              </DropdownMenuCheckboxItem>
             ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <span data-part="vsep" className="h-4 w-px shrink-0 bg-line" aria-hidden />
-        <div className="flex shrink-0 items-center gap-0.5 px-1" role="toolbar" aria-label="Strumenti di disegno">
-          <ToolButton label="Cursore" active={tool === null} onClick={() => setTool(null)} shortcut="Esc">
-            <MousePointer2 className="size-3.5" />
-          </ToolButton>
-          {TOOLBAR_KINDS.map((k) => {
-            const Icon = TOOL_ICON[k] ?? Slash;
-            return (
-              <ToolButton key={k} label={KIND_LABEL[k] ?? k} active={tool === k} onClick={() => setTool(tool === k ? null : k)} disabled={!writable || !symbol || !bars.length}>
-                <Icon className="size-3.5" />
-              </ToolButton>
-            );
-          })}
-          <span className="mx-1 h-4 w-px bg-line" aria-hidden />
-          <ToolButton label={drawingsVisible ? "Nascondi tutti i disegni" : "Mostra i disegni"} active={!drawingsVisible} onClick={() => setDrawingsVisible((v) => !v)}>
-            {drawingsVisible ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
-          </ToolButton>
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-1 pl-2">
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-xs font-medium text-fg-muted transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover data-[state=open]:text-fg">
+              <ChartNoAxesCombined className="size-3.5" strokeWidth={1.75} /> <span className="sr-only @[52rem]:not-sr-only">Indicatori</span>
+              <span className="num rounded-tag bg-hover px-1 text-[10px] leading-4 text-fg-subtle">{prefs.indicators.length}</span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">Calcolati dal Runtime, gli stessi valori che leggono gli agenti</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {INDICATORS.map((s) => (
+                <DropdownMenuCheckboxItem key={s.id} checked={prefs.indicators.includes(s.id)} onCheckedChange={() => toggleIndicator(s.id)} onSelect={(e) => e.preventDefault()} className="text-xs">
+                  <span className="flex flex-col">
+                    <span className="text-fg">{s.label}</span>
+                    <span className="text-2xs text-fg-subtle">{s.description}</span>
+                  </span>
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <div className={cn("seg", compact && "hidden")} role="toolbar" aria-label="Strumenti di disegno">
+            <ToolButton label="Cursore" active={tool === null} onClick={() => setTool(null)} shortcut="Esc">
+              <MousePointer2 className="size-3.5" strokeWidth={1.75} />
+            </ToolButton>
+            {TOOLBAR_KINDS.map((k) => {
+              const Icon = TOOL_ICON[k] ?? Slash;
+              return (
+                <ToolButton key={k} label={KIND_LABEL[k] ?? k} active={tool === k} onClick={() => setTool(tool === k ? null : k)} disabled={!writable || !symbol || !bars.length}>
+                  <Icon className="size-3.5" strokeWidth={1.75} />
+                </ToolButton>
+              );
+            })}
+            <span className="mx-0.5 h-3.5 w-px bg-line-strong" aria-hidden />
+            <ToolButton label={drawingsVisible ? "Nascondi tutti i disegni" : "Mostra i disegni"} active={!drawingsVisible} onClick={() => setDrawingsVisible((v) => !v)}>
+              {drawingsVisible ? <Eye className="size-3.5" strokeWidth={1.75} /> : <EyeOff className="size-3.5" strokeWidth={1.75} />}
+            </ToolButton>
+          </div>
           {last && !compact && (
             <span className="hidden text-2xs text-fg-subtle 2xl:inline">
               Ultima barra <span className="num text-fg-muted">{fmtDateTime(last.time)}</span>
             </span>
           )}
           {symbol && bars.length > 0 && (freshness.state === "stale" || freshness.state === "down") && (
-            <span role="status" className="inline-flex h-6 items-center gap-1.5 rounded-md bg-warn-soft px-2 text-2xs text-warn">
+            <span role="status" className="inline-flex h-6 items-center gap-1.5 rounded-item bg-warn-soft px-2 text-2xs text-warn">
               <span className="size-1.5 rounded-full bg-warn" style={{ animation: "status-pulse 1.6s ease-in-out infinite" }} aria-hidden />
               {freshness.age !== null && freshness.age >= 60_000 ? `Non in tempo reale · ${fmtAge(now - freshness.age, now)} fa` : "Non in tempo reale"}
             </span>
-          )}
-          {activityCollapsed && onExpandActivity && (
-            <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs" onClick={onExpandActivity}>
-              <PanelRightOpen className="size-3.5" /> Attività
-            </Button>
           )}
         </div>
       </div>
@@ -372,7 +367,7 @@ export function ChartPanel({
           </Overlay>
         ) : barsQ.isPending ? (
           <div className="absolute inset-0 z-20 flex flex-col gap-3 bg-ground p-4" aria-busy aria-label="Caricamento del grafico">
-            <div className="h-3 w-72 animate-pulse rounded bg-hover" />
+            <div className="h-3 w-72 animate-pulse rounded-item bg-hover" />
             <div className="flex flex-1 items-end gap-[3px] opacity-60">
               {Array.from({ length: 64 }).map((_, i) => (
                 <div key={i} className="flex-1 animate-pulse rounded-[1px] bg-hover" style={{ height: `${30 + 40 * Math.abs(Math.sin(i * 0.37)) + 15 * Math.sin(i * 1.7)}%` }} />

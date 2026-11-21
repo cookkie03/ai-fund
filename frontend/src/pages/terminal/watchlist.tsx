@@ -1,6 +1,8 @@
-import { Plus, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { Plus, Trash2, X, PanelLeftClose } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type CSSProperties } from "react";
 import { AuthorChip } from "@/components/author-chip";
+import { IconButton, TileHeader } from "@/components/tile";
+import { PANEL_SHORTCUT } from "@/shell/shell-state";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { author } from "@/lib/authors";
@@ -53,7 +55,7 @@ function PriceCell({ value }: { value: number }) {
       return () => clearTimeout(t);
     }
   }, [value]);
-  return <span className={cn("num rounded-sm px-0.5 text-sm font-medium text-fg", flash === "up" && "flash-up", flash === "down" && "flash-down")}>{fmtPrice(value)}</span>;
+  return <span className={cn("num rounded-tag px-0.5 text-sm font-medium text-fg", flash === "up" && "flash-up", flash === "down" && "flash-down")}>{fmtPrice(value)}</span>;
 }
 
 function AddTicker({ existing, compact }: { existing: string[]; compact?: boolean }) {
@@ -102,7 +104,7 @@ function AddTicker({ existing, compact }: { existing: string[]; compact?: boolea
               onChange={(e) => setTicker(e.target.value)}
               placeholder="es. AMZN"
               autoComplete="off"
-              className="mt-1 h-8 w-full rounded-md border border-line-strong bg-ground px-2.5 text-sm uppercase text-fg outline-none placeholder:normal-case placeholder:text-fg-subtle focus:border-accent-c"
+              className="mt-1 h-8 w-full rounded-control border border-line-strong bg-ground px-2.5 text-sm uppercase text-fg outline-none placeholder:normal-case placeholder:text-fg-subtle focus:border-accent-c"
             />
             {dup && <p className="mt-1 text-xs text-warn">{symbol} è già in watchlist.</p>}
           </div>
@@ -116,7 +118,7 @@ function AddTicker({ existing, compact }: { existing: string[]; compact?: boolea
               onChange={(e) => setNote(e.target.value)}
               rows={2}
               placeholder="Perché seguirlo"
-              className="mt-1 w-full resize-none rounded-md border border-line-strong bg-ground px-2.5 py-1.5 text-sm text-fg outline-none placeholder:text-fg-subtle focus:border-accent-c"
+              className="mt-1 w-full resize-none rounded-control border border-line-strong bg-ground px-2.5 py-1.5 text-sm text-fg outline-none placeholder:text-fg-subtle focus:border-accent-c"
             />
           </div>
           <p className="text-2xs leading-relaxed text-fg-subtle">Stesso comando degli agenti (add_watchlist): il ticker comparirà a tuo nome e lo vedranno al prossimo ciclo.</p>
@@ -147,7 +149,7 @@ function RemoveButton({ item, onDone }: { item: WatchlistItem; onDone?: () => vo
           disabled={!writable}
           onClick={(e) => e.stopPropagation()}
           aria-label={`Togli ${item.ticker} dalla watchlist`}
-          className="grid size-6 place-items-center rounded text-fg-subtle opacity-0 transition-opacity hover:bg-hover hover:text-down focus-visible:opacity-100 group-hover:opacity-100 group-data-[active=true]:opacity-100 disabled:hidden"
+          className="grid size-6 place-items-center rounded-item text-fg-subtle opacity-0 transition-opacity hover:bg-hover hover:text-down focus-visible:opacity-100 group-hover:opacity-100 group-data-[active=true]:opacity-100 disabled:hidden"
         >
           <X className="size-3.5" />
         </button>
@@ -185,7 +187,19 @@ function RemoveButton({ item, onDone }: { item: WatchlistItem; onDone?: () => vo
   );
 }
 
-export function Watchlist({ selected, onSelect, className }: { selected: string | null; onSelect: (t: string) => void; className?: string }) {
+export function Watchlist({
+  selected,
+  onSelect,
+  onHide,
+  className,
+  style,
+}: {
+  selected: string | null;
+  onSelect: (t: string) => void;
+  onHide?: () => void;
+  className?: string;
+  style?: CSSProperties;
+}) {
   const wl = useWatchlist();
   const items = useMemo(() => wl.data ?? [], [wl.data]);
   const bars = useWatchBars(items.map((i) => i.ticker));
@@ -204,22 +218,18 @@ export function Watchlist({ selected, onSelect, className }: { selected: string 
   };
 
   return (
-    <section data-region="watchlist" aria-label="Watchlist condivisa" className={cn("flex min-h-0 flex-col bg-panel", className)}>
-      <header data-part="panel-head" className="flex h-9 shrink-0 items-center gap-2 border-b border-line pl-3 pr-1.5">
-        <h2 className="text-xs font-medium text-fg">Watchlist</h2>
-        {wl.data && <span className="num text-2xs text-fg-subtle">{items.length}</span>}
-        <span className="text-2xs text-fg-subtle">· condivisa con gli agenti</span>
-        <div className="ml-auto">
-          <AddTicker existing={items.map((i) => i.ticker)} compact />
-        </div>
-      </header>
+    <section data-region="watchlist" aria-label="Watchlist condivisa" className={cn("flex min-h-0 flex-col bg-ground", className)} style={style}>
+      <TileHeader title="Watchlist" meta={wl.data ? String(items.length) : undefined} hint="Condivisa con gli agenti: è l\u2019universo che analizzano">
+        <AddTicker existing={items.map((i) => i.ticker)} compact />
+        {onHide && <IconButton icon={PanelLeftClose} label="Nascondi la watchlist" shortcut={PANEL_SHORTCUT.left} onClick={onHide} />}
+      </TileHeader>
 
       {wl.isPending ? (
-        <ul className="divide-y divide-line" aria-busy>
+        <ul className="px-1.5" aria-busy>
           {Array.from({ length: 6 }).map((_, i) => (
-            <li key={i} className="flex items-center gap-3 px-3 py-2.5">
-              <div className="h-3.5 w-12 animate-pulse rounded bg-hover" />
-              <div className="ml-auto h-3.5 w-16 animate-pulse rounded bg-hover" />
+            <li key={i} className="flex items-center gap-3 rounded-item px-2.5 py-3">
+              <div className="h-3.5 w-12 animate-pulse rounded-item bg-hover" />
+              <div className="ml-auto h-3.5 w-16 animate-pulse rounded-item bg-hover" />
             </li>
           ))}
         </ul>
@@ -240,7 +250,7 @@ export function Watchlist({ selected, onSelect, className }: { selected: string 
           <AddTicker existing={[]} />
         </div>
       ) : (
-        <ul ref={listRef} role="listbox" aria-label="Ticker" onKeyDown={onKeyDown} className="min-h-0 flex-1 overflow-y-auto">
+        <ul ref={listRef} role="listbox" aria-label="Ticker" onKeyDown={onKeyDown} className="min-h-0 flex-1 space-y-px overflow-y-auto px-1.5 pb-1.5">
           {items.map((item, i) => {
             const q = quoteFrom(bars[i]?.data);
             const loading = bars[i]?.isPending;
@@ -264,12 +274,12 @@ export function Watchlist({ selected, onSelect, className }: { selected: string 
                   }
                 }}
                 className={cn(
-                  "group cursor-pointer border-b border-line px-3 py-2 outline-none transition-colors duration-100 focus-visible:bg-hover",
-                  active ? "bg-selected" : "hover:bg-hover",
+                  "group cursor-pointer rounded-item px-2.5 py-2 outline-none transition-colors duration-150 focus-visible:bg-hover",
+                  active ? "bg-selected shadow-[inset_0_0_0_1px_oklch(1_0_0/0.05)]" : "hover:bg-hover",
                 )}
               >
                 <div className="flex items-center gap-2">
-                  <span className="w-12 shrink-0 text-sm font-semibold text-fg">{item.ticker}</span>
+                  <span className="w-12 shrink-0 text-[13px] font-semibold tracking-[-0.005em] text-fg">{item.ticker}</span>
                   {q ? <Spark closes={q.closes} up={up} /> : <span className="h-[18px] w-14" />}
                   <span className="ml-auto flex flex-col items-end leading-tight">
                     {q ? (
@@ -278,7 +288,7 @@ export function Watchlist({ selected, onSelect, className }: { selected: string 
                         <span className={cn("num text-2xs", up ? "text-up" : "text-down")}>{fmtPct(q.pct)}</span>
                       </>
                     ) : loading ? (
-                      <span className="h-3.5 w-14 animate-pulse rounded bg-hover" />
+                      <span className="h-3.5 w-14 animate-pulse rounded-item bg-hover" />
                     ) : (
                       <span className="text-2xs text-fg-subtle">Nessun dato</span>
                     )}

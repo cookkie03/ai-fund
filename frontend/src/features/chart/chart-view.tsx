@@ -17,12 +17,30 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import { DrawingManager, type Drawing, type DrawingKind } from "lightweight-charts-drawing";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { author as resolveAuthor, cssColor, withAlpha } from "@/lib/authors";
-import { chartLook as look } from "@/lib/variant";
 import { fmtPrice, fmtSigned, fmtVolume } from "@/lib/format";
 import type { Bar, IndicatorsResponse } from "@/lib/runtime/types";
 import { cn } from "@/lib/utils";
+
+/**
+ * The chart's look (Legend): no grid, thin solid strokes, monogram-only labels on the canvas
+ * (the text lives in the Disegni tab), quiet order marks and volume, so the candles lead.
+ */
+const look = {
+  grid: "none" as "full" | "horz" | "none",
+  gridAlpha: 0,
+  crosshair: LineStyle.Solid,
+  drawingWidth: 1.5,
+  dashedLevels: false,
+  fullLabels: false,
+  markStyle: LineStyle.Solid,
+  markAlpha: 0.5,
+  volumeAlpha: 0.12,
+  rsiGuides: true,
+  barSpacing: 8,
+  priceScaleBorder: false,
+};
 import { INDICATORS, pointCount, type ChartDrawing, type IndicatorId } from "./chart-state";
 
 export type PriceMark = { id: string; price: number; title: string; tone: "entry" | "tp" | "sl" | "pending" | "trail" };
@@ -107,6 +125,26 @@ export function ChartView(props: ChartViewProps) {
 
   const [hover, setHover] = useState<number | null>(null);
   const [paneTops, setPaneTops] = useState<{ id: string; top: number }[]>([]);
+  const paneIdsRef = useRef<string[]>([]);
+  const measurePanes = useCallback(() => {
+    const chart = chartRef.current;
+    const ids = paneIdsRef.current;
+    if (!chart || !ids.length) return;
+    let y = 0;
+    const out: { id: string; top: number }[] = [];
+    chart.panes().forEach((pn, i) => {
+      if (i > 0 && ids[i - 1]) out.push({ id: ids[i - 1], top: y + 4 });
+      y += pn.getHeight() + 1;
+    });
+    setPaneTops((prev) => (prev.length === out.length && prev.every((p, i) => p.id === out[i].id && p.top === out[i].top) ? prev : out));
+  }, []);
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const ro = new ResizeObserver(() => requestAnimationFrame(measurePanes));
+    ro.observe(host);
+    return () => ro.disconnect();
+  }, [measurePanes]);
 
   const intraday = timeframe !== "1d";
 
@@ -253,6 +291,7 @@ export function ChartView(props: ChartViewProps) {
     for (const s of indicatorSeries.current.values()) chart.removeSeries(s);
     indicatorSeries.current.clear();
     if (!indicators) {
+      paneIdsRef.current = [];
       setPaneTops([]);
       return;
     }
@@ -290,7 +329,7 @@ export function ChartView(props: ChartViewProps) {
         const s = chart.addSeries(LineSeries, { color: INDICATOR_COLORS[spec.id], lineWidth: 1, priceLineVisible: false, lastValueVisible: true }, idx);
         s.setData(line(spec.request));
         if (spec.id === "rsi14") {
-          if (look.rsiGuides) for (const level of [70, 30]) s.createPriceLine({ price: level, color: withAlpha(p.fgSubtle, 0.55), lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: "" });
+          if (look.rsiGuides) for (const level of [70, 30]) s.createPriceLine({ price: level, color: withAlpha(p.fgSubtle, 0.3), lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: "" });
           s.priceScale().applyOptions({ autoScale: false, scaleMargins: { top: 0.1, bottom: 0.1 } });
           s.applyOptions({ autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }) });
         }
@@ -300,17 +339,9 @@ export function ChartView(props: ChartViewProps) {
     const panes = chart.panes();
     panes[0]?.setStretchFactor(3);
     for (let i = 1; i < panes.length; i++) panes[i].setStretchFactor(panes.length > 3 ? 0.8 : 1);
-    // pane label positions, after layout
-    requestAnimationFrame(() => {
-      const ps = chart.panes();
-      let y = 0;
-      const out: { id: string; top: number }[] = [];
-      ps.forEach((pn, i) => {
-        if (i > 0) out.push({ id: tops[i - 1], top: y + 4 });
-        y += pn.getHeight() + 1;
-      });
-      setPaneTops(out);
-    });
+    // pane label positions, after layout (and again whenever the tile is resized)
+    paneIdsRef.current = tops;
+    requestAnimationFrame(measurePanes);
   }, [indicators, enabled]);
 
   // ---- drawings ------------------------------------------------------------------------------
@@ -446,10 +477,9 @@ export function ChartView(props: ChartViewProps) {
     <div className={cn("relative min-h-0 min-w-0", props.className)}>
       <div ref={hostRef} className="absolute inset-0" />
       {legend && (
-        <div className="pointer-events-none absolute left-2.5 top-2 z-10 flex max-w-[calc(100%-90px)] flex-col gap-1 text-[11px] leading-4">
+        <div className="pointer-events-none absolute left-4 top-1 z-10 flex max-w-[calc(100%-90px)] flex-col gap-1 text-[11px] leading-4">
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-            <span className="text-xs font-semibold text-fg">{symbol}</span>
-            <span className="text-fg-subtle">{timeframe === "1d" ? "1G" : timeframe.toUpperCase()} · ET</span>
+            <span className="text-fg-faint">ET</span>
             <span className="num text-fg-subtle">
               A <span className={legend.b.close >= legend.b.open ? "text-up" : "text-down"}>{fmtPrice(legend.b.open)}</span>
             </span>
@@ -497,7 +527,7 @@ export function ChartView(props: ChartViewProps) {
           );
         })}
       {hint && (
-        <div className="pointer-events-none absolute bottom-9 left-1/2 z-10 -translate-x-1/2 rounded-md border border-line-strong bg-raised/95 px-2.5 py-1 text-xs text-fg-muted shadow-[0_8px_24px_-8px_rgb(0_0_0/0.6)]">
+        <div className="pointer-events-none absolute bottom-9 left-1/2 z-10 -translate-x-1/2 rounded-control border border-line-strong bg-raised/95 px-2.5 py-1 text-xs text-fg-muted shadow-[0_8px_24px_-8px_rgb(0_0_0/0.6)]">
           {hint}
         </div>
       )}

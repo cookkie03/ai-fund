@@ -50,7 +50,7 @@ export function RuntimeStatus({ compact = false }: { compact?: boolean }) {
     <Popover>
       <PopoverTrigger
         className={cn(
-          "inline-flex h-7 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-hover",
+          "inline-flex h-7 items-center gap-2 rounded-control px-2 text-xs transition-colors hover:bg-hover",
           state === "down" ? "text-down" : state === "stale" ? "text-warn" : "text-fg-muted",
         )}
         aria-label={`Stato del Runtime: ${label}. ${broker}`}

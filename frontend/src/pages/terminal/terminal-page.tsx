@@ -1,25 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Gutter } from "@/components/gutter";
 import type { ChartDrawing } from "@/features/chart/chart-state";
 import { orderBucket } from "@/lib/orders";
 import { useOrders, useWatchlist } from "@/lib/runtime/hooks";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
+import { PANEL_LIMITS, useShell } from "@/shell/shell-state";
 import { ActivityPanel } from "./activity-panel";
 import { ChartPanel } from "./chart-panel";
 import { OrdersDock } from "./orders-dock";
 import { Watchlist } from "./watchlist";
-
-const ACTIVITY_KEY = "cockpit.terminal.activity";
-
-function readActivityOpen() {
-  try {
-    return localStorage.getItem(ACTIVITY_KEY) !== "closed";
-  } catch {
-    return true;
-  }
-}
 
 type MobileTab = "watchlist" | "activity" | "orders";
 const MOBILE_TABS: { id: MobileTab; label: string }[] = [
@@ -33,7 +24,7 @@ export function TerminalPage() {
   const watchlist = useWatchlist();
   const orders = useOrders();
   const pendingCount = (orders.data ?? []).filter((o) => orderBucket(o) === "pending").length;
-  const wide = useMediaQuery("(min-width: 1280px)");
+  const { layout, setPanelOpen, setPanelSize } = useShell();
   const tablet = useMediaQuery("(min-width: 768px)");
 
   const requested = params.get("t")?.toUpperCase() ?? null;
@@ -54,15 +45,6 @@ export function TerminalPage() {
     [setParams],
   );
 
-  const [activityOpen, setActivityOpen] = useState(readActivityOpen);
-  useEffect(() => {
-    try {
-      localStorage.setItem(ACTIVITY_KEY, activityOpen ? "open" : "closed");
-    } catch {
-      /* storage unavailable: the choice lasts for this visit */
-    }
-  }, [activityOpen]);
-  const [sheetOpen, setSheetOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>("watchlist");
 
   const [drawings, setDrawings] = useState<ChartDrawing[]>([]);
@@ -74,19 +56,17 @@ export function TerminalPage() {
   const [focus, setFocus] = useState<{ id: string; nonce: number } | null>(null);
   const focusDrawing = useCallback((id: string) => {
     setFocus({ id, nonce: Date.now() });
-    setSheetOpen(false);
   }, []);
 
   useEffect(() => {
     document.title = selected ? `${selected} · Terminale` : "Terminale";
   }, [selected]);
 
-  const activity = (opts: { onCollapse?: () => void; className?: string }) => (
+  const activity = (opts: { onCollapse?: () => void; className?: string; style?: CSSProperties }) => (
     <ActivityPanel
       ticker={selected}
       drawings={drawings.filter((d) => d.ticker === selected)}
       onFocusDrawing={focusDrawing}
-     
       onStrike={(id) => strikeRef.current(id)}
       {...opts}
     />
@@ -95,7 +75,7 @@ export function TerminalPage() {
   if (!tablet) {
     return (
       <div className="flex min-h-full min-w-0 flex-1 flex-col overflow-y-auto">
-        <div className="flex h-[56vh] min-h-[320px] shrink-0 border-b border-line">
+        <div className="flex h-[56vh] min-h-[320px] shrink-0">
           <ChartPanel symbol={selected} focusDrawing={focus} onDrawings={onDrawings} compact />
         </div>
         {pendingCount > 0 && mobileTab !== "orders" && (
@@ -103,7 +83,7 @@ export function TerminalPage() {
             type="button"
             data-action="approve"
             onClick={() => setMobileTab("orders")}
-            className="flex h-10 shrink-0 items-center gap-2 border-b border-line bg-warn-soft px-4 text-left text-xs"
+            className="mx-2 mt-2 flex h-10 shrink-0 items-center gap-2 rounded-control bg-warn-soft px-3 text-left text-xs transition-colors hover:bg-[oklch(0.82_0.14_78/0.2)]"
           >
             <span className="size-1.5 rounded-full bg-warn" aria-hidden />
             <span className="font-medium text-fg">
@@ -112,7 +92,7 @@ export function TerminalPage() {
             <span className="ml-auto font-medium text-accent-c">Rivedi</span>
           </button>
         )}
-        <div role="tablist" aria-label="Sezioni del Terminale" className="sticky top-0 z-10 flex h-10 shrink-0 border-b border-line bg-panel">
+        <div role="tablist" aria-label="Sezioni del Terminale" className="sticky top-0 z-10 mx-2 mt-2 flex h-9 shrink-0 gap-0.5 rounded-control bg-ground p-0.5">
           {MOBILE_TABS.map((t) => (
             <button
               key={t.id}
@@ -120,15 +100,15 @@ export function TerminalPage() {
               aria-selected={mobileTab === t.id}
               onClick={() => setMobileTab(t.id)}
               className={cn(
-                "relative flex-1 text-xs font-medium transition-colors",
-                mobileTab === t.id ? "text-fg after:absolute after:inset-x-4 after:bottom-0 after:h-0.5 after:rounded-full after:bg-accent-c" : "text-fg-subtle",
+                "flex-1 rounded-item text-xs font-medium transition-colors duration-150",
+                mobileTab === t.id ? "bg-hover text-fg" : "text-fg-subtle hover:text-fg",
               )}
             >
               {t.label}
             </button>
           ))}
         </div>
-        <div className="flex min-h-[50vh] flex-1 flex-col">
+        <div className="m-2 flex min-h-[50vh] flex-1 flex-col overflow-hidden rounded-tile bg-ground">
           {mobileTab === "watchlist" && <Watchlist selected={selected} onSelect={select} className="flex-1" />}
           {mobileTab === "activity" && activity({ className: "flex-1" })}
           {mobileTab === "orders" && <OrdersDock selected={selected} onSelect={select} className="flex-1" />}
@@ -137,31 +117,73 @@ export function TerminalPage() {
     );
   }
 
+  const { open, size } = layout;
+  const resetTo = (id: "left" | "right" | "bottom") => () => setPanelSize(id, PANEL_LIMITS[id].initial);
+
   return (
-    <div data-region="workspace" className="flex h-full min-h-0 min-w-0 flex-1">
-      <Watchlist selected={selected} onSelect={select} className="w-[272px] shrink-0 border-r border-line" />
+    <div data-region="workspace" className="flex h-full min-h-0 min-w-0 flex-1 pb-2.5 pr-2.5">
+      {open.left && (
+        <>
+          <Watchlist
+            selected={selected}
+            onSelect={select}
+            onHide={() => setPanelOpen("left", false)}
+            className="tile-enter-left shrink-0 overflow-hidden rounded-tile"
+            style={{ width: size.left }}
+          />
+          <Gutter
+            orientation="vertical"
+            label="Larghezza della watchlist"
+            value={size.left}
+            min={PANEL_LIMITS.left.min}
+            max={PANEL_LIMITS.left.max}
+            direction={1}
+            onResize={(px) => setPanelSize("left", px)}
+            onReset={resetTo("left")}
+          />
+        </>
+      )}
       <div data-region="stage" className="flex min-w-0 flex-1 flex-col">
         <div data-region="upper" className="flex min-h-0 flex-1">
-          <ChartPanel
-            symbol={selected}
-            focusDrawing={focus}
-           
-            onDrawings={onDrawings}
-            activityCollapsed={wide ? !activityOpen : true}
-            onExpandActivity={() => (wide ? setActivityOpen(true) : setSheetOpen(true))}
-          />
-          {wide && activityOpen && activity({ onCollapse: () => setActivityOpen(false), className: "w-[304px] shrink-0 border-l border-line" })}
+          <ChartPanel symbol={selected} focusDrawing={focus} onDrawings={onDrawings} className="overflow-hidden rounded-tile" />
+          {open.right && (
+            <>
+              <Gutter
+                orientation="vertical"
+                label="Larghezza del pannello attività"
+                value={size.right}
+                min={PANEL_LIMITS.right.min}
+                max={PANEL_LIMITS.right.max}
+                direction={-1}
+                onResize={(px) => setPanelSize("right", px)}
+                onReset={resetTo("right")}
+              />
+              {activity({ onCollapse: () => setPanelOpen("right", false), className: "tile-enter-right shrink-0 overflow-hidden rounded-tile", style: { width: size.right } })}
+            </>
+          )}
         </div>
-        <OrdersDock selected={selected} onSelect={select} className="h-[232px] shrink-0 border-t border-line" />
+        {open.bottom && (
+          <>
+            <Gutter
+              orientation="horizontal"
+              label="Altezza del pannello ordini"
+              value={size.bottom}
+              min={PANEL_LIMITS.bottom.min}
+              max={PANEL_LIMITS.bottom.max}
+              direction={-1}
+              onResize={(px) => setPanelSize("bottom", px)}
+              onReset={resetTo("bottom")}
+            />
+            <OrdersDock
+              selected={selected}
+              onSelect={select}
+              onHide={() => setPanelOpen("bottom", false)}
+              className="tile-enter-bottom shrink-0 overflow-hidden rounded-tile"
+              style={{ height: size.bottom }}
+            />
+          </>
+        )}
       </div>
-      {!wide && (
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetContent side="right" className="w-[340px] gap-0 border-line-strong bg-panel p-0 sm:max-w-[340px]">
-            <SheetTitle className="sr-only">Attività sullo strumento</SheetTitle>
-            {activity({ onCollapse: () => setSheetOpen(false), className: "h-full" })}
-          </SheetContent>
-        </Sheet>
-      )}
     </div>
   );
 }

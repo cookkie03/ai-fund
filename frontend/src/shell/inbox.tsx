@@ -33,7 +33,7 @@ function Row({ item, onRead, disabled }: { item: InboxItem; onRead: () => void; 
           type="button"
           onClick={onRead}
           disabled={disabled}
-          className="mt-0.5 h-6 shrink-0 self-start rounded px-1.5 text-2xs text-fg-subtle transition-colors hover:bg-hover hover:text-fg disabled:opacity-40"
+          className="mt-0.5 h-6 shrink-0 self-start rounded-item px-1.5 text-2xs text-fg-subtle transition-colors hover:bg-hover hover:text-fg disabled:opacity-40"
         >
           Letto
         </button>
@@ -55,7 +55,7 @@ export function InboxButton({ variant = "rail" }: { variant?: "rail" | "bar" }) 
         <TooltipTrigger asChild>
           <PopoverTrigger
             className={cn(
-              "relative grid place-items-center rounded-md text-fg-subtle transition-colors hover:bg-hover hover:text-fg",
+              "relative grid place-items-center rounded-control text-fg-subtle transition-colors hover:bg-hover hover:text-fg",
               variant === "rail" ? "size-9" : "size-8",
             )}
             aria-label={`Inbox, ${unread.length} non letti`}
@@ -79,7 +79,7 @@ export function InboxButton({ variant = "rail" }: { variant?: "rail" | "bar" }) 
               type="button"
               disabled={!writable || markRead.isPending}
               onClick={() => unread.forEach((i) => markRead.mutate({ item_id: i.id }))}
-              className="ml-auto inline-flex h-6 items-center gap-1 rounded px-1.5 text-2xs text-fg-subtle hover:bg-hover hover:text-fg disabled:opacity-40"
+              className="ml-auto inline-flex h-6 items-center gap-1 rounded-item px-1.5 text-2xs text-fg-subtle hover:bg-hover hover:text-fg disabled:opacity-40"
             >
               <CheckCheck className="size-3.5" /> Segna tutti letti
             </button>
@@ -88,7 +88,7 @@ export function InboxButton({ variant = "rail" }: { variant?: "rail" | "bar" }) 
         {inbox.isPending ? (
           <div className="space-y-2 p-3">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="h-10 animate-pulse rounded bg-hover" />
+              <div key={i} className="h-10 animate-pulse rounded-item bg-hover" />
             ))}
           </div>
         ) : inbox.isError ? (

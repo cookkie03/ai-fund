@@ -110,11 +110,11 @@ export function BridgePanel({ onClose, className }: { onClose?: () => void; clas
   };
 
   return (
-    <aside data-region="bridge-panel" aria-label="Bridge" className={cn("flex h-full min-h-0 flex-col bg-panel", className)}>
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-3">
+    <aside data-region="bridge-panel" aria-label="Bridge" className={cn("flex h-full min-h-0 flex-col bg-ground", className)}>
+      <div className="flex h-11 shrink-0 items-center gap-2 pl-4 pr-2">
         <Sparkles className="size-4 text-accent-c" aria-hidden />
         <h2 className="text-sm font-medium">Bridge</h2>
-        <span className="rounded bg-hover px-1.5 py-0.5 text-2xs text-fg-subtle">non ancora attivo</span>
+        <span className="rounded-tag bg-hover px-1.5 py-0.5 text-2xs text-fg-subtle">non ancora attivo</span>
         {onClose && (
           <Button variant="ghost" size="icon-sm" className="ml-auto" onClick={onClose} aria-label="Chiudi il Bridge">
             <X />
@@ -123,7 +123,7 @@ export function BridgePanel({ onClose, className }: { onClose?: () => void; clas
       </div>
 
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-        <div className="mb-4 rounded-md border border-line px-3 py-3 text-xs leading-relaxed text-fg-muted">
+        <div className="mb-4 rounded-control border border-line px-3 py-3 text-xs leading-relaxed text-fg-muted">
           <p className="text-fg">Il Bridge sarà il tuo interlocutore nell'ufficio: legge tutto, parla con ogni agente e usa i tuoi stessi comandi.</p>
           <p className="mt-1.5">Finché non è attivo nel Runtime, scrivi direttamente a un agente con <span className="text-fg">@</span>: il messaggio arriva nella sua chat «{COCKPIT_TOPIC}» e lui lo pesa come il parere di un collega.</p>
           <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -135,7 +135,7 @@ export function BridgePanel({ onClose, className }: { onClose?: () => void; clas
                   setText(`@${id} `);
                   inputRef.current?.focus();
                 }}
-                className="inline-flex h-6 items-center gap-1.5 rounded border border-line px-1.5 text-2xs text-fg-muted transition-colors hover:border-line-strong hover:bg-hover hover:text-fg"
+                className="inline-flex h-6 items-center gap-1.5 rounded-item border border-line px-1.5 text-2xs text-fg-muted transition-colors hover:border-line-strong hover:bg-hover hover:text-fg"
               >
                 <AuthorChip actor={id} size="xs" tooltip={AGENTS[id].name} />
                 {AGENTS[id].short}
@@ -147,7 +147,7 @@ export function BridgePanel({ onClose, className }: { onClose?: () => void; clas
         {loading ? (
           <div className="space-y-3">
             {[0, 1].map((i) => (
-              <div key={i} className="h-12 animate-pulse rounded bg-hover" />
+              <div key={i} className="h-12 animate-pulse rounded-item bg-hover" />
             ))}
           </div>
         ) : error ? (
@@ -180,9 +180,9 @@ export function BridgePanel({ onClose, className }: { onClose?: () => void; clas
         )}
       </div>
 
-      <div className="relative shrink-0 border-t border-line p-2.5">
+      <div className="relative shrink-0 p-2.5">
         {menu && options.length > 0 && (
-          <ul role="listbox" className="absolute inset-x-2.5 bottom-full mb-1 overflow-hidden rounded-md border border-line-strong bg-raised py-1 shadow-[0_10px_30px_-10px_rgb(0_0_0/0.7)]">
+          <ul role="listbox" className="absolute inset-x-2.5 bottom-full mb-1 overflow-hidden rounded-tile border border-line-strong/70 bg-raised p-1.5 shadow-[0_16px_40px_-12px_oklch(0_0_0/0.75)]">
             {options.map((id, i) => (
               <li key={id} role="option" aria-selected={i === menu.index}>
                 <button
@@ -201,7 +201,7 @@ export function BridgePanel({ onClose, className }: { onClose?: () => void; clas
             ))}
           </ul>
         )}
-        <div className="rounded-md border border-line-strong bg-ground focus-within:border-accent-c/70">
+        <div className="rounded-control border border-line-strong bg-ground focus-within:border-accent-c/70">
           <textarea
             ref={inputRef}
             value={text}
@@ -226,7 +226,7 @@ export function BridgePanel({ onClose, className }: { onClose?: () => void; clas
                   setMenu({ query: "", index: 0 });
                   inputRef.current?.focus();
                 }}
-                className="inline-flex h-6 items-center gap-1 rounded px-1 text-2xs text-fg-subtle hover:bg-hover hover:text-fg"
+                className="inline-flex h-6 items-center gap-1 rounded-item px-1 text-2xs text-fg-subtle hover:bg-hover hover:text-fg"
               >
                 <AtSign className="size-3.5" /> Scegli un agente
               </button>

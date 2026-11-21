@@ -1,5 +1,6 @@
-import { Check, ChevronsUpDown, OctagonPause, Play, PanelRight, PanelRightClose } from "lucide-react";
+import { Check, ChevronsUpDown, MessagesSquare, OctagonPause, PanelBottom, PanelLeft, PanelRight, Play } from "lucide-react";
 import { useMemo, useState } from "react";
+import { IconButton } from "@/components/tile";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -15,10 +16,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { fmtMoney, fmtPct, parseTs } from "@/lib/format";
 import { marketSession } from "@/lib/market";
-import { useCommand, useEquityHistory, usePortfolio } from "@/lib/runtime/hooks";
+import { orderBucket } from "@/lib/orders";
+import { useCommand, useEquityHistory, useOrders, usePortfolio } from "@/lib/runtime/hooks";
 import { useNow, useRuntime } from "@/lib/runtime/provider";
 import { cn } from "@/lib/utils";
-import { useShell } from "./shell-state";
+import { PANEL_SHORTCUT, useShell, type PanelId } from "./shell-state";
 import { RuntimeStatus } from "./status";
 
 function AccountSwitcher() {
@@ -26,12 +28,12 @@ function AccountSwitcher() {
   const label = health?.account_label ?? target.label ?? target.id;
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="group inline-flex h-7 min-w-0 items-center gap-2 rounded-md px-2 text-sm transition-colors hover:bg-hover focus-visible:outline-2">
+      <DropdownMenuTrigger className="group inline-flex h-7 min-w-0 items-center gap-2 rounded-control px-2 text-sm transition-colors hover:bg-hover focus-visible:outline-2">
         <span className="hidden text-xs text-fg-subtle sm:inline">Account</span>
         <span className="truncate font-medium text-fg">{label}</span>
         <ChevronsUpDown className="size-3.5 shrink-0 text-fg-subtle" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64 border-line-strong bg-raised">
+      <DropdownMenuContent align="start" className="w-64">
         <DropdownMenuLabel className="text-xs font-normal text-fg-subtle">Un Runtime per account broker</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {targets.map((t) => (
@@ -54,7 +56,7 @@ function MarketClock() {
   const m = marketSession(now);
   return (
     <Tooltip>
-      <TooltipTrigger className="hidden h-7 items-center gap-2 rounded-md px-2 text-xs text-fg-muted lg:inline-flex">
+      <TooltipTrigger className="hidden h-7 items-center gap-2 rounded-control px-2 text-xs text-fg-muted lg:inline-flex">
         <span className={cn("size-1.5 rounded-full", m.session === "open" ? "bg-up" : m.session === "closed" ? "bg-fg-faint" : "bg-warn")} aria-hidden />
         <span className="text-fg">NYSE {m.label.toLowerCase()}</span>
         <span className="num text-fg-subtle">{m.clock} ET</span>
@@ -80,7 +82,7 @@ function EquityReadout() {
     return { equity: snap.equity, pnl, pct: prev && prev.equity ? (pnl! / prev.equity) * 100 : null };
   }, [portfolio.data, history.data]);
 
-  if (portfolio.isPending) return <span className="h-4 w-36 animate-pulse rounded bg-hover" aria-label="Caricamento equity" />;
+  if (portfolio.isPending) return <span className="h-4 w-36 animate-pulse rounded-item bg-hover" aria-label="Caricamento equity" />;
   if (!figures) return <span className="text-xs text-fg-subtle">Nessuno snapshot del portafoglio</span>;
   const tone = figures.pnl === null ? "text-fg-muted" : figures.pnl >= 0 ? "text-up" : "text-down";
   return (
@@ -121,7 +123,7 @@ function HaltControl() {
         </Button>
       )}
       <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent className="border-line-strong bg-raised sm:max-w-md">
+        <AlertDialogContent className="sm:max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle>{halted ? "Riprendere il trading?" : "Fermare il trading?"}</AlertDialogTitle>
             <AlertDialogDescription className="text-fg-muted">
@@ -131,7 +133,7 @@ function HaltControl() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           {!halted && (
-            <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-line px-3 py-2.5 text-sm">
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-control border border-line px-3 py-2.5 text-sm">
               <input type="checkbox" checked={cancelOpen} onChange={(e) => setCancelOpen(e.target.checked)} className="mt-0.5 accent-[var(--down)]" />
               <span>
                 Annulla anche gli ordini aperti
@@ -160,6 +162,33 @@ function HaltControl() {
   );
 }
 
+const LAYOUT_TOGGLES: { id: PanelId; icon: typeof PanelLeft; label: string }[] = [
+  { id: "left", icon: PanelLeft, label: "Watchlist" },
+  { id: "bottom", icon: PanelBottom, label: "Ordini e trade" },
+  { id: "right", icon: PanelRight, label: "Attività" },
+];
+
+/** VS Code's layout controls: show or hide each tile around the chart. */
+function LayoutToggles() {
+  const { layout, togglePanel } = useShell();
+  const orders = useOrders();
+  const pending = (orders.data ?? []).filter((o) => orderBucket(o) === "pending").length;
+  return (
+    <div role="group" aria-label="Layout" className="hidden items-center gap-0.5 md:flex">
+      {LAYOUT_TOGGLES.map(({ id, icon, label }) => (
+        <span key={id} className="relative">
+          <IconButton icon={icon} label={`${layout.open[id] ? "Nascondi" : "Mostra"} ${label.toLowerCase()}`} shortcut={PANEL_SHORTCUT[id]} active={layout.open[id]} onClick={() => togglePanel(id)} />
+          {id === "bottom" && !layout.open.bottom && pending > 0 && (
+            <span className="num pointer-events-none absolute -right-0.5 -top-0.5 grid h-3.5 min-w-3.5 place-items-center rounded-tag bg-warn px-0.5 text-[9px] font-semibold leading-none text-ground" aria-label={`${pending} da approvare`}>
+              {pending}
+            </span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function TopBar() {
   const { halted, bridgeOpen, setBridgeOpen } = useShell();
   return (
@@ -167,8 +196,8 @@ export function TopBar() {
       data-region="topbar"
       data-halted={halted || undefined}
       className={cn(
-        "flex h-11 shrink-0 items-center gap-1 border-b px-2 transition-colors duration-200",
-        halted ? "border-[oklch(0.58_0.2_25/0.55)] bg-halt-ground" : "border-line bg-panel",
+        "flex h-12 shrink-0 items-center gap-1 px-2.5 transition-colors duration-200",
+        halted ? "bg-halt-ground" : "bg-desk",
       )}
     >
       <AccountSwitcher />
@@ -181,28 +210,15 @@ export function TopBar() {
       </div>
       <MarketClock />
       {halted && (
-        <span className="ml-2 inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-xs font-semibold text-[oklch(0.86_0.08_25)]">
+        <span className="ml-2 inline-flex items-center gap-1.5 rounded-tag px-2 py-0.5 text-xs font-semibold text-[oklch(0.86_0.08_25)]">
           <OctagonPause className="size-3.5" /> Halt attivo
         </span>
       )}
       <div className="ml-auto flex items-center gap-3">
         <EquityReadout />
         <span className="hidden h-4 w-px bg-line md:block" aria-hidden />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setBridgeOpen(!bridgeOpen)}
-              aria-pressed={bridgeOpen}
-              aria-label={bridgeOpen ? "Chiudi il Bridge" : "Apri il Bridge"}
-              className={cn(bridgeOpen && "bg-hover text-fg")}
-            >
-              {bridgeOpen ? <PanelRightClose /> : <PanelRight />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Bridge e messaggi agli agenti</TooltipContent>
-        </Tooltip>
+        <LayoutToggles />
+        <IconButton icon={MessagesSquare} label={bridgeOpen ? "Chiudi il Bridge" : "Bridge e messaggi agli agenti"} active={bridgeOpen} onClick={() => setBridgeOpen(!bridgeOpen)} />
         <HaltControl />
       </div>
     </header>
