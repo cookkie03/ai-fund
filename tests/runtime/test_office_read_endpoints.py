@@ -51,6 +51,12 @@ def test_chat_topics_preserve_agent_configuration_and_messages(tmp_path):
     assert topic["last_message"]["text"] == "Grazie"
     assert len(client.get("/v1/read/chat", params={"agent": "technical_analyst", "topic": "NVDA"}).json()) == 2
 
+    # Verify say command accepts topic field directly
+    post_say = client.post("/v1/commands/say", json={"agent": "technical_analyst", "topic": "NVDA", "text": "Aggiornamento"})
+    assert post_say.status_code == 200
+    assert post_say.json()["ok"] is True
+    assert len(client.get("/v1/read/chat", params={"agent": "technical_analyst", "topic": "NVDA"}).json()) == 3
+
 
 def test_usage_filters_and_aggregates_calls(tmp_path):
     db = OfficeDB(tmp_path / "usage.db")
