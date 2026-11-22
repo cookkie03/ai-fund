@@ -201,6 +201,10 @@ Phone (under 768 px): compact top bar, chart at 56 vh, an approval strip when or
 
 Spacing is a 4 px grid with two insets that drive the radius scale: 2 px inside a control, 6 px inside a tile. Rows are 32 px in tables and 80 px in the watchlist.
 
+**Ufficio** (`/ufficio`, `/ufficio/:agent`): the agents' office.
+- **Overview** (desktop): a grid of seat tiles (auto-fill, 296 px minimum), the Costi e token tile under it, and Conversazioni recenti as a 340 px tile on the right from 1024 px. On phones the seats become one list tile with cost on the right.
+- **Agent view** (desktop, from 1024 px): side list (agents, then that agent's chats) left, conversation in the centre, tool calls right. It reuses the shell layout, so Ctrl/⌘ B and Ctrl/⌘ Alt B hide the two side tiles and the gaps resize them. On phones: back link and avatar, a chat selector menu, then Chat and Tool tabs over one tile.
+
 ## Elevation & Depth
 
 Tonal. The desk-to-ground step separates tiles; there are no borders around them. Inside a tile, the active segmented thumb is `raised` with a 1 px drop shadow and a half-pixel top highlight, and primary buttons carry the same material highlight. Floating layers (popover, menu, dialog, sheet, toast) sit on `raised` with a hairline and a long soft shadow. When the Runtime is unreachable the page content is desaturated and dimmed, the one depth effect tied to state.
@@ -224,6 +228,8 @@ Radii are tokens (`rounded-tile`, `rounded-control`, `rounded-item`, `rounded-ta
 - Price cells flash once on change; the status dot pulses only while the stream reconnects.
 - Reduced motion collapses every animation and transition to 1 ms, except the price flash, which is a colour fade and carries information.
 - A resize drag updates the layout at most once per frame.
+- A working agent's status dot breathes in the agent's colour (`.agent-working`, 2.4 s). It is the only looping animation outside reconnects, and it stops when the agent is no longer working.
+- Tool blocks and other disclosures open by animating grid rows from 0fr to 1fr over 220 ms on the settle curve (`.expand`); new rows fade up 4 px (`.row-arrive`).
 
 ## Components
 
@@ -250,6 +256,30 @@ No grid, solid 1 px crosshair, thin solid drawings with the author's monogram on
 
 ### Author Layers (signature)
 A legend on the chart lists every author with drawings on the current ticker and the count. Click hides or shows that author's marks; hover highlights them and dims the rest. Agents' drawings are locked; Luca's are editable and saved to the Runtime as annotations the agents read.
+
+### Seat tile (Ufficio)
+One tile per agent, all of it a link to the agent's view. A 36 px avatar, name and role; the status mark top right; a work line (ticker tag plus what it is doing); the agent's last line in quotes with its ticker; then three meters (Ultima attività, Costo oggi, Token oggi). Assegna task appears on hover or focus. A field the Runtime does not send is left out, never shown as zero.
+
+### Status mark
+A 8 px dot and a word. Al lavoro: filled in the author's colour and breathing. In attesa: warn. Inattivo: hollow ring in `fg-subtle`. Compact form (dot only, tooltip) in dense rows. If the Runtime sends no state, nothing is drawn.
+
+### Side list (Ufficio)
+Slack's sidebar inside a tile: Agenti as 32 px rows (avatar, name, current ticker, compact status), then Chat di X as two-line rows (topic icon, title, count tag, time; author short name and last line). `#` marks a ticker chat, a speech bubble marks Luca's own chat. Section breaks are spacing, not rules.
+
+### Conversation and composer
+Messages group by author within 5 minutes, with a centred day label (Oggi, Ieri) and the list anchored to the bottom like a chat. The composer is a raised control: textarea that grows to 6 lines, Invio sends and Maiusc Invio breaks, keyboard hints as tags, Invia as the one primary. A refusal from the Runtime shows verbatim above the field.
+
+### Tool block
+A row per tool call in the right tile, newest first with running calls on top: check, spinner or warn icon, tool name in mono, a one-line summary of the parameters (or the error, in warn), duration and time. It opens in place (`.expand`) to show the chat and cycle, Input and Output as mono JSON with Copia, and a note when retention compacted the payload. The tile header says Dal vivo, Fermo da X or Connessione… and filters Tutte or Errori.
+
+### Usage
+Costi e token tile: a period control (Oggi, 7 giorni, 30 giorni), rows with the agent, a share bar in the author colour, calls, tokens in and out, cost, and a total. In the agent view the same data sits behind a ghost trigger (cost and tokens today) that opens a popover. When the Runtime does not expose usage, the control is disabled and the trigger reads Costi n/d.
+
+### Avatars
+Author avatars have two more sizes for the office: 28 px (`md`, messages) and 36 px (`lg`, seats).
+
+### Honest sources
+Data the Runtime does not expose yet is either rebuilt from real reads (with a quiet info note that says how) or shown as unavailable with the endpoint it waits for. Never sample data.
 
 ## Do's and Don'ts
 

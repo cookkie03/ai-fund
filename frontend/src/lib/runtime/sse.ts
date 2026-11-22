@@ -67,6 +67,11 @@ export function subscribeEvents({ url, initialAfter, onEvent, onStatus }: Option
 
 /** Event names the Runtime emits (runtime/, execution/, workflows/). Named SSE events need a listener each. */
 export const EVENT_TYPES = [
+  // Ufficio (backend-ufficio): live chat, tool calls and agent state.
+  "agent.status",
+  "chat.message",
+  "tool.started",
+  "tool.called",
   "annotation.created",
   "annotation.updated",
   "annotation.struck",

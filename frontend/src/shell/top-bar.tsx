@@ -1,5 +1,6 @@
 import { Check, ChevronsUpDown, MessagesSquare, OctagonPause, PanelBottom, PanelBottomDashed, PanelLeft, PanelLeftDashed, PanelRight, PanelRightDashed, Play } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { IconButton } from "@/components/tile";
 import { Button } from "@/components/ui/button";
 import {
@@ -169,14 +170,23 @@ const LAYOUT_TOGGLES: { id: PanelId; icon: typeof PanelLeft; hiddenIcon: typeof 
   { id: "right", icon: PanelRight, hiddenIcon: PanelRightDashed, label: "Attività" },
 ];
 
-/** VS Code's layout controls: show or hide each tile around the chart. */
+/** On an agent's view the same side bars hold its chats and its tool stream. */
+const OFFICE_TOGGLES: typeof LAYOUT_TOGGLES = [
+  { id: "left", icon: PanelLeft, hiddenIcon: PanelLeftDashed, label: "Agenti e chat" },
+  { id: "right", icon: PanelRight, hiddenIcon: PanelRightDashed, label: "Tool" },
+];
+
+/** VS Code's layout controls: show or hide each tile around the page's main tile. Pages without side tiles show none. */
 function LayoutToggles() {
   const { layout, togglePanel } = useShell();
+  const { pathname } = useLocation();
   const orders = useOrders();
   const pending = (orders.data ?? []).filter((o) => orderBucket(o) === "pending").length;
+  const toggles = pathname.startsWith("/terminale") ? LAYOUT_TOGGLES : /^\/ufficio\/[^/]+/.test(pathname) ? OFFICE_TOGGLES : [];
+  if (!toggles.length) return null;
   return (
     <div role="group" aria-label="Layout" className="hidden items-center gap-0.5 md:flex">
-      {LAYOUT_TOGGLES.map(({ id, icon, hiddenIcon, label }) => (
+      {toggles.map(({ id, icon, hiddenIcon, label }) => (
         <span key={id} className="relative">
           <IconButton icon={layout.open[id] ? icon : hiddenIcon} label={`${layout.open[id] ? "Nascondi" : "Mostra"} ${label.toLowerCase()}`} shortcut={PANEL_SHORTCUT[id]} active={layout.open[id]} onClick={() => togglePanel(id)} />
           {id === "bottom" && !layout.open.bottom && pending > 0 && (

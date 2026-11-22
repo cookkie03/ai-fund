@@ -7,7 +7,8 @@ type Props = {
   author?: Author;
   /** Show the short name beside the monogram. */
   label?: boolean;
-  size?: "xs" | "sm";
+  /** xs 18 px (dense rows), sm 20 px, md 28 px (messages), lg 36 px (agent seats). */
+  size?: "xs" | "sm" | "md" | "lg";
   className?: string;
   tooltip?: string;
 };
@@ -24,7 +25,13 @@ export function AuthorChip({ actor, author, label = false, size = "sm", classNam
         data-part="monogram"
         className={cn(
           "inline-grid shrink-0 place-items-center rounded-full font-bold tracking-[-0.01em] text-[oklch(0.16_0.01_260)]",
-          size === "xs" ? "size-[18px] text-[8.5px] leading-none" : "size-5 text-[9.5px] leading-none",
+          size === "xs"
+            ? "size-[18px] text-[8.5px] leading-none"
+            : size === "md"
+              ? "size-7 text-[11px] leading-none"
+              : size === "lg"
+                ? "size-9 text-[13px] leading-none"
+                : "size-5 text-[9.5px] leading-none",
         )}
         style={{
           ["--author" as string]: a.color,
