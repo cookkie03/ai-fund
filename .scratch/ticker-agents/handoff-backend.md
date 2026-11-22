@@ -72,3 +72,16 @@ Nuovo ADR `docs/adr/0004-agenti-del-ticker.md` (contesto, decisione, conseguenze
 - Ignora `openbb-ui/` e `telegram-claude/`.
 - Deleghe `claude -p`: solo `~/.local/bin/claude-my-combo`, mai `free`. Subagenti solo Sonnet o Haiku.
 - Non committare `data/*.db*`, `nohup.out`, `.serena/`, `graphify-out/` (salvo il grafo se già tracciato), `frontend/tsconfig.tsbuildinfo`.
+
+## Proposta del frontend: payload di `decide_proposal` (da confermare)
+
+Il contratto fissa solo `confirm:true`. Il frontend (branch `claude/ticker-agents-frontend-df5ea6`) invia, **come proposta**:
+
+```json
+{ "proposal_id": 412, "action": "accept|defer|reject|ask", "reason": "testo obbligatorio",
+  "confirm": true, "sizing_fraction": 0.03, "next_check_date": "2026-11-24" }
+```
+
+- `sizing_fraction` solo con `accept` e solo se Luca ridimensiona; `next_check_date` solo con `defer`.
+- Risposta attesa: envelope standard dei comandi; rifiuti in `reasons[]` (mostrati verbatim). Il frontend non legge altri campi della risposta: lo stato aggiornato arriva da `proposal.decided` e dalle read.
+- Se il backend sceglie nomi diversi, cambiare solo `frontend/src/lib/runtime/types.ts` (`decide_proposal`) e `frontend/src/features/dossier/decide-proposal.tsx`.
