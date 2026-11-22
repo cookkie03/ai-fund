@@ -124,6 +124,17 @@ def trade_levels(conn: sqlite3.Connection, trade: sqlite3.Row) -> tuple[float | 
     return (float(stop) if stop is not None else None, float(target) if target is not None else None)
 
 
+def _closed_after(conn: sqlite3.Connection, ticker: str, snapshot_ts: str) -> bool:
+    snap_dt = _parse(snapshot_ts)
+    for r in conn.execute(
+        "SELECT closed_ts FROM trades WHERE ticker = ? AND closed_ts IS NOT NULL", (ticker,)
+    ).fetchall():
+        closed = _parse(r["closed_ts"])
+        if closed and snap_dt and closed > snap_dt:
+            return True
+    return False
+
+
 def open_positions(conn: sqlite3.Connection, now: datetime) -> list[dict[str, Any]]:
     """Posizioni aperte: trade aperti uniti ai prezzi dell'ultima fotografia del portafoglio."""
     snap = latest_snapshot(conn)
@@ -188,6 +199,8 @@ def open_positions(conn: sqlite3.Connection, now: datetime) -> list[dict[str, An
     for ticker, sp in snap_pos.items():  # posizioni del broker senza trade locale (riconciliate)
         if ticker in seen or sp["qty"] <= 0:
             continue
+        if _closed_after(conn, ticker, snap["ts"]):
+            continue  # la fotografia è precedente alla chiusura: non è più una posizione
         price = sp["current_price"] if sp["current_price"] is not None else (sp["entry"] or 0.0)
         out.append(build(ticker, sp["qty"], sp["entry"] or price, price, None, None, None))
     return out

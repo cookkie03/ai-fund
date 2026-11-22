@@ -257,3 +257,43 @@ def test_events_not_published_when_close_rolls_back(env):
     assert res["ok"] is False
     types = [e.type for e in drain(env["sub"])]
     assert "trade.closed" not in types and "position.changed" not in types
+
+
+def test_closed_position_disappears_even_if_snapshot_is_stale(env):
+    seed_trade(env)
+    post(env["client"], "close_position",
+         {"ticker": "AAPL", "qty": None, "order_type": "market", "confirm": True})
+    assert env["client"].get("/v1/read/positions").json() == []
+    assert env["client"].get("/v1/read/portfolio_summary").json()["positions_count"] == 0
+
+
+def _stream_sell(env, client_order_id, qty, price, ts):
+    env["rt"].office.order_flow.apply_broker_update({
+        "event": "fill", "price": price, "qty": qty, "timestamp": ts,
+        "order": {"id": f"brk-{client_order_id}", "client_order_id": client_order_id,
+                  "symbol": "AAPL", "side": "sell"}})
+
+
+def test_stream_fill_of_manual_close_is_not_applied_twice(env):
+    tid = seed_trade(env)
+    res = post(env["client"], "close_position",
+               {"ticker": "AAPL", "qty": 30, "order_type": "market", "confirm": True}).json()
+    cid = res["data"]["order"]["client_order_id"]
+    _stream_sell(env, cid, 30, 105.0, "2026-11-22T11:00:00Z")  # eco dello stream: già registrato
+    t = env["db"].get_trade(tid)
+    assert t["closed_qty"] == 30 and t["realized_pnl"] == pytest.approx(150.0)
+
+
+def test_stream_fill_of_pending_manual_sell_reduces_or_closes(env):
+    """Broker reale: la vendita parte 'submitted' e il fill arriva dallo stream."""
+    tid = seed_trade(env)
+    db = env["db"]
+    for qty, expect_closed in ((40, False), (60, True)):
+        cid = f"manual-{qty}"
+        db.insert_order(ticker="AAPL", side="sell", draft={"symbol": "AAPL", "side": "sell"},
+                        draft_hash=cid, approval_status="approved", client_order_id=cid,
+                        status="submitted")
+        _stream_sell(env, cid, qty, 110.0, f"2026-11-22T{qty // 4}:00:00Z")
+        t = db.get_trade(tid)
+        assert (t["closed_ts"] is not None) is expect_closed
+    assert t["exit_reason"] == "pm_sell" and t["realized_pnl"] == pytest.approx(1000.0)
