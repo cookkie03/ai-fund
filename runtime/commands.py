@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class CommandResult(BaseModel):
@@ -22,8 +22,18 @@ class EnqueueTask(BaseModel):
 
 class Say(BaseModel):
     agent: str
-    chat: str
+    chat: str = ""
+    topic: str | None = None
     text: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_chat_topic(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            val = data.get("chat") or data.get("topic") or ""
+            data["chat"] = val
+            data["topic"] = val
+        return data
 
 
 class AddWatchlist(BaseModel):

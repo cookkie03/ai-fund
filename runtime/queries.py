@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -143,6 +144,115 @@ class ReadModel:
         conn = sqlite3.connect(uri, uri=True, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         return conn
+
+    def agents(self) -> list[dict[str, Any]]:
+        from datetime import UTC, datetime
+
+        conn = self._get_connection()
+        try:
+            rows = conn.execute(
+                "SELECT agent, SUM(tokens_in) AS tokens_in, SUM(tokens_out) AS tokens_out, "
+                "SUM(cost) AS cost FROM llm_calls WHERE date(ts) = ? GROUP BY agent",
+                (datetime.now(UTC).date().isoformat(),),
+            ).fetchall()
+            usage = {row['agent']: row for row in rows}
+            states = {row['name']: row for row in conn.execute('SELECT * FROM agents')}
+            result = []
+            for name, config in self._runtime.office.settings.agents.items():
+                row = usage.get(name)
+                tokens_in = int(row['tokens_in']) if row else 0
+                tokens_out = int(row['tokens_out']) if row else 0
+                state = states.get(name)
+                result.append({
+                    'name': name, 'role': name, 'model': config.model,
+                    'status': state['status'] if state else 'idle',
+                    'current_task': json.loads(state['current_task_json']) if state and state['current_task_json'] else None,
+                    'last_activity_ts': state['last_activity_ts'] if state else None,
+                    'today_tokens_in': tokens_in, 'today_tokens_out': tokens_out,
+                    'today_tokens': tokens_in + tokens_out,
+                    'today_cost': float(row['cost']) if row else 0.0,
+                })
+            return result
+        finally:
+            if self.db_path != ':memory:':
+                conn.close()
+
+    def tool_calls(
+        self, agent: str | None = None, cycle: int | None = None,
+        after: int = 0, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            query = ("SELECT t.*, c.topic FROM tool_calls t LEFT JOIN chats c ON c.id = t.chat_id "
+                     "WHERE t.id > ?")
+            params: list[Any] = [after]
+            if agent is not None:
+                query += " AND t.agent = ?"
+                params.append(agent)
+            if cycle is not None:
+                query += " AND t.cycle_id = ?"
+                params.append(cycle)
+            query += " ORDER BY t.id ASC LIMIT ?"
+            params.append(limit)
+            result = []
+            for row in conn.execute(query, params):
+                item = dict(row)
+                item['params'] = json.loads(item.pop('params_json'))
+                item['result'] = json.loads(item.pop('result_json'))
+                item['success'] = item['error'] is None
+                item['compacted'] = bool(item['compacted'])
+                result.append(item)
+            return result
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def usage(
+        self, agent: str | None = None, from_ts: datetime | None = None,
+        to_ts: datetime | None = None,
+    ) -> list[dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            query = "SELECT agent, SUM(tokens_in) AS tokens_in, SUM(tokens_out) AS tokens_out, SUM(cost) AS cost, COUNT(*) AS calls FROM llm_calls WHERE 1=1"
+            params: list[Any] = []
+            if agent is not None:
+                query += " AND agent = ?"
+                params.append(agent)
+            if from_ts is not None:
+                query += " AND julianday(ts) >= julianday(?)"
+                params.append(from_ts.isoformat())
+            if to_ts is not None:
+                query += " AND julianday(ts) < julianday(?)"
+                params.append(to_ts.isoformat())
+            query += " GROUP BY agent ORDER BY agent"
+            return [dict(row) for row in conn.execute(query, params)]
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def chat_topics(self, agent: str) -> list[dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            rows = conn.execute(
+                "SELECT c.id, c.topic, c.created_at, "
+                "(SELECT COUNT(*) FROM messages WHERE chat_id = c.id) AS message_count, "
+                "m.id AS message_id, m.text, m.author, m.ts, m.cycle_id, cy.ticker "
+                "FROM chats c LEFT JOIN messages m ON m.id = "
+                "(SELECT id FROM messages WHERE chat_id = c.id ORDER BY id DESC LIMIT 1) "
+                "LEFT JOIN cycles cy ON cy.id = m.cycle_id WHERE c.agent = ? "
+                "ORDER BY COALESCE(m.ts, c.created_at) DESC, c.id DESC", (agent,),
+            ).fetchall()
+            return [{
+                'id': r['id'], 'topic': r['topic'], 'title': r['topic'],
+                'ticker': r['ticker'], 'cycle_id': r['cycle_id'],
+                'message_count': r['message_count'],
+                'last_activity_ts': r['ts'] or r['created_at'],
+                'last_message': {'id': r['message_id'], 'text': r['text'],
+                                 'author': r['author'], 'ts': r['ts']} if r['message_id'] else None,
+            } for r in rows]
+        finally:
+            if self.db_path != ':memory:':
+                conn.close()
 
     def health(self) -> HealthDTO:
         conn = self._get_connection()

@@ -42,6 +42,9 @@ class ToolCallRecord:
     error: str | None = None
     chat_id: int | None = None
     ts: str | None = None
+    duration_ms: int | None = None
+    cycle_id: int | None = None
+    compacted: bool = False
 
 
 @dataclass(frozen=True)
@@ -168,6 +171,9 @@ class RegistryWriter:
                         error=record.error,
                         chat_id=record.chat_id,
                         ts=record.ts,
+                        duration_ms=record.duration_ms,
+                        cycle_id=record.cycle_id,
+                        compacted=record.compacted,
                     )
                 elif isinstance(record, CliCommandRecord):
                     self._db.log_cli_command(

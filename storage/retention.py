@@ -271,7 +271,7 @@ def run_retention_job(
     )
     compacted_news = cur_news.rowcount
 
-    # 2. Compact LLM calls
+    # 2. Compact LLM calls and tool calls
     cutoff_llm = (ref_date - timedelta(days=policy.llm_content_days)).isoformat()
     cur_llm = db.connection.execute(
         "UPDATE llm_calls SET prompt_blob = NULL, response_blob = NULL "
@@ -279,6 +279,13 @@ def run_retention_job(
         (cutoff_llm,),
     )
     compacted_llm = cur_llm.rowcount
+
+    cur_tools = db.connection.execute(
+        "UPDATE tool_calls SET params_json = '{}', result_json = '{}', compacted = 1 "
+        "WHERE SUBSTR(ts, 1, 10) <= ? AND (compacted = 0 OR params_json != '{}' OR result_json != '{}')",
+        (cutoff_llm,),
+    )
+    compacted_tools = cur_tools.rowcount
 
     # 3. Downsample hourly bars
     cutoff_hourly = (ref_date - timedelta(days=policy.hourly_days)).isoformat()
@@ -390,6 +397,7 @@ def run_retention_job(
     return {
         "compacted_news": compacted_news,
         "compacted_llm": compacted_llm,
+        "compacted_tools": compacted_tools,
         "downsampled_hourly": downsampled_hourly,
         "downsampled_daily": downsampled_daily,
     }

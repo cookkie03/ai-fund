@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from functools import partial
 from typing import Any, Protocol, runtime_checkable
 
 from agents.backend import ToolSpec
@@ -197,6 +199,8 @@ class AgentEnvironment:
         params: dict[str, Any],
         result: Any,
         error: str | None,
+        duration_ms: int | None = None,
+        cycle_id: int | None = None,
     ) -> None:
         """Log tool invocation to OfficeDB and injected logger."""
         try:
@@ -208,6 +212,8 @@ class AgentEnvironment:
                 error=error,
                 chat_id=chat_id,
                 ts=self._now_iso(),
+                duration_ms=duration_ms,
+                cycle_id=cycle_id,
             )
         except Exception as e:
             logger.warning(f"Failed to record tool call in OfficeDB: {e}")
@@ -226,16 +232,20 @@ class AgentEnvironment:
         handler: Callable[..., Any],
         agent_name: str,
         chat_id: int | None,
+        cycle_id: int | None = None,
     ) -> ToolSpec:
         """Wrap a tool function with logging and error tracking."""
         def wrapped(**kwargs: Any) -> Any:
+            started = time.monotonic()
             try:
                 res = handler(**kwargs)
-                self._log_tool_call(agent_name, chat_id, name, kwargs, res, None)
+                self._log_tool_call(agent_name, chat_id, name, kwargs, res, None,
+                                    int((time.monotonic() - started) * 1000), cycle_id)
                 return res
             except Exception as exc:
                 err_msg = str(exc)
-                self._log_tool_call(agent_name, chat_id, name, kwargs, None, err_msg)
+                self._log_tool_call(agent_name, chat_id, name, kwargs, None, err_msg,
+                                    int((time.monotonic() - started) * 1000), cycle_id)
                 raise
 
         return ToolSpec(
@@ -473,6 +483,7 @@ class AgentEnvironment:
     ) -> list[ToolSpec]:
         """Generate list of ToolSpec tailored to the given agent and chat context."""
         role = self._normalize_role(agent_name)
+        make_tool = partial(self._make_tool, cycle_id=cycle_id)
         tools: list[ToolSpec] = []
 
         # ---------------------------------------------------------------------
@@ -484,7 +495,7 @@ class AgentEnvironment:
             return self._get_or_create_ticker_state(sym)
 
         tools.append(
-            self._make_tool(
+            make_tool(
                 name="read_state",
                 description=(
                     "Read shared state for a ticker (analyses, suggestions, coefficients, "
@@ -508,7 +519,7 @@ class AgentEnvironment:
             }
 
         tools.append(
-            self._make_tool(
+            make_tool(
                 name="read_portfolio",
                 description=(
                     "Read portfolio account equity, cash, positions, and open/recent orders."
@@ -564,7 +575,7 @@ class AgentEnvironment:
                 }
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="send_message",
                     description=(
                         "Send a message to another agent. If sent to market_analyst on a ticker, "
@@ -586,7 +597,7 @@ class AgentEnvironment:
                 return {"task": task, "result": _serialize(result)}
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="call_subagent",
                     description="Delegate a bounded read-only task to a subagent.",
                     input_model=schemas.CallSubagentInput,
@@ -618,7 +629,7 @@ class AgentEnvironment:
                 return {"status": "ok", "ticker": sym, "agent": agent_name}
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="write_analysis",
                     description="Update your specialist analysis section in the ticker state.",
                     input_model=schemas.WriteAnalysisInput,
@@ -652,7 +663,7 @@ class AgentEnvironment:
                 }
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="suggest",
                     description="Suggest trading direction (buy/sell/hold) and conviction (0..1).",
                     input_model=schemas.SuggestInput,
@@ -727,7 +738,7 @@ class AgentEnvironment:
                 return {"status": "ok", "ticker": sym, "coefficients": coeffs}
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="set_coefficients",
                     description=(
                         "Set order calculation coefficients strictly by competence and bounds "
@@ -749,7 +760,7 @@ class AgentEnvironment:
                 return _serialize(self.market_data.macro(series_id.strip()))
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="macro",
                     description="Fetch macroeconomic time series data.",
                     input_model=schemas.MacroInput,
@@ -763,7 +774,7 @@ class AgentEnvironment:
                 return _serialize(self.market_data.news(theme=theme.strip(), limit=limit))
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="news_by_theme",
                     description="Fetch news articles by macro or sector theme.",
                     input_model=schemas.NewsByThemeInput,
@@ -777,7 +788,7 @@ class AgentEnvironment:
                 return _serialize(self.market_data.econ_calendar(limit=limit))
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="econ_calendar",
                     description="Fetch upcoming economic calendar events.",
                     input_model=schemas.EconCalendarInput,
@@ -791,7 +802,7 @@ class AgentEnvironment:
                 return _serialize(self.market_data.sector_perf())
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="sector_perf",
                     description="Fetch sector performance figures.",
                     input_model=schemas.SectorPerfInput,
@@ -840,7 +851,7 @@ class AgentEnvironment:
                 }
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="set_sector_view",
                     description=(
                         "Update the market outlook for a sector so cycles on tickers "
@@ -886,7 +897,7 @@ class AgentEnvironment:
                 }
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="schedule_task",
                     description=(
                         "Schedule a future task for Market Analyst with date clamped by "
@@ -907,7 +918,7 @@ class AgentEnvironment:
                 return _serialize(self.market_data.news(symbol=ticker.upper().strip(), limit=limit))
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="news_by_ticker",
                     description="Fetch recent news articles for a specific ticker.",
                     input_model=schemas.NewsByTickerInput,
@@ -921,7 +932,7 @@ class AgentEnvironment:
                 return _serialize(self.market_data.ratings(ticker.upper().strip()))
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="ratings",
                     description="Fetch analyst ratings for a ticker.",
                     input_model=schemas.RatingsInput,
@@ -935,7 +946,7 @@ class AgentEnvironment:
                 return _serialize(self.market_data.insiders(ticker.upper().strip(), limit=limit))
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="insiders",
                     description="Fetch insider trading transactions for a ticker.",
                     input_model=schemas.InsidersInput,
@@ -953,7 +964,7 @@ class AgentEnvironment:
                 return _serialize(self.market_data.quote(ticker.upper().strip()))
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="quote",
                     description="Fetch current market quote for a ticker.",
                     input_model=schemas.QuoteInput,
@@ -969,7 +980,7 @@ class AgentEnvironment:
                 )
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="ohlcv",
                     description="Fetch historical OHLCV bars for a ticker.",
                     input_model=schemas.OHLCVInput,
@@ -1039,7 +1050,7 @@ class AgentEnvironment:
                 return results
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="indicators",
                     description=(
                         "Compute technical indicators on the fly (SMA, EMA, RSI, MACD, ATR, pivot)."
@@ -1059,7 +1070,7 @@ class AgentEnvironment:
                 return _serialize(self.market_data.financials(ticker.upper().strip()))
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="financials",
                     description="Fetch financial statements for a ticker.",
                     input_model=schemas.FinancialsInput,
@@ -1076,7 +1087,7 @@ class AgentEnvironment:
                 return _serialize(fin)
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="ratios",
                     description="Fetch financial ratios for a ticker.",
                     input_model=schemas.RatiosInput,
@@ -1090,7 +1101,7 @@ class AgentEnvironment:
                 return _serialize(self.market_data.earnings_dates(ticker.upper().strip()))
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="earnings_dates",
                     description="Fetch upcoming earnings dates and recent surprise history.",
                     input_model=schemas.EarningsDatesInput,
@@ -1233,7 +1244,7 @@ class AgentEnvironment:
                 }
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="portfolio_risk",
                     description=(
                         "Analyze portfolio risks: exposures, concentration, "
@@ -1253,7 +1264,7 @@ class AgentEnvironment:
                 return {"ticker": sym, "draft": state.get("draft")}
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="current_draft",
                     description="Inspect the current calculated order draft for a ticker.",
                     input_model=schemas.CurrentDraftInput,
@@ -1274,7 +1285,7 @@ class AgentEnvironment:
                 return {"ticker": sym, "draft": state.get("draft")}
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="read_draft",
                     description="Read the current computed order draft for a ticker.",
                     input_model=schemas.ReadDraftInput,
@@ -1321,7 +1332,7 @@ class AgentEnvironment:
                 }
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="schedule_next_check",
                     description=(
                         "Schedule the mandatory future check task on a ticker before deciding."
@@ -1384,7 +1395,7 @@ class AgentEnvironment:
                 }
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="accept_order",
                     description=(
                         "Accept an order draft for execution (records decision and intent; "
@@ -1418,7 +1429,7 @@ class AgentEnvironment:
                 return {"status": "deferred", "ticker": sym, "reason": reason.strip()}
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="defer",
                     description=(
                         "Defer decision on a ticker to the next scheduled check "
@@ -1435,7 +1446,7 @@ class AgentEnvironment:
                 return self.db.list_watchlist()
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="watchlist_get",
                     description="Read current watchlist tickers.",
                     input_model=schemas.WatchlistGetInput,
@@ -1477,7 +1488,7 @@ class AgentEnvironment:
                 return self.db.list_watchlist()
 
             tools.append(
-                self._make_tool(
+                make_tool(
                     name="watchlist_set",
                     description="Add, remove, or set tickers in the watchlist.",
                     input_model=schemas.WatchlistSetInput,

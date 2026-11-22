@@ -232,6 +232,25 @@ def create_app(
     ) -> list[dict[str, Any]]:
         return runtime.read.equity_history(from_ts=from_ts, to_ts=to_ts)
 
+    @app.get("/v1/read/tool_calls", dependencies=[Depends(verify_token)])
+    def get_tool_calls(
+        agent: str | None = None, cycle: int | None = Query(default=None, ge=1),
+        after: int = Query(default=0, ge=0), limit: int = Query(default=100, ge=1, le=1000),
+    ) -> list[dict[str, Any]]:
+        return runtime.read.tool_calls(agent=agent, cycle=cycle, after=after, limit=limit)
+
+    @app.get("/v1/read/usage", dependencies=[Depends(verify_token)])
+    def get_usage(
+        agent: str | None = None,
+        from_ts: datetime | None = Query(default=None, alias="from"),  # noqa: B008
+        to_ts: datetime | None = Query(default=None, alias="to"),  # noqa: B008
+    ) -> list[dict[str, Any]]:
+        if (from_ts and from_ts.tzinfo is None) or (to_ts and to_ts.tzinfo is None):
+            raise HTTPException(status_code=422, detail="Dates must include a timezone")
+        if from_ts and to_ts and from_ts > to_ts:
+            raise HTTPException(status_code=422, detail="from must precede to")
+        return runtime.read.usage(agent, from_ts, to_ts)
+
     @app.get("/v1/read/annotations", dependencies=[Depends(verify_token)])
     def get_annotations(ticker: str, include_struck: bool = False) -> list[dict[str, Any]]:
         return runtime.read.annotations(ticker, include_struck)
@@ -241,6 +260,13 @@ def create_app(
         q = request.query_params
         norm = name.lower().replace("-", "_")
 
+        if norm == "agents":
+            return runtime.read.agents()
+        if norm == "chat_topics":
+            agent = q.get("agent", "").strip()
+            if not agent:
+                raise HTTPException(status_code=422, detail="agent is required")
+            return runtime.read.chat_topics(agent)
         if norm == "health":
             return runtime.read.health().model_dump()
         elif norm == "portfolio":

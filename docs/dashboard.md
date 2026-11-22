@@ -41,6 +41,10 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
   - Read-only SQLite queries running on read-only SQLite connections (`mode=ro`).
   - Supported queries:
     - `/v1/read/health`: System health and status.
+    - `/v1/read/agents`: Configured agents (`config/office.toml` & DB) with `name`, `role`, `model`, `status` (`working` | `waiting` | `idle`), `current_task` (`ticker`, `cycle_id` or `task_id`), `last_activity_ts`, `today_tokens_in`, `today_tokens_out`, `today_tokens`, and `today_cost`.
+    - `/v1/read/chat_topics?agent=`: Chat topics for an agent with `id`, `topic`, `title`, `ticker`, `cycle_id`, `message_count`, `last_activity_ts`, and `last_message` preview.
+    - `/v1/read/tool_calls?agent=&cycle=&after=&limit=`: Audit trail of tool calls with tool name, `params`, `result`, `duration_ms`, `success`, `error`, `chat_id`, `topic`, `cycle_id`, `ts`, and explicit `compacted` boolean flag (true if pruned by retention, false otherwise).
+    - `/v1/read/usage?agent=&from=&to=`: Aggregated LLM token usage and cost from `llm_calls` grouped by agent and filtered by ISO UTC date range (`from`, `to`).
     - `/v1/read/portfolio`: Latest portfolio snapshot (`ts`, `equity`, `cash`, `positions`).
     - `/v1/read/orders?status=&limit=`: List orders with optional filters.
     - `/v1/read/order?id=`: Detailed order with draft and lifecycle events.
@@ -68,7 +72,11 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
     data: {"trade_id": 1, "ticker": "AAPL", "entry_price": 150.0, "qty": 10.0}
     ```
   - Includes `: ping\n\n` keepalive comments to prevent connection timeouts.
-  - New event types: `annotation.created`, `annotation.updated`, `annotation.struck`.
+  - Live office events:
+    - `chat.message`: Message appended to an agent's chat topic (`chat_id`, `message_id`, `agent`, `topic`, `author`, `text`, `kind`, `cycle_id`, `ts`).
+    - `tool.called`: Tool invocation recorded with execution outcome and duration (`id`, `agent`, `tool`, `chat_id`, `topic`, `cycle_id`, `duration_ms`, `success`, `error`, `ts`, `compacted`).
+    - `agent.status`: Agent status change (`agent`, `status` in `working` | `waiting` | `idle`, `current_task`, `ts`).
+  - Terminal & chart event types: `annotation.created`, `annotation.updated`, `annotation.struck`.
 
 ## 3. Frontend Integration
 
