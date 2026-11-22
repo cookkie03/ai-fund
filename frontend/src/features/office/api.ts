@@ -51,17 +51,28 @@ function usageOf(v: unknown): UsageTotals | null {
 
 function normalizeAgent(r: Row): OfficeAgent {
   const status = str(r.status);
-  const cur = (r.current ?? null) as Row | null;
+  // Runtime shape: `current_task: {type, ticker, cycle_id | task_id, description}`.
+  const cur = (r.current_task ?? r.current ?? null) as Row | null;
+  // Runtime shape: flat `today_tokens_in`, `today_tokens_out`, `today_cost`.
+  const flatToday =
+    r.today_cost !== undefined || r.today_tokens_in !== undefined
+      ? { cost: r.today_cost, tokens_in: r.today_tokens_in, tokens_out: r.today_tokens_out, calls: r.today_calls }
+      : null;
   return {
     name: str(r.name ?? r.agent) ?? "sconosciuto",
     role: str(r.role),
     model: str(r.model),
     status: status === "working" || status === "waiting" || status === "idle" ? (status as AgentStatus) : null,
     current: cur
-      ? { kind: str(cur.kind) ?? "task", id: num(cur.id), ticker: str(cur.ticker), label: str(cur.label ?? cur.reason) }
+      ? {
+          kind: str(cur.type ?? cur.kind) ?? "task",
+          id: num(cur.cycle_id ?? cur.task_id ?? cur.id),
+          ticker: str(cur.ticker),
+          label: str(cur.description ?? cur.label ?? cur.reason),
+        }
       : null,
     last_activity_ts: str(r.last_activity_ts ?? r.last_activity),
-    today: usageOf(r.today ?? r.usage_today),
+    today: usageOf(r.today ?? r.usage_today ?? flatToday),
   };
 }
 

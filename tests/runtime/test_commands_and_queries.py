@@ -58,6 +58,15 @@ def test_command_say_non_pm(runtime: Runtime):
     assert messages[0].text == "Inflation data release"
 
 
+def test_chat_limit_returns_most_recent_messages_in_order(runtime: Runtime):
+    for i in range(5):
+        cmd = Say(agent="market_analyst", chat="MACRO", text=f"m{i}")
+        runtime.execute(cmd, actor="cli", command_id=str(uuid.uuid4()))
+
+    messages = runtime.read.chat(agent="market_analyst", topic="MACRO", limit=3)
+    assert [m.text for m in messages] == ["m2", "m3", "m4"]
+
+
 def test_command_say_to_pm_spawns_scheduled_task(runtime: Runtime):
     """Rule moved from CLI to handler: a message to PM enqueues a Scheduled task."""
     cmd = Say(agent="portfolio_manager", chat="MSFT", text="Review quarterly numbers")

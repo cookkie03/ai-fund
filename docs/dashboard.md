@@ -51,7 +51,7 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
     - `/v1/read/trades?ticker=&status=&limit=`: Trade records with entry/exit fills and PnL.
     - `/v1/read/cycles?ticker=&status=&limit=`: Analysis cycles.
     - `/v1/read/cycle?id=`: Specific analysis cycle with full message audit trail.
-    - `/v1/read/chat?agent=&topic=&limit=`: Agent chat messages.
+    - `/v1/read/chat?agent=&topic=&limit=`: Agent chat messages: the most recent `limit` messages, oldest first.
     - `/v1/read/ticker_state?ticker=`: Current analysis and state for symbol.
     - `/v1/read/watchlist`: Current watchlist symbols, notes and author (`added_by`).
     - `/v1/read/bars?ticker=&timeframe=&start=&end=&limit=`: OHLCV bars for lightweight-charts (`time` as UTC epoch s). If omitted, `timeframe` uses `[market].bar_timeframe` in `config/office.toml` (default `1h`).

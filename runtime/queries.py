@@ -560,7 +560,9 @@ class ReadModel:
                 return []
             chat_id = int(chat_row["id"])
             rows = conn.execute(
-                "SELECT * FROM messages WHERE chat_id = ? ORDER BY id ASC LIMIT ?",
+                # Latest `limit` messages, returned oldest-first for display.
+                "SELECT * FROM (SELECT * FROM messages WHERE chat_id = ? ORDER BY id DESC LIMIT ?) "
+                "ORDER BY id ASC",
                 (chat_id, limit),
             ).fetchall()
             return [
