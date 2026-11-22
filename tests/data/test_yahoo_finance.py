@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from data.interface import MarketDataProvider
+from data.models import PriceBar
 from data.providers.yahoo_finance import YahooFinanceProvider
 
 
@@ -49,7 +50,7 @@ def test_yahoo_finance_history_is_normalized_without_exposing_pandas():
     )
 
     assert bars == (
-        bars[0].__class__(
+        PriceBar(
             symbol="AAPL",
             interval="1d",
             timestamp=datetime(2024, 1, 2, tzinfo=UTC),
