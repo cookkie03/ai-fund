@@ -364,3 +364,92 @@ def seed_scenario(rt: Any, market: ScenarioMarketData) -> None:
         db.add_inbox("risk", "JPM: ordine rifiutato dal Risk Gate, R:R 1.33 sotto il minimo 1.5.", ts=_iso(now - timedelta(days=1, hours=3)))
         read_id = db.add_inbox("info", "Riconciliazione broker completata: 2 posizioni, 1 ordine aperto.", ts=_iso(now - timedelta(hours=5)))
         db.mark_inbox_read(read_id)
+
+        # Stati degli agenti per l'Ufficio (working, waiting, idle)
+        db.set_agent_status("portfolio_manager", "working", {"type": "cycle", "ticker": "NVDA", "cycle_id": 2, "description": "Valutazione ordine NVDA"}, ts=_iso(now - timedelta(minutes=40)))
+        db.set_agent_status("technical_analyst", "working", {"type": "cycle", "ticker": "AMD", "cycle_id": 3, "description": "Analisi supporto orario"}, ts=_iso(now - timedelta(minutes=15)))
+        db.set_agent_status("market_analyst", "waiting", {"type": "task", "ticker": "SEMICONDUCTORS", "description": "Attesa apertura sessione"}, ts=_iso(now - timedelta(hours=1)))
+        db.set_agent_status("risk_analyst", "waiting", {"type": "task", "ticker": "PORTFOLIO", "description": "Verifica esposizione settoriale"}, ts=_iso(now - timedelta(hours=2)))
+        db.set_agent_status("sentiment_analyst", "idle", None, ts=_iso(now - timedelta(hours=4)))
+        db.set_agent_status("fundamental_analyst", "idle", None, ts=_iso(now - timedelta(hours=5)))
+        db.set_agent_status("subagent", "idle", None, ts=_iso(now - timedelta(days=1)))
+
+        # Chat aggiuntive con messaggi di Luca e degli agenti
+        pm_luca_chat = db.get_or_create_chat("portfolio_manager", "direct")
+        db.append_message(pm_luca_chat, "Luca", "Ciao PM, oggi privilegiamo semiconduttori con R:R sopra 2.", ts=_iso(now - timedelta(hours=2)))
+        db.append_message(pm_luca_chat, "portfolio_manager", "Ricevuto Luca. NVDA ha R:R 2.4 stimato, ho preparato la bozza.", ts=_iso(now - timedelta(hours=1, minutes=55)))
+
+        ma_macro_chat = db.get_or_create_chat("market_analyst", "macro")
+        db.append_message(ma_macro_chat, "market_analyst", "Dati CPI in linea con il consensus (+0.2% MoM). Rendimenti Treasury decennale stabili al 4.38%.", ts=_iso(now - timedelta(hours=3)))
+        db.append_message(ma_macro_chat, "Luca", "Occhio alla conferenza stampa Fed delle 14:00.", ts=_iso(now - timedelta(hours=2, minutes=30)))
+        db.append_message(ma_macro_chat, "market_analyst", "Segnato. Nessun nuovo trade aperto durante la conferenza.", ts=_iso(now - timedelta(hours=2, minutes=25)))
+
+        ma_semi_chat = db.get_or_create_chat("market_analyst", "semiconductors")
+        db.append_message(ma_semi_chat, "market_analyst", "Flussi istituzionali su ETF SOXX e SMH in aumento del 18% rispetto alla media a 20 giorni.", ts=_iso(now - timedelta(hours=4)))
+
+        ta_tsla_chat = db.get_or_create_chat("technical_analyst", "TSLA")
+        db.append_message(ta_tsla_chat, "technical_analyst", "TSLA tocca resistenza dinamica a 245. Possibile ritracciamento.", ts=_iso(now - timedelta(days=1, hours=2)))
+
+        # Chiamate ai tool: riuscite, fallite e compattate
+        db.log_tool_call(
+            agent="technical_analyst",
+            tool="indicators",
+            params={"ticker": "NVDA", "timeframe": "1h", "names": "ema20,rsi14,atr14"},
+            result={"ema20": 174.2, "rsi14": 61.5, "atr14": 4.12},
+            duration_ms=85,
+            cycle_id=2,
+            chat_id=db.get_or_create_chat("technical_analyst", "NVDA"),
+            ts=_iso(now - timedelta(minutes=42)),
+        )
+        db.log_tool_call(
+            agent="technical_analyst",
+            tool="read_bars",
+            params={"ticker": "AMD", "limit": 50, "timeframe": "1h"},
+            result={"bars_count": 50, "latest_close": 118.45},
+            duration_ms=120,
+            cycle_id=3,
+            chat_id=db.get_or_create_chat("technical_analyst", "AMD"),
+            ts=_iso(now - timedelta(minutes=14)),
+        )
+        db.log_tool_call(
+            agent="market_analyst",
+            tool="macro_series",
+            params={"series_id": "CPIAUCSL"},
+            result={"value": 314.5, "change_pct": 0.2},
+            duration_ms=95,
+            chat_id=ma_macro_chat,
+            ts=_iso(now - timedelta(hours=3, minutes=1)),
+        )
+        db.log_tool_call(
+            agent="sentiment_analyst",
+            tool="fetch_news",
+            params={"symbol": "NVDA", "limit": 20},
+            result={},
+            error="Alpaca News API rate limit: 429 Too Many Requests (retry after 30s)",
+            duration_ms=4500,
+            chat_id=db.get_or_create_chat("sentiment_analyst", "news"),
+            ts=_iso(now - timedelta(hours=1, minutes=15)),
+        )
+        db.log_tool_call(
+            agent="technical_analyst",
+            tool="indicators",
+            params={},
+            result={},
+            duration_ms=110,
+            compacted=True,
+            chat_id=db.get_or_create_chat("technical_analyst", "AAPL"),
+            ts=_iso(now - timedelta(days=95)),
+        )
+
+        # Uso e costi LLM (oggi e giorni scorsi)
+        db.log_llm_call(agent="portfolio_manager", model="my-combo", tokens_in=1850, tokens_out=380, cost=0.085, duration_ms=1450, ts=_iso(now - timedelta(minutes=45)))
+        db.log_llm_call(agent="technical_analyst", model="my-combo", tokens_in=1200, tokens_out=220, cost=0.045, duration_ms=980, ts=_iso(now - timedelta(minutes=43)))
+        db.log_llm_call(agent="technical_analyst", model="my-combo", tokens_in=950, tokens_out=180, cost=0.035, duration_ms=820, ts=_iso(now - timedelta(minutes=14)))
+        db.log_llm_call(agent="market_analyst", model="my-combo", tokens_in=1400, tokens_out=310, cost=0.060, duration_ms=1120, ts=_iso(now - timedelta(hours=2, minutes=26)))
+        db.log_llm_call(agent="risk_analyst", model="my-combo", tokens_in=800, tokens_out=150, cost=0.025, duration_ms=650, ts=_iso(now - timedelta(hours=6, minutes=58)))
+
+        for d in range(1, 8):
+            day_ts = now - timedelta(days=d)
+            db.log_llm_call(agent="portfolio_manager", model="my-combo", tokens_in=3500, tokens_out=700, cost=0.150, duration_ms=2200, ts=_iso(day_ts.replace(hour=14, minute=30)))
+            db.log_llm_call(agent="technical_analyst", model="my-combo", tokens_in=2800, tokens_out=550, cost=0.110, duration_ms=1800, ts=_iso(day_ts.replace(hour=15, minute=0)))
+            db.log_llm_call(agent="market_analyst", model="my-combo", tokens_in=2200, tokens_out=420, cost=0.085, duration_ms=1500, ts=_iso(day_ts.replace(hour=10, minute=15)))

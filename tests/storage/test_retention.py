@@ -293,6 +293,15 @@ def test_run_retention_job_on_db(tmp_path):
         (old_llm_ts, h1, h2),
     )
 
+    # 2b. Old tool call
+    db.log_tool_call(
+        agent="pm",
+        tool="read_state",
+        params={"ticker": "AAPL"},
+        result={"price": 150.0},
+        ts=old_llm_ts,
+    )
+
     # 3. Hourly bars
     old_hour_ts = (today - timedelta(days=100)).isoformat() + "T14:00:00Z"
     db.connection.execute(
@@ -307,6 +316,7 @@ def test_run_retention_job_on_db(tmp_path):
     stats = run_retention_job(db, today=today)
     assert stats["compacted_news"] == 1
     assert stats["compacted_llm"] == 1
+    assert stats["compacted_tools"] == 1
     assert stats["downsampled_hourly"] == 1
 
     # Verify old news has full_text=None, recent news kept full_text

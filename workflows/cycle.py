@@ -366,7 +366,13 @@ class CycleRunner:
                 tools = self.env.tools_for(agent_name, chat_id=chat_id, cycle_id=self.cycle_id)
                 agent_spec = self._get_agent_spec(agent_name)
 
-                result = self.backend.step(agent_spec, chat_context, tools)
+                self.db.set_agent_status(agent_name, "working", {
+                    "cycle_id": self.cycle_id, "ticker": self.ticker, "chat_id": chat_id,
+                })
+                try:
+                    result = self.backend.step(agent_spec, chat_context, tools)
+                finally:
+                    self.db.set_agent_status(agent_name, "idle")
 
                 if self.registry:
                     usage = result.usage

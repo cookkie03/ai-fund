@@ -330,11 +330,14 @@ class Office:
                 effort=self.settings.get_agent("market_analyst").effort,
             )
 
+            self.db.set_agent_status("market_analyst", "working", {"theme": theme})
             try:
                 res: StepResult = self.backend.step(spec, chat_context, tools)
             except Exception as e:
                 logger.warning(f"Market analyst step failed: {e}")
                 break
+            finally:
+                self.db.set_agent_status("market_analyst", "idle")
 
             # Execute tools
             for tc in res.tool_calls:

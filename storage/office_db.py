@@ -392,6 +392,20 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         CREATE INDEX chart_annotations_ticker ON chart_annotations(ticker, status);
     """,
     ),
+    (
+        6,
+        "006_cockpit_office_backend",
+        """
+        ALTER TABLE agents ADD COLUMN status TEXT NOT NULL DEFAULT 'idle';
+        ALTER TABLE agents ADD COLUMN current_task_json TEXT;
+        ALTER TABLE agents ADD COLUMN last_activity_ts TEXT;
+
+        ALTER TABLE tool_calls ADD COLUMN duration_ms INTEGER;
+        ALTER TABLE tool_calls ADD COLUMN cycle_id INTEGER;
+        ALTER TABLE tool_calls ADD COLUMN compacted INTEGER NOT NULL DEFAULT 0;
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_cycle ON tool_calls(cycle_id);
+        """,
+    ),
 ]
 
 
@@ -405,6 +419,7 @@ class OfficeDB:
         self._lock = threading.RLock()
         self._on_commit_callbacks: list[Callable[[], None]] | None = None
         self._tx_depth = 0
+        self.event_log: Any = None
         self._connection = sqlite3.connect(
             str(self.path), isolation_level=None, check_same_thread=False
         )
@@ -567,6 +582,28 @@ class OfficeDB:
             (name, role, config_json, prompt_hash),
         )
 
+    def set_agent_status(
+        self, agent: str, status: str, current_task: dict | None = None,
+        ts: str | None = None,
+    ) -> None:
+        if status not in ("working", "waiting", "idle"):
+            raise ValueError("Invalid agent status")
+        ts = ts or utc_now_iso()
+        with self.transaction():
+            self._connection.execute(
+                "INSERT INTO agents(name, role, status, current_task_json, last_activity_ts) "
+                "VALUES (?, ?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET "
+                "status=excluded.status, current_task_json=excluded.current_task_json, "
+                "last_activity_ts=excluded.last_activity_ts",
+                (agent, agent, status, json.dumps(current_task) if current_task else None, ts),
+            )
+            if self.event_log:
+                self.event_log.append(
+                    "agent.status", f"agent:{agent}",
+                    {"agent": agent, "status": status, "current_task": current_task, "ts": ts},
+                    actor=agent,
+                )
+
     def get_agent(self, name: str) -> dict | None:
         row = self._connection.execute("SELECT * FROM agents WHERE name = ?", (name,)).fetchone()
         return dict(row) if row else None
@@ -574,7 +611,10 @@ class OfficeDB:
     # --- Chats & Messages ---
 
     def create_chat(self, agent: str, topic: str) -> int:
-        self.register_agent(agent, "agent")
+        self._connection.execute(
+            "INSERT INTO agents(name, role) VALUES (?, ?) ON CONFLICT(name) DO NOTHING",
+            (agent, agent),
+        )
         cursor = self._connection.execute(
             """
             INSERT INTO chats (agent, topic, created_at)
@@ -618,14 +658,25 @@ class OfficeDB:
         if kind not in ("original", "summary"):
             raise ValueError(f"Invalid message kind: {kind}")
         ts = ts or utc_now_iso()
-        cursor = self._connection.execute(
-            """
-            INSERT INTO messages (chat_id, author, ts, text, kind, cycle_id)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (chat_id, author, ts, text, kind, cycle_id),
-        )
-        return int(cursor.lastrowid)
+        with self.transaction():
+            cursor = self._connection.execute(
+                """
+                INSERT INTO messages (chat_id, author, ts, text, kind, cycle_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (chat_id, author, ts, text, kind, cycle_id),
+            )
+            message_id = int(cursor.lastrowid)
+            if self.event_log:
+                chat = self.get_chat(chat_id)
+                self.event_log.append(
+                    "chat.message", f"chat:{chat_id}",
+                    {"chat_id": chat_id, "message_id": message_id,
+                     "agent": chat["agent"], "topic": chat["topic"], "author": author,
+                     "text": text, "kind": kind, "cycle_id": cycle_id, "ts": ts},
+                    actor=author,
+                )
+            return message_id
 
     def list_messages(
         self,
@@ -1146,19 +1197,36 @@ class OfficeDB:
         error: str | None = None,
         chat_id: int | None = None,
         ts: str | None = None,
+        duration_ms: int | None = None,
+        cycle_id: int | None = None,
+        compacted: bool = False,
     ) -> int:
         ts = ts or utc_now_iso()
         params_json = params if isinstance(params, str) else json.dumps(params)
         result_json = result if isinstance(result, str) else json.dumps(result)
-        cursor = self._connection.execute(
-            """
-            INSERT INTO tool_calls (
-                ts, agent, chat_id, tool, params_json, result_json, error
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (ts, agent, chat_id, tool, params_json, result_json, error),
-        )
-        return int(cursor.lastrowid)
+        with self.transaction():
+            cursor = self._connection.execute(
+                """
+                INSERT INTO tool_calls (
+                    ts, agent, chat_id, tool, params_json, result_json, error,
+                    duration_ms, cycle_id, compacted
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (ts, agent, chat_id, tool, params_json, result_json, error,
+                 duration_ms, cycle_id, int(compacted)),
+            )
+            call_id = int(cursor.lastrowid)
+            if self.event_log:
+                chat = self.get_chat(chat_id) if chat_id is not None else None
+                self.event_log.append(
+                    "tool.called", f"tool:{call_id}",
+                    {"id": call_id, "agent": agent, "tool": tool, "chat_id": chat_id,
+                     "topic": chat["topic"] if chat else None, "cycle_id": cycle_id,
+                     "duration_ms": duration_ms, "success": error is None,
+                     "error": error, "ts": ts, "compacted": compacted},
+                    actor=agent,
+                )
+            return call_id
 
     def log_cli_command(self, command: str, args: dict | str = "{}", ts: str | None = None) -> int:
         ts = ts or utc_now_iso()

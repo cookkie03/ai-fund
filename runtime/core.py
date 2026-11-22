@@ -146,6 +146,7 @@ class Runtime:
         )
         self.bus = EventBus()
         self.event_log = EventLog(db=office.db, bus=self.bus)
+        office.db.event_log = self.event_log
         self.read = ReadModel(db_path=office.db.path, runtime=self)
 
         self.office.event_log = self.event_log
