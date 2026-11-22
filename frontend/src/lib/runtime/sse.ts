@@ -72,6 +72,10 @@ export const EVENT_TYPES = [
   "chat.message",
   "tool.started",
   "tool.called",
+  // Ticker agents (ticker-agents-backend): dossier versions and the proposal flow.
+  "dossier.updated",
+  "proposal.submitted",
+  "proposal.decided",
   "annotation.created",
   "annotation.updated",
   "annotation.struck",

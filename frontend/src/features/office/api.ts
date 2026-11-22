@@ -58,8 +58,16 @@ function normalizeAgent(r: Row): OfficeAgent {
     r.today_cost !== undefined || r.today_tokens_in !== undefined
       ? { cost: r.today_cost, tokens_in: r.today_tokens_in, tokens_out: r.today_tokens_out, calls: r.today_calls }
       : null;
+  const name = str(r.name ?? r.agent) ?? "sconosciuto";
+  // Ticker-agent contract: `kind`, `ticker`, `supervisor`. A Runtime that predates it sends none of them;
+  // then the identity `ticker:<SYM>` (same contract) is the only honest signal.
+  const prefixed = /^ticker:(.+)$/i.exec(name);
+  const kind = r.kind === "ticker" || r.kind === "core" ? r.kind : prefixed ? "ticker" : "core";
   return {
-    name: str(r.name ?? r.agent) ?? "sconosciuto",
+    name,
+    kind,
+    ticker: kind === "ticker" ? (str(r.ticker) ?? prefixed?.[1]?.toUpperCase() ?? null) : null,
+    supervisor: str(r.supervisor),
     role: str(r.role),
     model: str(r.model),
     status: status === "working" || status === "waiting" || status === "idle" ? (status as AgentStatus) : null,
@@ -148,7 +156,7 @@ export function fetchAgents(client: RuntimeClient): Promise<Sourced<OfficeAgent[
           for (const m of mine) if (!last || (parseTs(m.ts) ?? 0) > (parseTs(last) ?? 0)) last = m.ts;
           if (!current && c.status === "open" && mine.length) current = { kind: "cycle", id: c.id, ticker: c.ticker, label: null };
         }
-        return { name, role: null, model: null, status: null, current, last_activity_ts: last, today: null };
+        return { name, kind: "core", ticker: null, supervisor: null, role: null, model: null, status: null, current, last_activity_ts: last, today: null };
       });
       return { source: "derived", data: agents, note: "Stato, modello e costi non sono ancora esposti dal Runtime: ultima attività e ciclo corrente vengono dai cicli recenti." };
     },

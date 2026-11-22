@@ -174,7 +174,9 @@ export type CommandName =
   | "resume"
   | "reconcile_broker"
   | "refresh_data"
-  | "mark_inbox_read";
+  | "mark_inbox_read"
+  | "add_dossier_note"
+  | "decide_proposal";
 
 export type CommandPayloads = {
   enqueue_task: { agent: string; ticker: string; reason: string; when_ts?: string };
@@ -190,4 +192,20 @@ export type CommandPayloads = {
   reconcile_broker: Record<string, never>;
   refresh_data: { kinds?: string[]; force?: boolean };
   mark_inbox_read: { item_id: number };
+  /** A note signed by Luca in the ticker's dossier; agents read it as a senior colleague's view. */
+  add_dossier_note: { ticker: string; text: string };
+  /**
+   * Luca decides in the PM's place: same path as the PM, the Risk Gate stays sovereign.
+   * Field names beyond `confirm` are the frontend's proposal (.scratch/ticker-agents/wiki-notes-frontend.md).
+   */
+  decide_proposal: {
+    proposal_id: number;
+    action: "accept" | "defer" | "reject" | "ask";
+    reason: string;
+    confirm: true;
+    /** accept only: resize the proposal (fraction of equity). */
+    sizing_fraction?: number;
+    /** defer only: when to look again (YYYY-MM-DD). */
+    next_check_date?: string;
+  };
 };

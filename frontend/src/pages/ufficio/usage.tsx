@@ -2,7 +2,7 @@ import { ChevronDown, Coins } from "lucide-react";
 import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { PERIOD_LABEL, useUsage, type UsagePeriod } from "@/features/office/hooks";
-import { AGENTS } from "@/lib/authors";
+import { author } from "@/lib/authors";
 import { cn } from "@/lib/utils";
 import { fmtCost, fmtTokens, Meter, totalTokens, onRadioKeys } from "./parts";
 
@@ -21,7 +21,7 @@ export function UsageButton({ agent, className }: { agent: string; className?: s
     <Popover>
       <PopoverTrigger
         className={cn("inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-control px-2 text-xs transition-colors hover:bg-hover", className)}
-        aria-label={`Costi e token di ${AGENTS[agent]?.name ?? agent}`}
+        aria-label={`Costi e token di ${author(agent).name}`}
       >
         <Coins className="size-3.5 text-fg-subtle" aria-hidden />
         {today.isPending ? (
@@ -37,7 +37,7 @@ export function UsageButton({ agent, className }: { agent: string; className?: s
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-0">
         <div className="flex items-center gap-2 px-3.5 pb-2 pt-3">
-          <h3 className="text-[13px] font-semibold text-fg">Uso di {AGENTS[agent]?.short ?? agent}</h3>
+          <h3 className="text-[13px] font-semibold text-fg">Uso di {author(agent).short}</h3>
         </div>
         <div className="px-3.5 pb-2">
           <div role="radiogroup" aria-label="Periodo" className="seg w-full" onKeyDown={onRadioKeys}>

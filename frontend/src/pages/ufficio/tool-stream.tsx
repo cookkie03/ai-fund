@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { IconButton } from "@/components/tile";
 import { useToolCalls } from "@/features/office/hooks";
 import type { ToolCall } from "@/features/office/types";
-import { AGENTS } from "@/lib/authors";
+import { author } from "@/lib/authors";
 import { fmtAge, fmtDateTime, fmtWhen } from "@/lib/format";
 import { useNow, useRuntime } from "@/lib/runtime/provider";
 import { cn } from "@/lib/utils";
@@ -192,7 +192,7 @@ export function ToolStream({ agent, onHide, className, style }: { agent: string;
   }, [agent]);
 
   return (
-    <aside aria-label={`Tool di ${AGENTS[agent]?.name ?? agent}`} className={cn("flex min-h-0 flex-col bg-ground", className)} style={style}>
+    <aside aria-label={`Tool di ${author(agent).name}`} className={cn("flex min-h-0 flex-col bg-ground", className)} style={style}>
       <header className="flex h-11 shrink-0 items-center gap-2 pl-4 pr-2">
         <h2 className="text-[13px] font-semibold tracking-[-0.005em] text-fg">Tool</h2>
         {calls.length > 0 && <span className="num rounded-tag bg-hover px-1.5 text-[10px] leading-4 text-fg-subtle">{calls.length}</span>}
@@ -241,7 +241,7 @@ export function ToolStream({ agent, onHide, className, style }: { agent: string;
           </div>
         ) : shown.length === 0 ? (
           <p className="px-2.5 py-6 text-center text-xs text-fg-subtle">
-            {filter === "errors" ? "Nessuna chiamata fallita." : `${AGENTS[agent]?.short ?? agent} non ha ancora chiamato tool.`}
+            {filter === "errors" ? "Nessuna chiamata fallita." : `${author(agent).short} non ha ancora chiamato tool.`}
           </p>
         ) : (
           <ol className="space-y-0.5">

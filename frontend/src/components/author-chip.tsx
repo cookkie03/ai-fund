@@ -39,7 +39,7 @@ export function AuthorChip({ actor, author, label = false, size = "sm", classNam
           boxShadow: "inset 0 0.5px 0 oklch(1 0 0 / 0.3)",
         }}
       >
-        {a.initials}
+        {a.ticker && size === "lg" ? <span className={a.ticker.length > 3 ? "text-[10px] tracking-[-0.03em]" : "text-[11px]"}>{a.ticker.slice(0, 4)}</span> : a.initials}
       </span>
       {label && <span className="truncate text-fg-muted">{a.short}</span>}
     </span>

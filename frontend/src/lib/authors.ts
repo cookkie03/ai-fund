@@ -13,7 +13,17 @@ export type Author = {
   /** CSS colour token. */
   color: string;
   channel?: string;
+  /** Ticker agents (`ticker:<SYM>`): the symbol they own; the avatar shows it instead of a monogram. */
+  ticker?: string;
 };
+
+/** A ticker agent's identity is `ticker:<SYM>` (ADR 0004, .scratch/ticker-agents/brief.md). */
+export const tickerAgentId = (symbol: string) => `ticker:${symbol.toUpperCase()}`;
+
+export function tickerOf(actor: string | null | undefined): string | null {
+  const m = /^ticker:(.+)$/i.exec((actor ?? "").trim());
+  return m ? m[1].toUpperCase() : null;
+}
 
 const HUMAN_CHANNELS: Record<string, string> = {
   cockpit: "cockpit",
@@ -38,6 +48,10 @@ export const AGENT_IDS = Object.keys(AGENTS).filter((a) => a !== "subagent");
 export const LUCA: Author = { id: "luca", kind: "human", name: "Luca", short: "Luca", initials: "LM", color: "var(--author-luca)", channel: "cockpit" };
 
 export function author(actor: string | null | undefined): Author {
+  const sym = tickerOf(actor);
+  if (sym) {
+    return { id: tickerAgentId(sym), kind: "agent", name: `Agente ${sym}`, short: sym, initials: sym.slice(0, 2), color: "var(--author-ticker)", ticker: sym };
+  }
   const id = (actor ?? "").trim().toLowerCase();
   if (id in HUMAN_CHANNELS) return { ...LUCA, channel: HUMAN_CHANNELS[id] };
   const agent = AGENTS[id];

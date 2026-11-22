@@ -71,6 +71,8 @@ function keysFor(type: string): string[][] {
   if (type.startsWith("task.")) return [["office", "agents"]];
   if (type.startsWith("tool.")) return [["office", "tools"], ["office", "agents"], ["office", "usage"]];
   if (type === "agent.status") return [["office", "agents"]];
+  if (type === "dossier.updated") return [["dossier"], ["dossier_history"], ["dossiers"]];
+  if (type.startsWith("proposal.")) return [["proposals"], ["dossier"], ["dossiers"], ["dossier_history"], ["office", "agents"]];
   if (type === "data.refreshed") return [["bars"], ["indicators"]];
   return [];
 }
