@@ -2,13 +2,15 @@ import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { officeFixtures } from "./dev/office-fixtures";
 
 // The Runtime has no CORS: the browser reaches it through this same-origin proxy.
 const runtimeUrl = process.env.COCKPIT_RUNTIME_URL ?? "http://127.0.0.1:8766";
 const port = Number(process.env.COCKPIT_PORT ?? 5174);
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  // COCKPIT_OFFICE_FIXTURES=1: synthetic answers for the Ufficio reads the Runtime does not expose yet (dev server only).
+  plugins: [react(), tailwindcss(), ...(process.env.COCKPIT_OFFICE_FIXTURES === "1" ? [officeFixtures()] : [])],
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
   server: {
     host: "127.0.0.1",

@@ -317,3 +317,16 @@
 :root[data-resizing] { user-select: none; }
 :root[data-resizing="vertical"] * { cursor: col-resize !important; }
 :root[data-resizing="horizontal"] * { cursor: row-resize !important; }
+
+/* Ufficio: a working agent's dot breathes in its own colour; a tool block opens in place. */
+@keyframes agent-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.agent-working { animation: agent-breathe 2.4s ease-in-out infinite; }
+.expand {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 220ms var(--ease-settle-curve);
+}
+.expand[data-open="true"] { grid-template-rows: 1fr; }
+.expand > * { min-height: 0; overflow: hidden; }
+@keyframes row-arrive { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.row-arrive { animation: row-arrive 260ms var(--ease-settle-curve) both; }

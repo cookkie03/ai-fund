@@ -66,7 +66,11 @@ function keysFor(type: string): string[][] {
   if (type === "halt.changed") return [["health"], ["orders"]];
   if (type === "inbox.changed") return [["inbox"]];
   if (type === "portfolio.synced") return [["portfolio"], ["equity"]];
-  if (type.startsWith("cycle.") || type === "message.appended") return [["cycles"], ["ticker_state"]];
+  if (type === "message.appended" || type === "chat.message") return [["cycles"], ["ticker_state"], ["office", "chat"], ["office", "topics"], ["office", "agents"]];
+  if (type.startsWith("cycle.")) return [["cycles"], ["ticker_state"], ["office", "agents"], ["office", "topics"]];
+  if (type.startsWith("task.")) return [["office", "agents"]];
+  if (type.startsWith("tool.")) return [["office", "tools"], ["office", "agents"], ["office", "usage"]];
+  if (type === "agent.status") return [["office", "agents"]];
   if (type === "data.refreshed") return [["bars"], ["indicators"]];
   return [];
 }

@@ -106,6 +106,8 @@ type CommandOpts = {
   success?: string | false;
   /** Query prefixes to refetch after the command settles. */
   invalidate?: string[][];
+  /** False when the caller shows the refusal reasons inline, next to the control that caused them. */
+  toastRefusal?: boolean;
 };
 
 /**
@@ -126,6 +128,7 @@ export function useCommand<N extends CommandName>(name: N, opts: CommandOpts = {
     },
     onError: (err) => {
       if (err instanceof CommandRefused) {
+        if (opts.toastRefusal === false) return;
         toast.error("Il Runtime ha rifiutato il comando", { description: err.reasons.join(" · ") || "Nessuna ragione indicata" });
       } else if (err instanceof RuntimeError && err.unreachable) {
         toast.error("Runtime irraggiungibile", { description: "Il comando non è stato inviato. Riprova quando torna raggiungibile." });
