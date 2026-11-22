@@ -8,9 +8,11 @@ import threading
 from typing import TYPE_CHECKING, Any
 
 from runtime.commands import (
+    AddDossierNote,
     AddWatchlist,
     ApproveOrder,
     CommandResult,
+    DecideProposal,
     EnqueueTask,
     Halt,
     IngestAlert,
@@ -119,6 +121,60 @@ def handle_say(ctx: RuntimeContext, cmd: Say, actor: str) -> CommandResult:
             data["task_id"] = task_id
 
     return CommandResult(ok=True, data=data)
+
+
+def handle_add_dossier_note(ctx: RuntimeContext, cmd: AddDossierNote, actor: str) -> CommandResult:
+    from uuid import uuid4
+
+    text = cmd.text.strip()
+    if not text:
+        return CommandResult(ok=False, reasons=["Note text is required"])
+    ticker = cmd.ticker.upper()
+    ts = ctx.office.get_now_iso()
+    note = {"id": str(uuid4()), "author": actor, "text": text, "ts": ts}
+    version = ctx.office.db.write_dossier_section(ticker, "notes", note, actor, ts)
+    return CommandResult(ok=True, data={"ticker": ticker, "version": version, "note": note})
+
+def handle_decide_proposal(ctx: RuntimeContext, cmd: DecideProposal, actor: str) -> CommandResult:
+    if not cmd.confirm:
+        return CommandResult(ok=False, reasons=["decide_proposal requires confirm: true"])
+    try:
+        env = ctx.office.get_env(None)
+        if cmd.action == "accept":
+            with ctx.office.db.transaction():
+                proposal = ctx.office.db.connection.execute("SELECT * FROM proposals WHERE id = ?", (cmd.proposal_id,)).fetchone()
+                if not proposal or ctx.office.db.get_active_cycle(proposal["ticker"]) is not None:
+                    raise ValueError("Cannot accept an unknown proposal or while its ticker cycle is active")
+                res = env.decide_proposal(cmd.proposal_id, cmd.action, cmd.reason, cmd.when, actor)
+                ctx.office.db.connection.execute("UPDATE proposals SET status='processing' WHERE id=?", (cmd.proposal_id,))
+        else:
+            res = env.decide_proposal(cmd.proposal_id, cmd.action, cmd.reason, cmd.when, actor)
+        if cmd.action != "accept":
+            return CommandResult(ok=True, data=res)
+        row = ctx.office.db.connection.execute("SELECT * FROM proposals WHERE id=?", (cmd.proposal_id,)).fetchone()
+        ticker = row["ticker"]
+        from workflows.cycle import CycleRunner
+
+        runner = CycleRunner(db=ctx.office.db, backend=ctx.office.backend, env=env,
+            order_flow=ctx.office.order_flow, clock=ctx.office.clock, settings=ctx.office.settings,
+            registry=ctx.office.registry, ticker=ticker, cycle_id=row["cycle_id"] or 0,
+            sleep_fn=ctx.office.sleep_fn, event_log=ctx.office.event_log)
+        outcome = runner._process_order_flow(row["direction"], {"draft": env.current_draft(ticker).get("draft")})
+        runner._ensure_future_scheduled_task()
+        if outcome.is_submitted or outcome.is_pending or outcome.is_queued:
+            ctx.office.db.connection.execute("UPDATE proposals SET status='accepted' WHERE id=? AND status='processing'", (cmd.proposal_id,))
+            ctx.office.db.write_dossier_section(ticker, "risk", {"verdict": "approved", "rationale": "Risk Gate superato", "guardrails": []}, "risk_gate", ctx.office.get_now_iso())
+            return CommandResult(ok=True, data={**res, "order_id": outcome.order_id})
+        reason = "; ".join(outcome.reasons) or outcome.status
+        ctx.office.db.connection.execute("UPDATE proposals SET status='deferred' WHERE id=? AND status='processing'", (cmd.proposal_id,))
+        ctx.office.db.write_dossier_section(ticker, "status", "monitoring", "risk_gate", ctx.office.get_now_iso())
+        ctx.office.db.write_dossier_section(ticker, "risk", {"verdict": "declined", "rationale": reason,
+            "guardrails": []}, "risk_gate", ctx.office.get_now_iso())
+        return CommandResult(ok=False, reasons=[reason])
+    except Exception as exc:
+        if cmd.action == "accept":
+            ctx.office.db.connection.execute("UPDATE proposals SET status='deferred' WHERE id=? AND status='processing'", (cmd.proposal_id,))
+        return CommandResult(ok=False, reasons=[str(exc)])
 
 
 def handle_add_watchlist(ctx: RuntimeContext, cmd: AddWatchlist, actor: str) -> CommandResult:

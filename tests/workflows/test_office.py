@@ -174,6 +174,7 @@ def test_deliver_task_opens_cycle_compacts_chat_and_translates_prompt(
 
     # Scripted PM that immediately defers
     script = {
+        ("ticker:AAPL", 0): StepResult(tool_calls=[ToolCall(id="p", name="submit_proposal", args={"ticker":"AAPL", "direction":"hold", "conviction":0.5, "reason":"Review"})], done=True),
         ("portfolio_manager", 0): StepResult(
             tool_calls=[
                 ToolCall(
@@ -183,8 +184,8 @@ def test_deliver_task_opens_cycle_compacts_chat_and_translates_prompt(
                 ),
                 ToolCall(
                     id="tc2",
-                    name="defer",
-                    args={"ticker": "AAPL", "reason": "Further technical confirmation needed"},
+                    name="decide_proposal",
+                    args={"proposal_id": 1, "action": "defer", "when": "2026-06-03T10:00:00Z", "reason": "Further technical confirmation needed"},
                 ),
             ],
             done=True,
@@ -285,12 +286,12 @@ def test_full_cycle_analysts_turn_and_pm_accept_submits_order(
 ):
     """Stories 23, 46, 57, 63: PM sends opening to analysts, analysts suggest and set coeffs, PM accepts, order submitted to broker."""
     # Step sequence:
-    # 1. PM Turn 0: sends message to technical and risk analysts
+    # 1. Ticker agent sends messages to technical and risk analysts
     # 2. Risk analyst Turn 0: sets k_entry & risk_fraction, suggests BUY
     # 3. Technical analyst Turn 0: sets k_stop & k_tp, suggests BUY
     # 4. PM Turn 1: schedules next check and accepts order
     script = {
-        ("portfolio_manager", 0): StepResult(
+        ("ticker:AAPL", 0): StepResult(
             outgoing_messages=[
                 OutgoingMessage(
                     to_agent="risk_analyst",
@@ -345,7 +346,9 @@ def test_full_cycle_analysts_turn_and_pm_accept_submits_order(
             ],
             done=True,
         ),
-        ("portfolio_manager", 1): StepResult(
+        ("ticker:AAPL", 1): StepResult(tool_calls=[ToolCall(id="prop", name="submit_proposal", args={
+            "ticker": "AAPL", "direction": "buy", "conviction": 0.8, "reason": "Convergenza"})], done=True),
+        ("portfolio_manager", 0): StepResult(
             tool_calls=[
                 ToolCall(
                     id="t_sched",
@@ -358,10 +361,10 @@ def test_full_cycle_analysts_turn_and_pm_accept_submits_order(
                 ),
                 ToolCall(
                     id="t_acc",
-                    name="accept_order",
+                    name="decide_proposal",
                     args={
-                        "ticker": "AAPL",
-                        "action": "buy",
+                        "proposal_id": 1,
+                        "action": "accept",
                         "reason": "Forte convergenza tecnica e di rischio",
                     },
                 ),
@@ -427,6 +430,117 @@ def test_full_cycle_analysts_turn_and_pm_accept_submits_order(
     assert len(future_tasks) >= 1
 
     registry.close()
+
+
+def test_ticker_agent_orchestrates_and_pm_defers_proposal(db, env, order_flow, fixed_now):
+    script = {
+        ("ticker:AAPL", 0): StepResult(tool_calls=[ToolCall(
+            id="p", name="submit_proposal", args={"ticker": "AAPL", "direction": "buy",
+                                                    "conviction": 0.8, "reason": "Opportunity"})], done=True),
+        ("portfolio_manager", 0): StepResult(tool_calls=[ToolCall(
+            id="d", name="decide_proposal", args={"proposal_id": 1, "action": "defer",
+                "reason": "Wait", "when": "2026-06-10T10:00:00Z"})], done=True),
+    }
+    office = Office(db=db, backend=ScriptedBackend(script), env_factory=env,
+                    order_flow=order_flow, clock=lambda: fixed_now, sleep_fn=lambda _: None)
+    task = ScheduledTask(agent="portfolio_manager", chat="AAPL", when=fixed_now,
+                         source=TaskSource.AGENT, reason="Analyze")
+    assert office.deliver(task) == "deferred"
+    assert db.get_agent("ticker:AAPL")["role"] == "ticker_agent"
+    assert db.connection.execute("SELECT status FROM proposals").fetchone()[0] == "deferred"
+
+
+def test_ticker_agent_receives_specialist_reply_before_proposing(db, env, order_flow, fixed_now):
+    script = {
+        ("ticker:AAPL", 0): StepResult(outgoing_messages=[OutgoingMessage(
+            to_agent="technical_analyst", chat="AAPL", text="Analyze")], done=True),
+        ("technical_analyst", 0): StepResult(content="Technical view", done=True),
+        ("ticker:AAPL", 1): StepResult(tool_calls=[ToolCall(id="p", name="submit_proposal", args={
+            "ticker": "AAPL", "direction": "buy", "conviction": 0.8, "reason": "Trend"})], done=True),
+        ("portfolio_manager", 0): StepResult(tool_calls=[ToolCall(id="d", name="decide_proposal", args={
+            "proposal_id": 1, "action": "defer", "reason": "Wait", "when": "2026-06-10T10:00:00Z"})], done=True),
+    }
+    office = Office(db=db, backend=ScriptedBackend(script), env_factory=env,
+                    order_flow=order_flow, clock=lambda: fixed_now, sleep_fn=lambda _: None)
+    task = ScheduledTask(agent="portfolio_manager", chat="AAPL", when=fixed_now,
+                         source=TaskSource.AGENT, reason="Analyze")
+    assert office.deliver(task) == "deferred"
+    chat_id = db.get_or_create_chat("ticker:AAPL", "AAPL")
+    assert any(m["text"] == "Technical view" for m in db.list_messages(chat_id))
+
+
+def test_parallel_ticker_cycles_keep_their_proposals_separate(db, env, order_flow, fixed_now):
+    from concurrent.futures import ThreadPoolExecutor
+
+    class Backend:
+        def step(self, agent, context, tools):
+            ticker = agent.name.split(":")[-1] if agent.name.startswith("ticker:") else None
+            if ticker:
+                return StepResult(tool_calls=[ToolCall(id="p", name="submit_proposal", args={
+                    "ticker": ticker, "direction": "buy", "conviction": 0.5, "reason": ticker})], done=True)
+            return StepResult(done=True)
+
+    office = Office(db=db, backend=Backend(), env_factory=env, order_flow=order_flow,
+                    clock=lambda: fixed_now, sleep_fn=lambda _: None)
+    tasks = [ScheduledTask(agent="portfolio_manager", chat=sym, when=fixed_now,
+             source=TaskSource.AGENT, reason="Analyze") for sym in ("AAPL", "MSFT")]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(office.deliver, tasks))
+    assert {r["ticker"] for r in db.connection.execute("SELECT ticker FROM proposals")} == {"AAPL", "MSFT"}
+    for ticker in ("AAPL", "MSFT"):
+        chat_id = db.get_or_create_chat(f"ticker:{ticker}", ticker)
+        messages = db.list_messages(chat_id)
+        assert not any(("MSFT" if ticker == "AAPL" else "AAPL") in m["text"] for m in messages)
+
+
+def test_accepted_proposal_goes_through_risk_gate(db, broker, env, order_flow, fixed_now):
+    db.set_ticker_state("AAPL", {"coefficients": {"risk_fraction": 0.003}})
+    script = {
+        ("ticker:AAPL", 0): StepResult(tool_calls=[ToolCall(id="p", name="submit_proposal", args={
+            "ticker": "AAPL", "direction": "buy", "conviction": 0.8, "reason": "Opportunity"})], done=True),
+        ("portfolio_manager", 0): StepResult(tool_calls=[ToolCall(id="d", name="decide_proposal", args={
+            "proposal_id": 1, "action": "accept", "reason": "Approve"})], done=True),
+    }
+    office = Office(db=db, backend=ScriptedBackend(script), env_factory=env,
+                    order_flow=order_flow, clock=lambda: fixed_now, sleep_fn=lambda _: None)
+    task = ScheduledTask(agent="portfolio_manager", chat="AAPL", when=fixed_now,
+                         source=TaskSource.AGENT, reason="Analyze")
+    assert office.deliver(task) == "accepted"
+    assert len(broker.get_open_orders("AAPL")) == 1
+    assert db.connection.execute("SELECT status FROM proposals").fetchone()[0] == "accepted"
+
+
+def test_risk_gate_blocks_accepted_ticker_proposal(db, broker, env, order_flow, fixed_now):
+    settings = OfficeSettings()
+    settings.limits.max_risk_per_trade_fraction = 0.000001
+    db.set_ticker_state("AAPL", {"coefficients": {"risk_fraction": 0.003}})
+    script = {
+        ("ticker:AAPL", 0): StepResult(tool_calls=[ToolCall(id="p", name="submit_proposal", args={
+            "ticker": "AAPL", "direction": "buy", "conviction": 0.8, "reason": "Opportunity"})], done=True),
+        ("portfolio_manager", 0): StepResult(tool_calls=[ToolCall(id="d", name="decide_proposal", args={
+            "proposal_id": 1, "action": "accept", "reason": "Approve"})], done=True),
+    }
+    office = Office(db=db, backend=ScriptedBackend(script), env_factory=env, settings=settings,
+                    order_flow=order_flow, clock=lambda: fixed_now, sleep_fn=lambda _: None)
+    task = ScheduledTask(agent="portfolio_manager", chat="AAPL", when=fixed_now,
+                         source=TaskSource.AGENT, reason="Analyze")
+    assert office.deliver(task) == "rimando"
+    assert not broker.get_open_orders("AAPL")
+    assert any("Risk Gate" in item["text"] for item in db.list_inbox(unread_only=False))
+
+
+def test_failed_ticker_agent_falls_back_to_rimando(db, env, order_flow, fixed_now):
+    class FailingBackend:
+        def step(self, agent, context, tools):
+            raise RuntimeError("ticker unavailable")
+
+    office = Office(db=db, backend=FailingBackend(), env_factory=env, order_flow=order_flow,
+                    clock=lambda: fixed_now, sleep_fn=lambda _: None)
+    task = ScheduledTask(agent="portfolio_manager", chat="AAPL", when=fixed_now,
+                         source=TaskSource.AGENT, reason="Analyze")
+    assert office.deliver(task) == "rimando"
+    assert db.list_inbox(unread_only=False)
+    assert db.due_scheduled_tasks("2026-06-10T00:00:00Z")
 
 
 def test_risk_gate_rejection_leads_to_rimando_with_reasons_and_future_task(
@@ -656,6 +770,7 @@ def test_market_analyst_activation_produces_scheduled_task_for_watchlist_ticker(
             done=True,
         ),
         # When AAPL cycle opens as a result:
+        ("ticker:AAPL", 0): StepResult(tool_calls=[ToolCall(id="p", name="submit_proposal", args={"ticker": "AAPL", "direction": "hold", "conviction": 0.5, "reason": "Catalyst"})], done=True),
         ("portfolio_manager", 0): StepResult(
             tool_calls=[
                 ToolCall(
@@ -665,8 +780,8 @@ def test_market_analyst_activation_produces_scheduled_task_for_watchlist_ticker(
                 ),
                 ToolCall(
                     id="tc_def",
-                    name="defer",
-                    args={"ticker": "AAPL", "reason": "Catalyst assessed, defer to next session"},
+                    name="decide_proposal",
+                    args={"proposal_id": 1, "action": "defer", "when": "2026-06-03T10:00:00Z", "reason": "Catalyst assessed, defer to next session"},
                 ),
             ],
             done=True,
@@ -730,6 +845,7 @@ def test_market_analyst_send_message_tool_call_activates_watchlist_ticker(
             done=True,
         ),
         # When AAPL cycle opens as a result:
+        ("ticker:AAPL", 0): StepResult(tool_calls=[ToolCall(id="p", name="submit_proposal", args={"ticker": "AAPL", "direction": "hold", "conviction": 0.5, "reason": "Catalyst"})], done=True),
         ("portfolio_manager", 0): StepResult(
             tool_calls=[
                 ToolCall(
@@ -739,8 +855,8 @@ def test_market_analyst_send_message_tool_call_activates_watchlist_ticker(
                 ),
                 ToolCall(
                     id="tc_def",
-                    name="defer",
-                    args={"ticker": "AAPL", "reason": "Catalyst assessed, defer to next session"},
+                    name="decide_proposal",
+                    args={"proposal_id": 1, "action": "defer", "when": "2026-06-03T10:00:00Z", "reason": "Catalyst assessed, defer to next session"},
                 ),
             ],
             done=True,

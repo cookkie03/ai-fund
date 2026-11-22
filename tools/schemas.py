@@ -13,6 +13,43 @@ class ReadStateInput(BaseModel):
     ticker: str = Field(description="Ticker symbol to read state for (e.g. AAPL)")
 
 
+class SubmitProposalInput(BaseModel):
+    ticker: str
+    direction: Literal["buy", "sell", "hold"]
+    conviction: float = Field(ge=0, le=1, allow_inf_nan=False)
+    reason: str = Field(min_length=1, max_length=10000)
+
+
+class DecideProposalInput(BaseModel):
+    proposal_id: int = Field(gt=0)
+    action: Literal["accept", "defer", "reject", "ask"]
+    reason: str = Field(min_length=1, max_length=10000)
+    when: str | None = None
+
+
+class ReadProposalsInput(BaseModel):
+    status: str | None = "pending"
+    ticker: str | None = None
+    limit: int = Field(default=50, ge=1, le=500)
+
+
+class WriteThesisInput(BaseModel):
+    ticker: str
+    direction: Literal["buy", "sell", "hold"]
+    conviction: float = Field(ge=0, le=1, allow_inf_nan=False)
+    pro: list[str] = Field(default_factory=list)
+    contro: list[str] = Field(default_factory=list)
+    time_horizon: str | None = None
+    catalysts: list[dict] = Field(default_factory=list)
+    next_check_date: str | None = None
+
+
+class WriteLessonInput(BaseModel):
+    ticker: str
+    text: str = Field(min_length=1, max_length=1000)
+    exit_reason: str | None = None
+
+
 class ReadPortfolioInput(BaseModel):
     """Input for reading current portfolio account, positions, and orders."""
 

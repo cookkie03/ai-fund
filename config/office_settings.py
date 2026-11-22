@@ -33,6 +33,7 @@ def default_agents() -> dict[str, AgentConfig]:
     """
     return {
         "portfolio_manager": AgentConfig(effort="high", api_key_env="OMNIROUTE_API_KEY"),
+        "ticker_agent": AgentConfig(effort="medium", api_key_env="OMNIROUTE_API_KEY"),
         "market_analyst": AgentConfig(effort="medium", api_key_env="OMNIROUTE_API_KEY"),
         "sentiment_analyst": AgentConfig(effort="medium", api_key_env="OMNIROUTE_API_KEY"),
         "technical_analyst": AgentConfig(effort="medium", api_key_env="OMNIROUTE_API_KEY"),
@@ -110,6 +111,7 @@ class OfficeSettings(BaseModel):
     budgets: BudgetsConfig = Field(default_factory=BudgetsConfig)
     retention: RetentionConfig = Field(default_factory=RetentionConfig)
     market: MarketConfig = Field(default_factory=MarketConfig)
+    dossier_stale_days: dict[str, int] = Field(default_factory=lambda: {"default": 30})
     max_parallel: int = 3
     db_size_alert_mb: int = 500
     approval_mode: ApprovalMode = "auto"
@@ -119,7 +121,7 @@ class OfficeSettings(BaseModel):
     def get_agent(self, name: str) -> AgentConfig:
         """Retrieve agent config by standard name or common alias."""
         key = name.lower().strip().replace(" ", "_").replace("-", "_")
-        canonical = _AGENT_ALIASES.get(key, key)
+        canonical = "ticker_agent" if key.startswith("ticker:") else _AGENT_ALIASES.get(key, key)
         if canonical in self.agents:
             return self.agents[canonical]
         raise KeyError(f"Unknown agent: '{name}'")

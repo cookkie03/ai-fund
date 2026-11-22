@@ -304,6 +304,126 @@ def test_analyst_write_analysis_and_suggest(test_setup):
         )
 
 
+def test_specialist_analysis_is_versioned_and_keeps_previous_text(test_setup):
+    from runtime.queries import ReadModel
+
+    env = test_setup["env"]
+    db = test_setup["db"]
+    write = _get_tool_map(env.tools_for("technical_analyst", chat_id=1))["write_analysis"]
+    for text in ("First analysis", "Revised analysis"):
+        write.execute(ToolCall(id=text, name="write_analysis", args={
+            "ticker": "AAPL", "section_text": text,
+        }))
+
+    read = ReadModel(db.path)
+    history = read.dossier_history("AAPL", limit=10)
+    assert [item["version"] for item in history] == [2, 1]
+    assert all(item["author"] == "technical_analyst" for item in history)
+    assert all(item["sections_changed"] == ["desks"] for item in history)
+    assert read.dossier("AAPL")["desks"][0]["text"] == "Revised analysis"
+
+
+def test_dossier_event_is_published_only_after_commit(test_setup):
+    from runtime.events import EventBus, EventLog
+
+    db = test_setup["db"]
+    bus = EventBus()
+    db.event_log = EventLog(db, bus)
+    events = []
+    bus.add_listener(events.append)
+    write = _get_tool_map(test_setup["env"].tools_for("technical_analyst", chat_id=1))["write_analysis"]
+    call = ToolCall(id="1", name="write_analysis", args={"ticker": "AAPL", "section_text": "Bull"})
+    with pytest.raises(RuntimeError), db.transaction():
+        write.execute(call)
+        assert events == []
+        raise RuntimeError("rollback")
+    assert events == []
+    assert db.get_ticker_state("AAPL") is None
+    write.execute(call)
+    dossier_events = [event for event in events if event.type == "dossier.updated"]
+    assert len(dossier_events) == 1
+    assert dossier_events[0].payload == {"ticker": "AAPL", "version": 1, "sections": ["desks"]}
+
+
+def test_second_analysis_keeps_first_version_readable(test_setup):
+    db = test_setup["db"]
+    write = _get_tool_map(test_setup["env"].tools_for("technical_analyst"))["write_analysis"]
+    for text in ("old", "new"):
+        write.execute(ToolCall(id=text, name="write_analysis", args={"ticker": "AAPL", "section_text": text}))
+    from runtime.queries import ReadModel
+
+    read = ReadModel(db.path)
+    assert read.dossier_version("AAPL", 1)["desks"][0]["text"] == "old"
+    assert read.dossier_version("AAPL", 2)["desks"][0]["text"] == "new"
+
+
+def test_ticker_agent_submits_proposal_without_creating_order(test_setup):
+    from runtime.queries import ReadModel
+
+    env, db = test_setup["env"], test_setup["db"]
+    db.register_agent("ticker:AAPL", "ticker_agent")
+    tool = _get_tool_map(env.tools_for("ticker:AAPL"))["submit_proposal"]
+    result = tool.execute(ToolCall(id="p1", name="submit_proposal", args={
+        "ticker": "AAPL", "direction": "buy", "conviction": 0.8, "reason": "Trend",
+    }))
+    proposals = ReadModel(db.path).proposals(status="pending")
+    assert len(proposals) == 1
+    assert proposals[0]["id"] == result["id"]
+    assert proposals[0]["agent"] == "ticker:AAPL"
+    assert db.connection.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 0
+
+
+def test_pm_can_defer_proposal_and_cannot_decide_it_twice(test_setup):
+    from runtime.queries import ReadModel
+
+    env, db = test_setup["env"], test_setup["db"]
+    db.register_agent("ticker:AAPL", "ticker_agent")
+    submit = _get_tool_map(env.tools_for("ticker:AAPL"))["submit_proposal"]
+    proposal = submit.execute(ToolCall(id="1", name="submit_proposal", args={
+        "ticker": "AAPL", "direction": "buy", "conviction": 0.8, "reason": "Trend",
+    }))
+    decide = _get_tool_map(env.tools_for("portfolio_manager"))["decide_proposal"]
+    decision = ToolCall(id="2", name="decide_proposal", args={
+        "proposal_id": proposal["id"], "action": "defer", "reason": "Wait", "when": "2026-06-10T10:00:00Z",
+    })
+    decide.execute(decision)
+    assert ReadModel(db.path).proposals()[0]["status"] == "deferred"
+    assert db.due_scheduled_tasks("2026-06-11T00:00:00Z")
+    with pytest.raises(ValueError):
+        decide.execute(decision)
+
+
+def test_pm_can_ask_questions_back_to_ticker_agent(test_setup):
+    env, db = test_setup["env"], test_setup["db"]
+    db.register_agent("ticker:AAPL", "ticker_agent")
+    tool = _get_tool_map(env.tools_for("ticker:AAPL"))["submit_proposal"]
+    proposal = tool.execute(ToolCall(id="1", name="submit_proposal", args={
+        "ticker": "AAPL", "direction": "buy", "conviction": 0.8, "reason": "Catalyst",
+    }))
+    decide = _get_tool_map(env.tools_for("portfolio_manager"))["decide_proposal"]
+    decide.execute(ToolCall(id="2", name="decide_proposal", args={
+        "proposal_id": proposal["id"], "action": "ask", "reason": "Clarify margins",
+    }))
+    chat_id = next(c["id"] for c in db.list_chats("ticker:AAPL") if c["topic"] == "AAPL")
+    messages = db.list_messages(chat_id)
+    assert any(m["text"] == "Clarify margins" and m["author"] == "portfolio_manager" for m in messages)
+
+
+def test_ticker_agent_writes_thesis_only_for_own_ticker(test_setup):
+    from runtime.queries import ReadModel
+
+    env, db = test_setup["env"], test_setup["db"]
+    db.register_agent("ticker:AAPL", "ticker_agent")
+    write = _get_tool_map(env.tools_for("ticker:AAPL"))["write_thesis"]
+    args = {"ticker": "AAPL", "direction": "buy", "conviction": 0.8,
+            "pro": ["Margins"], "contro": ["Valuation"]}
+    write.execute(ToolCall(id="1", name="write_thesis", args=args))
+    thesis = ReadModel(db.path).dossier("AAPL")["thesis"]
+    assert thesis["pro"] == ["Margins"] and thesis["author"] == "ticker:AAPL"
+    with pytest.raises(ValueError):
+        write.execute(ToolCall(id="2", name="write_thesis", args={**args, "ticker": "MSFT"}))
+
+
 def test_coefficients_role_permissions_and_bounds(test_setup):
     env: AgentEnvironment = test_setup["env"]
     db: OfficeDB = test_setup["db"]

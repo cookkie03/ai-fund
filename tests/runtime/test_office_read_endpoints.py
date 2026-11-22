@@ -24,7 +24,7 @@ def test_agents_include_configured_agents_and_only_todays_usage(tmp_path):
 
     assert response.status_code == 200
     agents = response.json()
-    assert {agent["name"] for agent in agents} == set(office.settings.agents)
+    assert {agent["name"] for agent in agents} == set(office.settings.agents) - {"ticker_agent"}
     pm = next(agent for agent in agents if agent["name"] == "portfolio_manager")
     assert pm["model"] == office.settings.agents["portfolio_manager"].model
     assert pm["status"] == "idle"
@@ -156,4 +156,17 @@ def test_dev_cockpit_scenario_seeds_office_data(tmp_path):
     # 4. Usage
     usage = client.get("/v1/read/usage").json()
     assert len(usage) >= 3
+
+
+def test_dev_cockpit_scenario_has_ticker_dossiers_and_mixed_proposals(tmp_path):
+    from scripts.dev_cockpit_scenario import ScenarioMarketData, seed_scenario
+
+    db = OfficeDB(tmp_path / "scenario.db")
+    rt = Runtime(office=build_test_office(db=db))
+    seed_scenario(rt, ScenarioMarketData())
+    assert len([a for a in rt.read.agents() if a["kind"] == "ticker"]) >= 4
+    assert {p["status"] for p in rt.read.proposals()} >= {"pending", "accepted", "deferred"}
+    dossier = rt.read.dossier("AAPL")
+    assert dossier["stale_count"] >= 1
+    assert dossier["notes"] and dossier["lessons"]
 

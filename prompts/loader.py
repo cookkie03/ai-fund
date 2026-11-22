@@ -34,7 +34,7 @@ def load_prompt(agent_name: str, prompts_dir: Path | None = None) -> tuple[str, 
     """
     base_dir = prompts_dir or PROMPTS_DIR
     normalized = agent_name.strip().lower()
-    canonical_name = ROLE_ALIASES.get(normalized, normalized)
+    canonical_name = "ticker_agent" if normalized.startswith("ticker:") else ROLE_ALIASES.get(normalized, normalized)
 
     prompt_path = base_dir / f"{canonical_name}.md"
     if not prompt_path.is_file():

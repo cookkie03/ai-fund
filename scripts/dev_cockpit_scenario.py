@@ -199,6 +199,37 @@ def seed_scenario(rt: Any, market: ScenarioMarketData) -> None:
     for ticker, note, actor in watch:
         rt.execute(AddWatchlist(ticker=ticker, note=note), actor=actor)
 
+    from agents.backend import ToolCall
+    from runtime.commands import AddDossierNote
+    env = rt.office.get_env(None)
+    for index, (ticker, _, _) in enumerate(watch[:5]):
+        agent = f"ticker:{ticker}"
+        db.register_agent(agent, "ticker_agent")
+        db.set_agent_status(agent, ("working", "waiting", "idle", "idle", "working")[index],
+                            {"ticker": ticker} if index in (0, 1, 4) else None)
+        tools = {tool.name: tool for tool in env.tools_for(agent)}
+        for analyst in ("technical_analyst", "fundamental_analyst"):
+            write = next(tool for tool in env.tools_for(analyst) if tool.name == "write_analysis")
+            write.execute(ToolCall(id=f"dev-{ticker}-{analyst}", name="write_analysis", args={
+                "ticker": ticker, "section_text": f"Scenario demo {analyst} per {ticker}."}))
+        tools["write_thesis"].execute(ToolCall(id=f"thesis-{ticker}", name="write_thesis", args={
+            "ticker": ticker, "direction": "buy", "conviction": 0.7,
+            "pro": ["Trend favorevole"], "contro": ["Volatilità"], "time_horizon": "3 mesi"}))
+        if index in (1, 2, 3):
+            proposal = tools["submit_proposal"].execute(ToolCall(id=f"proposal-{ticker}", name="submit_proposal", args={
+                "ticker": ticker, "direction": "buy", "conviction": 0.7, "reason": "Scenario demo"}))
+            if index == 2:
+                env.decide_proposal(proposal["id"], "defer", "Rivedere", (now + timedelta(days=3)).isoformat(), "portfolio_manager")
+            elif index == 3:
+                env.decide_proposal(proposal["id"], "accept", "Scenario demo", None, "portfolio_manager")
+        if index == 0:
+            rt.execute(AddDossierNote(ticker=ticker, text="Verificare il margine operativo"), actor="user", command_id="dev-note")
+            tools["write_lesson"].execute(ToolCall(id="lesson-aapl", name="write_lesson", args={
+                "ticker": ticker, "text": "Attendere conferma dei volumi.", "exit_reason": "stop_loss"}))
+            db.write_dossier_section(ticker, "desks", {"agent": "sentiment_analyst", "section": "sentiment_analyst",
+                "text": "Analisi storica", "ts": "2020-01-01T00:00:00Z", "reference_date": "2020-01-01",
+                "confidence": None, "status": "stale"}, "sentiment_analyst", now.isoformat())
+
     # Chart annotations signed by their authors (TradingView drawing kinds).
     aapl = bars("AAPL")
     hi = max(b["h"] for b in aapl[-140:-20])
