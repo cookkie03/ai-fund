@@ -11,6 +11,8 @@ import { ShellStateProvider } from "@/shell/shell-state";
 const TerminalPage = lazy(() => import("@/pages/terminal/terminal-page").then((m) => ({ default: m.TerminalPage })));
 const UfficioPage = lazy(() => import("@/pages/ufficio/ufficio-page").then((m) => ({ default: m.UfficioPage })));
 
+const TickerPage = lazy(() => import("@/pages/ticker/ticker-page").then((m) => ({ default: m.TickerPage })));
+
 const pageFallback = <div className="flex-1 bg-ground" aria-busy />;
 
 export function App() {
@@ -42,6 +44,14 @@ export function App() {
                     }
                   />
                 ))}
+                <Route
+                  path="/ticker/:symbol"
+                  element={
+                    <Suspense fallback={pageFallback}>
+                      <TickerPage />
+                    </Suspense>
+                  }
+                />
                 {NAV.filter((n) => !n.built).map((n) => (
                   <Route key={n.path} path={n.path} element={<PendingPage item={n} />} />
                 ))}
