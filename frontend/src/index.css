@@ -330,3 +330,9 @@
 .expand > * { min-height: 0; overflow: hidden; }
 @keyframes row-arrive { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 .row-arrive { animation: row-arrive 260ms var(--ease-settle-curve) both; }
+
+/* Portafoglio: exposure bars grow once from their baseline; tab content settles in. */
+@keyframes bar-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.bar-grow { transform-origin: left; animation: bar-grow 520ms var(--ease-settle-curve) both; }
+@keyframes tab-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.tab-in[data-state="active"] { animation: tab-in 220ms var(--ease-settle-curve) both; }

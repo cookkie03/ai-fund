@@ -7,6 +7,6 @@ export const NAV: NavItem[] = [
   { path: "/ufficio", label: "Ufficio", icon: UsersRound, built: true, summary: "Gli agenti, le loro chat da leggere e scrivere, e lo stream dei tool che chiamano." },
   { path: "/terminale", label: "Terminale", icon: CandlestickChart, built: true, summary: "Grafico condiviso con il Technical Analyst, watchlist, ordini." },
   { path: "/notizie", label: "Notizie", icon: Newspaper, built: false, summary: "L'ambiente notizie degli agenti: leggere, filtrare e inviare notizie agli agenti." },
-  { path: "/portafoglio", label: "Portafoglio", icon: WalletCards, built: false, summary: "Statistiche, esposizione, allocazione, posizioni, trade e vincoli di rischio." },
+  { path: "/portafoglio", label: "Portafoglio", icon: WalletCards, built: true, summary: "Statistiche, esposizione, allocazione, posizioni, trade e vincoli di rischio." },
   { path: "/configurazioni", label: "Configurazioni", icon: Settings2, built: false, summary: "Agenti, modelli, prompt, schedule, budget, provider, account, database e salute del Runtime." },
 ];

@@ -59,13 +59,16 @@ export const queryClient = new QueryClient({
 
 /** Which reads an event makes stale. Keys are query-key prefixes. */
 function keysFor(type: string): string[][] {
-  if (type.startsWith("order.")) return [["orders"], ["inbox"]];
-  if (type.startsWith("trade.")) return [["trades"], ["orders"], ["portfolio"]];
+  if (type.startsWith("order.")) return [["orders"], ["inbox"], ["pf", "trades"]];
+  if (type.startsWith("trade.")) return [["trades"], ["orders"], ["portfolio"], ["pf"]];
+  if (type === "portfolio.updated") return [["portfolio"], ["equity"], ["pf"]];
+  if (type === "position.changed") return [["portfolio"], ["trades"], ["pf"]];
+  if (type === "risk_limits.updated") return [["pf", "risk"], ["inbox"]];
   if (type.startsWith("annotation.")) return [["annotations"]];
   if (type === "watchlist.changed") return [["watchlist"]];
-  if (type === "halt.changed") return [["health"], ["orders"]];
+  if (type === "halt.changed") return [["health"], ["orders"], ["pf", "summary"]];
   if (type === "inbox.changed") return [["inbox"]];
-  if (type === "portfolio.synced") return [["portfolio"], ["equity"]];
+  if (type === "portfolio.synced") return [["portfolio"], ["equity"], ["pf"]];
   if (type === "message.appended" || type === "chat.message") return [["cycles"], ["ticker_state"], ["office", "chat"], ["office", "topics"], ["office", "agents"]];
   if (type.startsWith("cycle.")) return [["cycles"], ["ticker_state"], ["office", "agents"], ["office", "topics"]];
   if (type.startsWith("task.")) return [["office", "agents"]];
