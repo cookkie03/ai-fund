@@ -406,6 +406,26 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         CREATE INDEX IF NOT EXISTS idx_tool_calls_cycle ON tool_calls(cycle_id);
         """,
     ),
+    (
+        7,
+        "007_portfolio_backend",
+        """
+        CREATE TABLE IF NOT EXISTS risk_limits_versions (
+            version INTEGER PRIMARY KEY,
+            ts TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            before_json TEXT NOT NULL,
+            after_json TEXT NOT NULL
+        );
+        ALTER TABLE trades ADD COLUMN stop_price REAL;
+        ALTER TABLE trades ADD COLUMN target_price REAL;
+        ALTER TABLE trades ADD COLUMN initial_stop REAL;
+        ALTER TABLE trades ADD COLUMN proposed_by TEXT;
+        ALTER TABLE trades ADD COLUMN closed_qty REAL NOT NULL DEFAULT 0;
+        ALTER TABLE trades ADD COLUMN realized_pnl REAL;
+        """,
+    ),
 ]
 
 
@@ -1096,6 +1116,37 @@ class OfficeDB:
                 """,
                 (exit_price, exit_reason, closed_ts, trade_id),
             )
+
+    # --- Risk limits (versioned) ---
+
+    def latest_risk_limits_version(self) -> dict | None:
+        row = self._connection.execute(
+            "SELECT * FROM risk_limits_versions ORDER BY version DESC LIMIT 1"
+        ).fetchone()
+        return dict(row) if row else None
+
+    def insert_risk_limits_version(
+        self, actor: str, reason: str, before: dict, after: dict, ts: str | None = None
+    ) -> int:
+        ts = ts or utc_now_iso()
+        row = self._connection.execute(
+            "SELECT COALESCE(MAX(version), 0) + 1 FROM risk_limits_versions"
+        ).fetchone()
+        version = int(row[0])
+        self._connection.execute(
+            """
+            INSERT INTO risk_limits_versions (version, ts, actor, reason, before_json, after_json)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (version, ts, actor, reason, json.dumps(before), json.dumps(after)),
+        )
+        return version
+
+    def list_risk_limits_versions(self, limit: int = 50) -> list[dict]:
+        rows = self._connection.execute(
+            "SELECT * FROM risk_limits_versions ORDER BY version DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     # --- Portfolio Snapshots ---
 

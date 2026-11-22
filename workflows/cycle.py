@@ -19,7 +19,8 @@ from agents.backend import (
 from config.office_settings import OfficeSettings
 from execution.order_draft import OrderDraft
 from execution.order_flow import OrderFlow, Outcome
-from execution.risk_gate import RiskGateContext, RiskGateLimits
+from execution.risk_gate import RiskGateContext
+from execution.risk_limits import active_gate_limits
 from storage.office_db import OfficeDB
 from storage.registry import LlmCallRecord, RegistryWriter
 from tools.environment import AgentEnvironment
@@ -323,15 +324,7 @@ class CycleRunner:
             if r["sector"]:
                 sector_map[r["symbol"].upper()] = r["sector"]
 
-        limits = RiskGateLimits(
-            max_risk_per_trade=Decimal(str(self.settings.limits.max_risk_per_trade_fraction)),
-            max_position_size=Decimal(str(self.settings.limits.max_position_fraction)),
-            max_sector_exposure=Decimal(str(self.settings.limits.max_sector_fraction)),
-            max_open_positions=self.settings.limits.max_open_positions,
-            min_cash_reserve=Decimal(str(self.settings.limits.min_cash_reserve_fraction)),
-            min_risk_reward=Decimal(str(self.settings.limits.min_risk_reward_ratio)),
-            earnings_blackout_trading_days=self.settings.limits.earnings_embargo_days,
-        )
+        limits = active_gate_limits(self.db, self.settings.limits)
 
         gate_ctx = RiskGateContext(
             equity=equity,
