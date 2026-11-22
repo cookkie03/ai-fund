@@ -279,7 +279,25 @@ Costi e token tile: a period control (Oggi, 7 giorni, 30 giorni), rows with the 
 Author avatars have two more sizes for the office: 28 px (`md`, messages) and 36 px (`lg`, seats).
 
 ### Honest sources
-Data the Runtime does not expose yet is either rebuilt from real reads (with a quiet info note that says how) or shown as unavailable with the endpoint it waits for. Never sample data.
+Data the Runtime does not expose yet is either rebuilt from real reads (with a quiet info note that says how) or shown as unavailable with the endpoint it waits for. Never sample data. Dev fixtures (`COCKPIT_*_FIXTURES=1`, dev server only) put a warn **Dati di esempio** tag in the page header, so a synthetic figure is never mistaken for the account.
+
+### Threshold tick (Portafoglio signature)
+Every exposure figure is drawn against its limit. A sunken track (black at 30%, 4 px tall, 4 px radius), a fill in `fg-muted` that turns warn at 80% of the limit and down past it, and a 2 px `fg` tick where the Risk Gate draws the line. For minimums (cash reserve, R:R) the tick marks the floor and warn starts below 1.25× of it. The same bar serves allocation rows, the limits table and the edit review, where the tick moves to the new value over current usage. Growth is `.bar-grow` (scaleX from the left, 520 ms, settle curve).
+
+### Status word
+`Entro` (check, `fg-subtle`), `Vicino` (warn on its soft tint), `Oltre` (down on its soft tint). Always an icon and a word, never colour alone. Warn means near, down means breached; up and down stay reserved for P&L.
+
+### Summary band (Portafoglio)
+One tile. Equity is the page's only large figure (30 px semibold, tabular, -0.025em; 22 px on the phone) with the day change as a tag on its up/down tint. Then six meters, each tied to what it is measured against: PnL non realizzato, Realizzato oggi, Investito (% of equity), Cassa (% and minimum reserve), Posizioni (n / max), Rischio aperto (loss if every stop fills, % of equity). The phone keeps four.
+
+### Equity curve
+lightweight-charts, Legend styling: no grid, area in $ coloured up or down by the period's return, periods as a segmented control (1G 1S 1M 3M YTD 1A Tutto). The SPY toggle (`aria-pressed`) switches to two lines indexed to 0% at the period start with a dotted zero line, never a second axis. Drawdown sits in its own pane under the curve (down area, stretch 0.34). A crosshair legend shows date, value, return and drawdown. Fewer than two points shows "Storico troppo corto" instead of a line.
+
+### Allocation
+Horizontal rows by sector or position (segmented control), each a threshold-tick bar with value, weight and the limit in the header ("soglia 30%"). Cash closes the list against its reserve floor. Near or breached rows raise a one-line note at the top. No pie.
+
+### Capital dialogs
+Close or reduce, and stop/target edits, run a debounced dry run as the user types and show the Runtime's preview (quantity, price, value, realized PnL or new risk and R:R) and the Risk Gate's answer before the primary unlocks. A refusal shows the Gate's reasons verbatim in the dialog. Editing limits takes two steps: values (fractions typed as %, bounds checked) plus a required reason, then **Rivedi** shows before → after on the threshold tick with the status change, then **Conferma e applica**. History lists version, author, reason and each change. While the Runtime is unreachable or Halt is active every capital action is disabled and says why.
 
 ## Do's and Don'ts
 
