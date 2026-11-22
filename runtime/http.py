@@ -26,10 +26,12 @@ from analysis.indicators import (
 from runtime.commands import (
     AddWatchlist,
     ApproveOrder,
+    ClosePosition,
     EnqueueTask,
     Halt,
     IngestAlert,
     MarkInboxRead,
+    ModifyExit,
     ReconcileBroker,
     RefreshData,
     RejectOrder,
@@ -37,6 +39,7 @@ from runtime.commands import (
     Resume,
     Say,
     StrikeAnnotation,
+    UpdateRiskLimits,
     UpsertAnnotation,
 )
 
@@ -54,6 +57,9 @@ _COMMAND_MAP = {
     "add_watchlist": AddWatchlist,
     "remove_watchlist": RemoveWatchlist,
     "approve_order": ApproveOrder,
+    "update_risk_limits": UpdateRiskLimits,
+    "close_position": ClosePosition,
+    "modify_exit": ModifyExit,
     "reject_order": RejectOrder,
     "halt": Halt,
     "resume": Resume,
@@ -231,6 +237,40 @@ def create_app(
         to_ts: str | None = Query(default=None, alias="to"),
     ) -> list[dict[str, Any]]:
         return runtime.read.equity_history(from_ts=from_ts, to_ts=to_ts)
+
+    @app.get("/v1/read/portfolio_summary", dependencies=[Depends(verify_token)])
+    def get_portfolio_summary() -> dict[str, Any]:
+        return runtime.read.portfolio_summary()
+
+    @app.get("/v1/read/positions", dependencies=[Depends(verify_token)])
+    def get_positions() -> list[dict[str, Any]]:
+        return runtime.read.positions()
+
+    @app.get("/v1/read/allocation", dependencies=[Depends(verify_token)])
+    def get_allocation() -> dict[str, Any]:
+        return runtime.read.allocation()
+
+    @app.get("/v1/read/performance", dependencies=[Depends(verify_token)])
+    def get_performance(period: str = "1M", benchmark: str | None = "SPY") -> dict[str, Any]:
+        try:
+            return runtime.read.performance(period=period, benchmark=benchmark or None)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/v1/read/attribution", dependencies=[Depends(verify_token)])
+    def get_attribution(period: str = "1M") -> dict[str, Any]:
+        try:
+            return runtime.read.attribution(period=period)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/v1/read/risk_limits", dependencies=[Depends(verify_token)])
+    def get_risk_limits() -> dict[str, Any]:
+        return runtime.read.risk_limits()
+
+    @app.get("/v1/read/risk_limits_history", dependencies=[Depends(verify_token)])
+    def get_risk_limits_history(limit: int = Query(default=50, ge=1, le=500)) -> list[dict]:
+        return runtime.read.risk_limits_history(limit=limit)
 
     @app.get("/v1/read/tool_calls", dependencies=[Depends(verify_token)])
     def get_tool_calls(

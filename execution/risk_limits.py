@@ -92,6 +92,27 @@ def validate_partial(partial: dict[str, Any]) -> dict[str, float | int]:
     return clean
 
 
+class ConnRiskLimitsReader:
+    """Lettura delle versioni su una connessione SQLite qualsiasi (anche read-only)."""
+
+    event_log = None
+
+    def __init__(self, conn: Any) -> None:
+        self._conn = conn
+
+    def latest_risk_limits_version(self) -> dict | None:
+        row = self._conn.execute(
+            "SELECT * FROM risk_limits_versions ORDER BY version DESC LIMIT 1"
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list_risk_limits_versions(self, limit: int = 50) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT * FROM risk_limits_versions ORDER BY version DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 class RiskLimitsStore:
     """Accesso ai limiti attivi e alla cronologia delle versioni."""
 

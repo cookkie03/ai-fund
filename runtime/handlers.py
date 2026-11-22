@@ -10,11 +10,13 @@ from typing import TYPE_CHECKING, Any
 from runtime.commands import (
     AddWatchlist,
     ApproveOrder,
+    ClosePosition,
     CommandResult,
     EnqueueTask,
     Halt,
     IngestAlert,
     MarkInboxRead,
+    ModifyExit,
     ReconcileBroker,
     RefreshData,
     RejectOrder,
@@ -22,6 +24,7 @@ from runtime.commands import (
     Resume,
     Say,
     StrikeAnnotation,
+    UpdateRiskLimits,
     UpsertAnnotation,
 )
 from workflows.scheduling import TaskSource
@@ -269,6 +272,12 @@ def handle_reconcile_broker(ctx: RuntimeContext, cmd: ReconcileBroker, actor: st
             },
             actor=actor,
         )
+        ctx.event_log.append(
+            type="portfolio.updated",
+            subject="portfolio",
+            payload={"reason": "reconcile", "ts": now_ts, "equity": equity, "cash": cash},
+            actor=actor,
+        )
 
     return CommandResult(ok=True, data={"orders_synced": len(changed), "portfolio_synced": True})
 
@@ -324,3 +333,94 @@ def handle_ingest_alert(ctx: RuntimeContext, cmd: IngestAlert, actor: str) -> Co
             actor=actor,
         )
     return CommandResult(ok=True, data={"task_id": task_id})
+
+
+def handle_update_risk_limits(
+    ctx: RuntimeContext, cmd: UpdateRiskLimits, actor: str
+) -> CommandResult:
+    from execution.risk_limits import (
+        LimitsValidationError,
+        RiskLimitsStore,
+        defaults_from_settings,
+    )
+
+    store = RiskLimitsStore(ctx.office.db, defaults_from_settings(ctx.office.settings.limits))
+    try:
+        active = store.update(cmd.limits, cmd.reason, actor)
+    except LimitsValidationError as exc:
+        return CommandResult(ok=False, reasons=exc.reasons)
+    return CommandResult(
+        ok=True,
+        data={"version": active.version, "limits": active.limits,
+              "updated_ts": active.updated_ts, "updated_by": active.updated_by},
+    )
+
+
+def _position_exits(ctx: RuntimeContext) -> Any:
+    from execution.position_exits import PositionExits
+
+    office = ctx.office
+    return PositionExits(
+        office.db,
+        office.order_flow.broker,
+        office.halt,
+        office.order_flow.trade_manager,
+        event_log=ctx.event_log,
+    )
+
+
+def _open_trade_and_price(ctx: RuntimeContext, ticker: str) -> tuple[dict | None, Any]:
+    from decimal import Decimal
+
+    from runtime import portfolio
+
+    sym = ticker.upper().strip()
+    conn = ctx.office.db.connection
+    row = conn.execute(
+        "SELECT * FROM trades WHERE ticker = ? AND closed_ts IS NULL ORDER BY id DESC LIMIT 1",
+        (sym,),
+    ).fetchone()
+    if row is None:
+        return None, None
+    trade = dict(row)
+    price = portfolio.current_price(conn, sym)
+    if price is None:
+        price = trade["entry_price"]
+    return trade, Decimal(str(price))
+
+
+def _dec_or_none(value: Any) -> Any:
+    from decimal import Decimal
+
+    return Decimal(str(value)) if value is not None else None
+
+
+def handle_close_position(ctx: RuntimeContext, cmd: ClosePosition, actor: str) -> CommandResult:
+    trade, price = _open_trade_and_price(ctx, cmd.ticker)
+    if trade is None:
+        return CommandResult(ok=False, reasons=[f"Nessuna posizione aperta su {cmd.ticker.upper()}"])
+    exits = _position_exits(ctx)
+    gate_ctx = ctx.office.build_risk_gate_context()
+    qty, limit = _dec_or_none(cmd.qty), _dec_or_none(cmd.limit_price)
+    if cmd.dry_run:
+        preview = exits.preview_close(trade, qty, cmd.order_type, limit, price, gate_ctx)
+        if ctx.office.halt.is_halted():
+            preview["risk_gate"] = {"allowed": False, "reasons": [
+                "System is halted: all order submissions blocked"]}
+        return CommandResult(ok=True, data={"dry_run": True, **preview})
+    ok, data, reasons = exits.close(trade, qty, cmd.order_type, limit, price, gate_ctx, actor)
+    return CommandResult(ok=ok, data=data, reasons=reasons)
+
+
+def handle_modify_exit(ctx: RuntimeContext, cmd: ModifyExit, actor: str) -> CommandResult:
+    trade, price = _open_trade_and_price(ctx, cmd.ticker)
+    if trade is None:
+        return CommandResult(ok=False, reasons=[f"Nessuna posizione aperta su {cmd.ticker.upper()}"])
+    exits = _position_exits(ctx)
+    gate_ctx = ctx.office.build_risk_gate_context()
+    stop, target = _dec_or_none(cmd.stop_price), _dec_or_none(cmd.target_price)
+    if cmd.dry_run:
+        preview = exits.preview_modify(trade, stop, target, price, gate_ctx)
+        return CommandResult(ok=True, data={"dry_run": True, **preview})
+    ok, data, reasons = exits.modify(trade, stop, target, price, gate_ctx, actor)
+    return CommandResult(ok=ok, data=data, reasons=reasons)

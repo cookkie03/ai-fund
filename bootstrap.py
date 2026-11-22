@@ -286,6 +286,65 @@ class AlpacaBracketAdapter:
     def cancel(self, broker_order_id: str) -> None:
         self._client.cancel_order_by_id(broker_order_id)
 
+    def close_position(
+        self,
+        *,
+        client_order_id: str,
+        symbol: str,
+        qty: Decimal,
+        order_type: str,
+        limit_price: Decimal | None,
+        bracket_order_id: str | None,
+        residual_qty: Decimal,
+        residual_stop: Decimal | None,
+        residual_target: Decimal | None,
+    ) -> Any:
+        """Vende `qty` e ripristina la protezione OCO sulla quantità residua.
+
+        Non ancora verificato su un conto paper reale: i test usano un client finto.
+        """
+        from alpaca.trading.enums import OrderSide, TimeInForce
+        from alpaca.trading.requests import (
+            LimitOrderRequest,
+            MarketOrderRequest,
+            StopLossRequest,
+            TakeProfitRequest,
+        )
+
+        from execution.position_exits import CloseResult
+
+        if bracket_order_id:
+            for kind in ("stop", "tp"):
+                try:
+                    self._client.cancel_order_by_id(self._leg_id(bracket_order_id, kind))
+                except Exception:  # gamba già cancellata dal fratello OCO
+                    pass
+        if order_type == "limit":
+            req: Any = LimitOrderRequest(
+                symbol=symbol, qty=str(qty), side=OrderSide.SELL,
+                time_in_force=TimeInForce.DAY, limit_price=str(limit_price),
+                client_order_id=client_order_id,
+            )
+        else:
+            req = MarketOrderRequest(
+                symbol=symbol, qty=str(qty), side=OrderSide.SELL,
+                time_in_force=TimeInForce.DAY, client_order_id=client_order_id,
+            )
+        res = self._client.submit_order(req)
+        residual_id = None
+        if residual_qty > 0 and residual_stop is not None and residual_target is not None:
+            oco = LimitOrderRequest(
+                symbol=symbol, qty=str(residual_qty), side=OrderSide.SELL,
+                time_in_force=TimeInForce.GTC, order_class="oco",
+                limit_price=str(residual_target),
+                take_profit=TakeProfitRequest(limit_price=float(residual_target)),
+                stop_loss=StopLossRequest(stop_price=str(residual_stop)),
+                client_order_id=f"{client_order_id}-res",
+            )
+            residual_id = str(self._client.submit_order(oco).id)
+        return CloseResult(broker_order_id=str(res.id), status="submitted",
+                           residual_order_id=residual_id)
+
     def find_by_client_id(self, client_order_id: str) -> Any | None:
         try:
             return self._client.get_order_by_client_id(client_order_id)

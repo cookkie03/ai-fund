@@ -92,6 +92,47 @@ class Resume(BaseModel):
     confirm: Literal[True]
 
 
+class UpdateRiskLimits(BaseModel):
+    limits: dict[str, Any]
+    reason: str
+    confirm: Literal[True]
+
+
+class ClosePosition(BaseModel):
+    ticker: str
+    qty: float | None = None
+    order_type: Literal["market", "limit"] = "market"
+    limit_price: float | None = None
+    dry_run: bool = False
+    confirm: bool = False
+
+    @model_validator(mode="after")
+    def _check(self) -> ClosePosition:
+        if self.qty is not None and self.qty <= 0:
+            raise ValueError("qty must be positive")
+        if self.order_type == "limit" and (self.limit_price is None or self.limit_price <= 0):
+            raise ValueError("limit_price is required for limit orders")
+        if not self.dry_run and not self.confirm:
+            raise ValueError("confirm must be true")
+        return self
+
+
+class ModifyExit(BaseModel):
+    ticker: str
+    stop_price: float | None = None
+    target_price: float | None = None
+    dry_run: bool = False
+    confirm: bool = False
+
+    @model_validator(mode="after")
+    def _check(self) -> ModifyExit:
+        if self.stop_price is None and self.target_price is None:
+            raise ValueError("stop_price or target_price is required")
+        if not self.dry_run and not self.confirm:
+            raise ValueError("confirm must be true")
+        return self
+
+
 class ReconcileBroker(BaseModel):
     pass
 

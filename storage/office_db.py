@@ -1056,6 +1056,10 @@ class OfficeDB:
         exit_reason: str | None = None,
         exit_price: float | None = None,
         events: list | str = "[]",
+        stop_price: float | None = None,
+        target_price: float | None = None,
+        initial_stop: float | None = None,
+        proposed_by: str | None = None,
     ) -> int:
         if exit_reason is not None and exit_reason not in ("tp", "sl", "pm_sell", "expired"):
             raise ValueError(f"Invalid exit reason: {exit_reason}")
@@ -1065,8 +1069,9 @@ class OfficeDB:
             """
             INSERT INTO trades (
                 ticker, entry_order_id, opened_ts, closed_ts, exit_reason,
-                entry_price, exit_price, qty, events_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                entry_price, exit_price, qty, events_json,
+                stop_price, target_price, initial_stop, proposed_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 ticker,
@@ -1078,9 +1083,55 @@ class OfficeDB:
                 exit_price,
                 qty,
                 events_json,
+                stop_price,
+                target_price,
+                initial_stop if initial_stop is not None else stop_price,
+                proposed_by,
             ),
         )
         return int(cursor.lastrowid)
+
+    def update_trade_levels(
+        self,
+        trade_id: int,
+        stop_price: float | None = None,
+        target_price: float | None = None,
+        events: list | str | None = None,
+    ) -> None:
+        """Aggiorna stop/target correnti (None = invariato) ed eventualmente gli eventi."""
+        sets: list[str] = []
+        params: list[Any] = []
+        if stop_price is not None:
+            sets.append("stop_price = ?")
+            params.append(stop_price)
+        if target_price is not None:
+            sets.append("target_price = ?")
+            params.append(target_price)
+        if events is not None:
+            sets.append("events_json = ?")
+            params.append(events if isinstance(events, str) else json.dumps(events))
+        if not sets:
+            return
+        params.append(trade_id)
+        self._connection.execute(f"UPDATE trades SET {', '.join(sets)} WHERE id = ?", params)
+
+    def add_trade_partial_close(
+        self, trade_id: int, qty: float, pnl: float, events: list | str | None = None
+    ) -> None:
+        """Registra una chiusura parziale: quantità chiusa e PnL realizzato cumulati."""
+        events_json = None if events is None else (
+            events if isinstance(events, str) else json.dumps(events)
+        )
+        self._connection.execute(
+            """
+            UPDATE trades
+            SET closed_qty = closed_qty + ?,
+                realized_pnl = COALESCE(realized_pnl, 0) + ?,
+                events_json = COALESCE(?, events_json)
+            WHERE id = ?
+            """,
+            (qty, pnl, events_json, trade_id),
+        )
 
     def get_trade(self, trade_id: int) -> dict | None:
         row = self._connection.execute("SELECT * FROM trades WHERE id = ?", (trade_id,)).fetchone()
@@ -1093,10 +1144,21 @@ class OfficeDB:
         exit_reason: str = "tp",
         closed_ts: str | None = None,
         events: list | str | None = None,
+        realized_pnl: float | None = None,
+        closed_qty: float | None = None,
     ) -> None:
         if exit_reason not in ("tp", "sl", "pm_sell", "expired", "reconciled_unknown"):
             raise ValueError(f"Invalid exit reason: {exit_reason}")
         closed_ts = closed_ts or utc_now_iso()
+        if realized_pnl is not None or closed_qty is not None:
+            self._connection.execute(
+                """
+                UPDATE trades
+                SET realized_pnl = COALESCE(?, realized_pnl), closed_qty = COALESCE(?, closed_qty)
+                WHERE id = ?
+                """,
+                (realized_pnl, closed_qty, trade_id),
+            )
         if events is not None:
             events_json = events if isinstance(events, str) else json.dumps(events)
             self._connection.execute(
