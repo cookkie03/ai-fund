@@ -1030,12 +1030,13 @@ class OfficeDB:
         )
 
     def get_ticker_state(self, ticker: str) -> dict | None:
-        row = self._connection.execute(
-            "SELECT * FROM ticker_state WHERE ticker = ?", (ticker,)
-        ).fetchone()
-        if not row:
-            return None
-        return dict(row)
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM ticker_state WHERE ticker = ?", (ticker,)
+            ).fetchone()
+            if not row:
+                return None
+            return dict(row)
 
     def write_dossier_section(
         self, ticker: str, section: str, value: Any, author: str, ts: str

@@ -11,7 +11,8 @@ Annotazioni per la sessione principale da registrare nella wiki (`/home/luca/tra
   - Accesso in lettura completo allo stato dell'ufficio (portafoglio, ordini, trade, limiti, schede/dossier, chat agenti, tool calls, eventi, briefing).
   - Comunicazione bidirezionale verso gli agenti via `message_agent {agent, topic, text}` con prefisso `[Per conto di Luca]`. Le risposte degli agenti rientrano nella conversazione come messaggi `kind: "agent_relay"` e avviano un turno di sintesi automatica. Messaggi al PM generano contestualmente uno Scheduled task.
   - Sovranità del Risk Gate e protezione del capitale: il Bridge non ha tool diretti per azioni con capitale; usa `propose_action` con anteprima (`dry_run`). L'esecuzione avviene solo tramite `bridge_action_decide` con conferma esplicita dell'utente (`confirm: true`), riusando lo stesso handler originario con attore `luca` e rieseguendo tutte le verifiche real-time.
-  - Lettura deterministica del briefing (`/v1/read/briefing`) con variazioni di portafoglio, conteggi chiave, lista elementi e sintesi `summary_text` scritta dal Bridge con cache.
+  - Lettura deterministica del briefing (`/v1/read/briefing`) con variazioni di portafoglio, conteggi chiave, lista elementi delle 10 categorie (`trade`, `order_pending`, `proposal_pending`, `proposal_decided`, `alert`, `halt`, `resume`, `dossier`, `agent_error`, `risk_limits`) e sintesi `summary_text` scritta dal Bridge con cache.
+  - Titolazione nitida automatica post-primo turno (`BridgeRunner`) e supporto per filtri `q` e paginazione retrograda `before`.
   - ADR di riferimento: `docs/adr/0005-bridge-agent.md`.
 
 ## 2. Pagine del cockpit e interfaccia (`system/interface/frontend-module.md`)

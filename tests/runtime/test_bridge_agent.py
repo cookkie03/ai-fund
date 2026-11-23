@@ -228,6 +228,7 @@ def test_capital_action_only_proposed_pending_and_confirmation_flow(tmp_path):
         actor="luca",
     )
     assert decide_res.ok is False
+    assert any("nessuna posizione" in r.lower() for r in decide_res.reasons)
     action_after = db.get_bridge_action(action_id)
     assert action_after["status"] == "failed"
 
@@ -244,7 +245,25 @@ def test_capital_action_only_proposed_pending_and_confirmation_flow(tmp_path):
     assert dismiss_res.ok is True
     assert db.get_bridge_action(action2["id"])["status"] == "dismissed"
 
-    # 6. Halt blocks action confirmation
+    # 6. Halt blocks action confirmation (with real open position on NVDA)
+    oid = db.insert_order(
+        ticker="NVDA",
+        side="buy",
+        draft={"symbol": "NVDA", "side": "buy"},
+        draft_hash="hash_nvda_halt",
+        client_order_id="c_nvda_halt",
+        approval_status="approved",
+        status="filled",
+    )
+    db.insert_trade(
+        ticker="NVDA",
+        entry_order_id=oid,
+        entry_price=150.0,
+        qty=10.0,
+        opened_ts=office.get_now_iso(),
+        stop_price=140.0,
+        target_price=170.0,
+    )
     action3 = prop_tool.fn(
         command="close_position",
         payload={"ticker": "NVDA", "qty": 5.0, "order_type": "market"},
@@ -256,6 +275,7 @@ def test_capital_action_only_proposed_pending_and_confirmation_flow(tmp_path):
         actor="luca",
     )
     assert halt_res.ok is False
+    assert any("halt" in r.lower() for r in halt_res.reasons)
 
 
 def test_budget_exhaustion_emits_error_message(tmp_path):
@@ -503,6 +523,16 @@ def test_bridge_conversation_pagination_and_search_filter(tmp_path):
     assert msgs[1]["id"] == mid1_2
     assert msgs[0]["text"] == "Primo messaggio"
     assert msgs[1]["text"] == "Secondo messaggio"
+
+    # 4. Search with archived='all' should return both active and archived conversations
+    cid_archived = db.create_bridge_conversation(
+        title="Archiviata SegretoInfrasettimanale", archived=True
+    )
+    resp_archived_all = client.get(
+        "/v1/read/bridge_conversations", params={"q": "SegretoInfrasettimanale", "archived": "all"}
+    ).json()
+    assert len(resp_archived_all) == 2
+    assert {c["id"] for c in resp_archived_all} == {cid1, cid_archived}
 
 
 def test_bridge_replaces_provisional_title_after_first_turn(tmp_path):
