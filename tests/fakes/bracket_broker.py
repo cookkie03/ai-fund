@@ -31,6 +31,8 @@ class FakeBracketBroker:
     cancelled_orders: list[str] = field(default_factory=list)
     modified_stops: list[tuple[str, Decimal]] = field(default_factory=list)
     modified_take_profits: list[tuple[str, Decimal]] = field(default_factory=list)
+    market_prices: dict[str, Decimal] = field(default_factory=dict)
+    closed_positions: list[dict] = field(default_factory=list)
     _order_counter: int = 0
 
     def is_market_open(self) -> bool:
@@ -83,6 +85,52 @@ class FakeBracketBroker:
             raise KeyError(f"Broker order {broker_order_id} not found")
         self.orders[broker_order_id].status = "cancelled"
         self.cancelled_orders.append(broker_order_id)
+
+    def close_position(
+        self,
+        *,
+        client_order_id: str,
+        symbol: str,
+        qty: Decimal,
+        order_type: str,
+        limit_price: Decimal | None,
+        bracket_order_id: str | None,
+        residual_qty: Decimal,
+        residual_stop: Decimal | None,
+        residual_target: Decimal | None,
+    ):
+        """Vendita immediata al prezzo di mercato configurato; il bracket diventa residuo."""
+        from execution.position_exits import CloseResult
+
+        price = Decimal(str(limit_price)) if order_type == "limit" and limit_price is not None \
+            else self.market_prices.get(symbol)
+        if price is None:
+            raise RuntimeError(f"Nessun prezzo di mercato per {symbol}")
+        if bracket_order_id and bracket_order_id in self.orders:
+            self.orders[bracket_order_id].status = "cancelled"
+            self.cancelled_orders.append(bracket_order_id)
+        self._order_counter += 1
+        sell_id = f"b_ord_{self._order_counter:04d}"
+        self.orders[sell_id] = FakeBrokerOrder(
+            broker_order_id=sell_id, client_order_id=client_order_id, symbol=symbol, side="sell",
+            quantity=Decimal(str(qty)), limit_price=price, take_profit=None, stop_loss=None,
+            status="filled", filled_quantity=Decimal(str(qty)), average_fill_price=price,
+        )
+        self.client_map[client_order_id] = sell_id
+        residual_id = None
+        if residual_qty > 0:
+            self._order_counter += 1
+            residual_id = f"b_ord_{self._order_counter:04d}"
+            self.orders[residual_id] = FakeBrokerOrder(
+                broker_order_id=residual_id, client_order_id=f"{client_order_id}-res",
+                symbol=symbol, side="buy", quantity=Decimal(str(residual_qty)),
+                limit_price=price, take_profit=residual_target, stop_loss=residual_stop,
+                status="filled", filled_quantity=Decimal(str(residual_qty)),
+                average_fill_price=price,
+            )
+        self.closed_positions.append({"symbol": symbol, "qty": Decimal(str(qty)), "price": price})
+        return CloseResult(broker_order_id=sell_id, status="filled", fill_price=price,
+                           filled_qty=Decimal(str(qty)), residual_order_id=residual_id)
 
     def find_by_client_id(self, client_order_id: str) -> FakeBrokerOrder | None:
         b_id = self.client_map.get(client_order_id)

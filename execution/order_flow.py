@@ -743,6 +743,12 @@ class OrderFlow:
 
         # 3. Check for exit fill (TP / SL / sell) closing an open trade
         if event_str == "fill" and (side == "sell" or explicit_exit_reason is not None):
+            local_sell = local_order is not None and local_order["side"] == "sell"
+            if local_sell and self.db.connection.execute(
+                "SELECT 1 FROM order_events WHERE order_id = ? AND event = 'exit_recorded'",
+                (int(local_order["id"]),),
+            ).fetchone():
+                return  # chiusura manuale già registrata al momento dell'invio
             ticker_to_find = symbol or (local_order["ticker"] if local_order else "")
             if ticker_to_find and self.trade_manager is not None:
                 open_trade = self.db.connection.execute(
@@ -757,7 +763,20 @@ class OrderFlow:
                         return
 
                     reason = "tp"
-                    if explicit_exit_reason in ("tp", "sl", "pm_sell", "expired"):
+                    if local_sell:
+                        reason = "pm_sell"
+                        remaining = float(open_trade["qty"]) - float(
+                            open_trade["closed_qty"] or 0.0
+                        )
+                        if qty is not None and 0 < float(qty) < remaining - 1e-9:
+                            self.trade_manager.record_partial_exit(
+                                int(open_trade["id"]),
+                                qty,
+                                price if price is not None else 0.0,
+                                ts=ts_str,
+                            )
+                            return
+                    elif explicit_exit_reason in ("tp", "sl", "pm_sell", "expired"):
                         reason = explicit_exit_reason
                     elif order_type in ("stop", "stop_limit"):
                         reason = "sl"

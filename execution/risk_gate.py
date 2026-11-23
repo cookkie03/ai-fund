@@ -27,6 +27,12 @@ def default_trading_days_between(start: date, end: date) -> int:
     return trading_days
 
 
+def _pct(fraction: Decimal) -> str:
+    """Frazione -> percentuale senza zeri finali (0.01 -> '1', 0.075 -> '7.5')."""
+    text = format((fraction * 100).normalize(), "f")
+    return text
+
+
 @dataclass(frozen=True)
 class GateOrder:
     symbol: str
@@ -172,7 +178,7 @@ def guard_max_open_positions(order: GateOrder, ctx: RiskGateContext) -> GuardRes
 
 
 def guard_risk_per_trade(order: GateOrder, ctx: RiskGateContext) -> GuardResult:
-    """Max risk per trade <= 1% equity."""
+    """Max risk per trade (default 1% equity)."""
     if order.side == "buy":
         max_allowed_risk = ctx.equity * ctx.limits.max_risk_per_trade
         order_risk = order.risk
@@ -181,7 +187,7 @@ def guard_risk_per_trade(order: GateOrder, ctx: RiskGateContext) -> GuardResult:
                 ok=False,
                 reason=(
                     f"Risk per trade {order_risk} exceeds maximum allowed "
-                    f"{max_allowed_risk} (1% equity)"
+                    f"{max_allowed_risk} ({_pct(ctx.limits.max_risk_per_trade)}% equity)"
                 ),
             )
     return GuardResult(ok=True)
@@ -198,7 +204,8 @@ def guard_position_size(order: GateOrder, ctx: RiskGateContext) -> GuardResult:
                 ok=False,
                 reason=(
                     f"Position value {new_total_val} for {order.symbol} exceeds "
-                    f"maximum allowed {max_allowed_position} (10% equity)"
+                    f"maximum allowed {max_allowed_position} "
+                    f"({_pct(ctx.limits.max_position_size)}% equity)"
                 ),
             )
     return GuardResult(ok=True)
@@ -219,7 +226,8 @@ def guard_sector_exposure(order: GateOrder, ctx: RiskGateContext) -> GuardResult
                 ok=False,
                 reason=(
                     f"Sector exposure for '{order.sector}' would reach {new_sector_total}, "
-                    f"exceeding maximum allowed {max_allowed_sector} (30% equity)"
+                    f"exceeding maximum allowed {max_allowed_sector} "
+                    f"({_pct(ctx.limits.max_sector_exposure)}% equity)"
                 ),
             )
     return GuardResult(ok=True)
@@ -235,7 +243,7 @@ def guard_cash_reserve(order: GateOrder, ctx: RiskGateContext) -> GuardResult:
                 ok=False,
                 reason=(
                     f"Cash after order ({cash_after}) falls below required cash reserve "
-                    f"{required_reserve} (5% equity)"
+                    f"{required_reserve} ({_pct(ctx.limits.min_cash_reserve)}% equity)"
                 ),
             )
     return GuardResult(ok=True)

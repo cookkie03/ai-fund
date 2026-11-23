@@ -13,6 +13,7 @@ import json
 import math
 import random
 from datetime import UTC, date, datetime, time, timedelta
+from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -174,6 +175,116 @@ def _iso(dt: datetime) -> str:
     return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
+_SECTORS = {
+    "AAPL": "Technology", "NVDA": "Technology", "MSFT": "Technology", "AMD": "Technology",
+    "GOOGL": "Technology", "META": "Technology", "AMZN": "Consumer Discretionary",
+    "TSLA": "Consumer Discretionary", "JPM": "Financials", "XOM": "Energy", "LLY": "Health Care",
+}
+_AGENTS = ("technical_analyst", "market_analyst", "fundamental_analyst", "portfolio_manager")
+
+
+def _seed_portfolio(rt: Any, market: ScenarioMarketData, now: datetime, existing: dict[str, tuple[int, float, int]]) -> None:
+    """Portafoglio per il cockpit: 6 posizioni su 4 settori (Technology vicino al limite),
+    storico di trade chiusi con motivi e agenti diversi, equity di oltre un anno, SPY giornaliero,
+    una modifica ai limiti e un broker finto che esegue close_position/modify_exit.
+    Solo sviluppo, mai produzione."""
+    from execution.risk_limits import RiskLimitsStore, defaults_from_settings
+    from tests.fakes.bracket_broker import FakeBrokerOrder
+
+    db = rt.office.db
+    broker = rt.office.order_flow.broker
+
+    def last(sym: str) -> float:
+        return market.ohlcv(sym, interval="1h", limit=0)[-1]["c"]
+
+    for sym, sector in _SECTORS.items():
+        db.connection.execute("INSERT OR REPLACE INTO securities(symbol, name, sector) VALUES (?, ?, ?)", (sym, sym, sector))
+
+    def filled_order(sym: str, entry: float, stop: float, tp: float, qty: int, ago: timedelta, tag: str) -> int:
+        d = {"symbol": sym, "side": "buy", "entry": f"{entry:.2f}", "stop": f"{stop:.2f}", "take_profit": f"{tp:.2f}", "quantity": str(qty), "notional": f"{entry * qty:.2f}"}
+        h = hashlib.sha256(f"{tag}-{sym}-{entry}-{qty}".encode()).hexdigest()
+        oid = db.insert_order(
+            ticker=sym, side="buy", draft=d, draft_hash=h, approval_status="auto",
+            client_order_id=f"{tag}-{sym.lower()}-{h[:8]}", status="filled",
+            broker_order_id=f"alp-{h[8:16]}", created_ts=_iso(now - ago),
+        )
+        db.insert_order_event(oid, "filled", {"price": entry, "qty": qty}, ts=_iso(now - ago))
+        return oid
+
+    # posizioni aperte: AAPL e LLY esistono già; si aggiungono GOOGL, META, JPM, XOM
+    opens: dict[str, tuple[int, float, int]] = dict(existing)
+    extra = {"GOOGL": (32, 6, "market_analyst", 0.965, 1.07), "META": (14, 12, "portfolio_manager", 0.96, 1.08),
+             "JPM": (35, 17, "fundamental_analyst", 0.97, 1.05), "XOM": (60, 3, "market_analyst", 0.962, 1.045)}
+    for sym, (qty, days, who, sp, tp) in extra.items():
+        price = last(sym)
+        entry = round(price * (0.985 if sym != "XOM" else 1.012), 2)
+        stop = round(min(entry * sp, price * 0.965), 2)
+        target = round(max(entry * tp, price * 1.05), 2)
+        oid = filled_order(sym, entry, stop, target, qty, timedelta(days=days), "port")
+        db.insert_trade(sym, oid, entry, qty, opened_ts=_iso(now - timedelta(days=days)), stop_price=stop, target_price=target, initial_stop=round(entry * sp, 2), proposed_by=who)
+        opens[sym] = (oid, entry, qty)
+
+    positions = []
+    for sym, (_oid, entry, qty) in opens.items():
+        px = last(sym)
+        positions.append({"symbol": sym, "qty": qty, "avg_entry_price": entry, "current_price": px, "market_value": round(px * qty, 2), "unrealized_pl": round((px - entry) * qty, 2)})
+        broker.market_prices[sym] = Decimal(str(px))
+        order = db.get_order(opens[sym][0])
+        bid = order["broker_order_id"]
+        trade = db.connection.execute("SELECT stop_price, target_price FROM trades WHERE entry_order_id = ?", (opens[sym][0],)).fetchone()
+        broker.orders[bid] = FakeBrokerOrder(
+            broker_order_id=bid, client_order_id=order["client_order_id"], symbol=sym, side="buy",
+            quantity=Decimal(qty), limit_price=Decimal(str(entry)), take_profit=Decimal(str(trade["target_price"])),
+            stop_loss=Decimal(str(trade["stop_price"])), status="filled", filled_quantity=Decimal(qty),
+            average_fill_price=Decimal(str(entry)),
+        )
+        broker.client_map[order["client_order_id"]] = bid
+
+    # trade chiusi: ~24 in un anno, motivi e agenti diversi, alcuni negli ultimi giorni
+    rng = random.Random(11)
+    for i in range(24):
+        sym = rng.choice(sorted(_PROFILE))
+        anchor = _PROFILE[sym][0]
+        entry = round(anchor * rng.uniform(0.8, 1.05), 2)
+        reason = rng.choices(["tp", "sl", "pm_sell", "expired"], weights=[40, 35, 20, 5])[0]
+        pct = {"tp": rng.uniform(0.03, 0.09), "sl": -rng.uniform(0.02, 0.045), "pm_sell": rng.uniform(-0.03, 0.05), "expired": rng.uniform(-0.01, 0.015)}[reason]
+        qty = max(1, int(rng.uniform(3000, 9000) / entry))
+        initial_stop = round(entry * (1 - rng.uniform(0.03, 0.05)), 2)
+        closed_ago = timedelta(days=rng.uniform(0.2, 6.0) if i < 5 else rng.uniform(7, 355))
+        held = timedelta(days=rng.randint(2, 21), hours=rng.randint(0, 5))
+        oid = filled_order(sym, entry, initial_stop, round(entry * 1.07, 2), qty, closed_ago + held, f"hist{i}")
+        exit_px = round(entry * (1 + pct), 2)
+        who = None if i == 7 else rng.choice(_AGENTS)
+        tid = db.insert_trade(sym, oid, entry, qty, opened_ts=_iso(now - closed_ago - held), closed_ts=_iso(now - closed_ago), exit_reason=reason, exit_price=exit_px, initial_stop=initial_stop, proposed_by=who)
+        db.connection.execute("UPDATE trades SET realized_pnl = ?, closed_qty = ? WHERE id = ?", (round((exit_px - entry) * qty, 2), qty, tid))
+
+    # equity giornaliera (>1 anno) correlata a SPY, che termina sul valore delle posizioni + cassa
+    invested = sum(p["market_value"] for p in positions)
+    cash = round(invested * 1.1, 2)
+    equity_end = round(cash + invested, 2)
+    days = [d for d in (now - timedelta(days=i) for i in range(400, 0, -1)) if d.weekday() < 5]
+    market_ret = [rng.gauss(0.0004, 0.009) for _ in days]
+    eq_path, spy_path, e, b = [], [], 1.0, 1.0
+    for m in market_ret:
+        e *= math.exp(0.7 * m + rng.gauss(0.0003, 0.004))
+        b *= math.exp(m)
+        eq_path.append(e)
+        spy_path.append(b)
+    scale = equity_end / eq_path[-1] / 1.0037  # l'ultimo snapshot è +0,37% sul giorno precedente
+    for d, e, b in zip(days, eq_path, spy_path, strict=True):
+        db.insert_portfolio_snapshot(equity=round(e * scale, 2), cash=round(e * scale * 0.55, 2), ts=_iso(d.replace(hour=21, minute=0, second=0, microsecond=0)))
+        px = round(430 * b, 2)
+        db.connection.execute(
+            "INSERT OR REPLACE INTO prices_ohlcv(symbol, ts, interval, o, h, l, c, v, source, fetched_at) VALUES ('SPY', ?, '1d', ?, ?, ?, ?, 1, 'scenario', ?)",
+            (d.strftime("%Y-%m-%dT00:00:00Z"), px, px, px, px, _iso(now)),
+        )
+    db.insert_portfolio_snapshot(equity=equity_end, cash=cash, positions=positions, ts=_iso(now - timedelta(minutes=3)))
+
+    # una modifica ai limiti nella cronologia
+    store = RiskLimitsStore(db, defaults_from_settings(rt.office.settings.limits))
+    store.update({"max_sector_fraction": 0.32}, "Tecnologia in trend: concedo più spazio al settore", "cockpit")
+
+
 def seed_scenario(rt: Any, market: ScenarioMarketData) -> None:
     """Populate the dev office through the Runtime and, where no command exists, the DB."""
     from runtime.commands import AddWatchlist, UpsertAnnotation
@@ -277,28 +388,13 @@ def seed_scenario(rt: Any, market: ScenarioMarketData) -> None:
         jpm_entry = round(jpm[-300]["c"], 2)
         jpm_oid = order("JPM", "buy", draft("JPM", "buy", jpm_entry, round(jpm_entry * 0.97, 2), round(jpm_entry * 1.05, 2), 35), "auto", "filled", timedelta(days=44), [("filled", {"price": jpm_entry})])
 
-        db.insert_trade("AAPL", aapl_oid, aapl_entry, 40, opened_ts=_iso(now - timedelta(days=4)))
-        db.insert_trade("LLY", lly_oid, lly_entry, 6, opened_ts=_iso(now - timedelta(days=9)), events=[{"event": "trail_armed", "stop": round(lly_entry * 1.01, 2)}])
-        db.insert_trade("TSLA", tsla_oid, tsla_entry, 20, opened_ts=_iso(now - timedelta(days=30)), closed_ts=_iso(now - timedelta(days=24)), exit_reason="sl", exit_price=round(tsla_entry * 0.95, 2))
-        db.insert_trade("JPM", jpm_oid, jpm_entry, 35, opened_ts=_iso(now - timedelta(days=44)), closed_ts=_iso(now - timedelta(days=31)), exit_reason="tp", exit_price=round(jpm_entry * 1.05, 2))
+        aapl_now, lly_now = last("AAPL"), last("LLY")
+        db.insert_trade("AAPL", aapl_oid, aapl_entry, 40, opened_ts=_iso(now - timedelta(days=4)), stop_price=min(round(aapl_entry * 0.968, 2), round(aapl_now * 0.97, 2)), target_price=round(aapl_entry * 1.06, 2) if aapl_entry * 1.06 > aapl_now else round(aapl_now * 1.04, 2), initial_stop=round(aapl_entry * 0.968, 2), proposed_by="technical_analyst")
+        db.insert_trade("LLY", lly_oid, lly_entry, 6, opened_ts=_iso(now - timedelta(days=9)), events=[{"event": "trail_armed", "stop": round(lly_entry * 1.01, 2)}], stop_price=min(round(lly_entry * 1.01, 2), round(lly_now * 0.97, 2)), target_price=max(round(lly_entry * 1.08, 2), round(lly_now * 1.05, 2)), initial_stop=round(lly_entry * 0.955, 2), proposed_by="portfolio_manager")
+        db.insert_trade("TSLA", tsla_oid, tsla_entry, 20, opened_ts=_iso(now - timedelta(days=30)), closed_ts=_iso(now - timedelta(days=24)), exit_reason="sl", exit_price=round(tsla_entry * 0.95, 2), initial_stop=round(tsla_entry * 0.95, 2), proposed_by="technical_analyst")
+        db.insert_trade("JPM", jpm_oid, jpm_entry, 35, opened_ts=_iso(now - timedelta(days=44)), closed_ts=_iso(now - timedelta(days=31)), exit_reason="tp", exit_price=round(jpm_entry * 1.05, 2), initial_stop=round(jpm_entry * 0.97, 2), proposed_by="fundamental_analyst")
 
-        # Portfolio: daily equity history and the latest snapshot with positions.
-        aapl_px, lly_px = last("AAPL"), last("LLY")
-        positions = [
-            {"symbol": "AAPL", "qty": 40, "avg_entry_price": aapl_entry, "current_price": aapl_px, "market_value": round(aapl_px * 40, 2), "unrealized_pl": round((aapl_px - aapl_entry) * 40, 2)},
-            {"symbol": "LLY", "qty": 6, "avg_entry_price": lly_entry, "current_price": lly_px, "market_value": round(lly_px * 6, 2), "unrealized_pl": round((lly_px - lly_entry) * 6, 2)},
-        ]
-        rng = random.Random(7)
-        equity = 98_400.0
-        for i in range(60, 0, -1):
-            day = now - timedelta(days=i)
-            if day.weekday() >= 5:
-                continue
-            equity *= math.exp(rng.gauss(0.0007, 0.004))
-            db.insert_portfolio_snapshot(equity=round(equity, 2), cash=round(equity * 0.78, 2), ts=_iso(day.replace(hour=21, minute=0, second=0, microsecond=0)))
-        invested = sum(p["market_value"] for p in positions)
-        cash = round(equity * 0.97 - invested + 1450.0, 2)
-        db.insert_portfolio_snapshot(equity=round(cash + invested, 2), cash=cash, positions=positions, ts=_iso(now - timedelta(minutes=3)))
+        _seed_portfolio(rt, market, now, {"AAPL": (aapl_oid, aapl_entry, 40), "LLY": (lly_oid, lly_entry, 6)})
 
         # Shared ticker state written by the agents.
         db.set_ticker_state("AAPL", {

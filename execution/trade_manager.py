@@ -20,6 +20,28 @@ from storage.office_db import OfficeDB, utc_now_iso
 ExitReason = Literal["tp", "sl", "pm_sell", "expired", "reconciled_unknown"]
 
 
+def resolve_proposed_by(state: dict[str, Any] | None) -> str | None:
+    """Agente che ha proposto il trade, dallo stato condiviso del ticker.
+
+    Il suggerimento `buy` con più convinzione, altrimenti l'autore della decisione del PM;
+    `None` se non determinabile (mai un nome inventato).
+    """
+    if not state:
+        return None
+    best: tuple[float, str] | None = None
+    for agent, sug in (state.get("suggestions") or {}).items():
+        if isinstance(sug, dict) and str(sug.get("direction", "")).lower() == "buy":
+            conv = float(sug.get("conviction") or 0.0)
+            if best is None or conv > best[0]:
+                best = (conv, str(agent))
+    if best is not None:
+        return best[1]
+    decision = state.get("decision")
+    if isinstance(decision, dict):
+        return decision.get("proposed_by") or ("portfolio_manager" if decision else None)
+    return None
+
+
 class TradeManager:
     """Tracks Trade lifecycle from entry to exit, managing events and trailing stop adjustments."""
 
@@ -94,6 +116,40 @@ class TradeManager:
                 stop=stop,
             )
 
+    def _emit(self, type_: str, subject: str, payload: dict[str, Any]) -> None:
+        if self.event_log is not None:
+            self.event_log.append(type=type_, subject=subject, payload=payload, actor="trade_manager")
+
+    def _emit_position_changed(self, ticker: str, trade_id: int, change: str, **extra: Any) -> None:
+        trade = self.db.get_trade(trade_id) or {}
+        qty = float(trade.get("qty") or 0.0)
+        closed = float(trade.get("closed_qty") or 0.0)
+        self._emit(
+            "position.changed",
+            f"position:{ticker}",
+            {
+                "ticker": ticker,
+                "trade_id": trade_id,
+                "change": change,
+                "qty_remaining": max(qty - closed, 0.0) if trade.get("closed_ts") is None else 0.0,
+                "stop_price": trade.get("stop_price"),
+                "target_price": trade.get("target_price"),
+                **extra,
+            },
+        )
+
+    def _emit_portfolio_updated(self, reason: str, ticker: str) -> None:
+        self._emit("portfolio.updated", "portfolio", {"reason": reason, "ticker": ticker})
+
+    def _proposed_by(self, ticker: str) -> str | None:
+        row = self.db.get_ticker_state(ticker)
+        if not row or not row.get("state_json"):
+            return None
+        try:
+            return resolve_proposed_by(json.loads(row["state_json"]))
+        except Exception:
+            return None
+
     def record_entry_fill(
         self,
         order_id: int | None = None,
@@ -130,6 +186,7 @@ class TradeManager:
         # Extract draft defaults if not supplied
         atr_dec = Decimal(str(atr)) if atr is not None else None
         stop_dec = Decimal(str(stop_loss)) if stop_loss is not None else None
+        target_dec: Decimal | None = None
         if order.get("draft_json"):
             try:
                 draft_dict = json.loads(order["draft_json"])
@@ -137,6 +194,8 @@ class TradeManager:
                     atr_dec = Decimal(str(draft_dict["atr"]))
                 if stop_dec is None and draft_dict.get("stop"):
                     stop_dec = Decimal(str(draft_dict["stop"]))
+                if draft_dict.get("take_profit"):
+                    target_dec = Decimal(str(draft_dict["take_profit"]))
             except Exception:
                 pass
 
@@ -168,6 +227,10 @@ class TradeManager:
             qty=float(qty_dec),
             opened_ts=now_ts,
             events=initial_events,
+            stop_price=float(stop_dec),
+            target_price=float(target_dec) if target_dec is not None else None,
+            initial_stop=float(stop_dec),
+            proposed_by=self._proposed_by(resolved_ticker),
         )
 
         state = TrailingState(
@@ -212,6 +275,8 @@ class TradeManager:
                 },
                 actor="trade_manager",
             )
+            self._emit_position_changed(resolved_ticker, trade_id, "opened")
+            self._emit_portfolio_updated("trade.opened", resolved_ticker)
 
         return trade_id
 
@@ -263,12 +328,21 @@ class TradeManager:
             }
         )
 
+        qty_total = float(trade["qty"])
+        already_closed = float(trade.get("closed_qty") or 0.0)
+        pnl_total = float(trade.get("realized_pnl") or 0.0)
+        if price_val is not None:
+            pnl_total += (price_val - float(trade["entry_price"])) * max(
+                qty_total - already_closed, 0.0
+            )
         self.db.close_trade(
             trade_id=tid,
             exit_price=price_val,
             exit_reason=exit_reason,
             closed_ts=now_ts,
             events=events,
+            realized_pnl=pnl_total if price_val is not None else None,
+            closed_qty=qty_total,
         )
 
         ticker = trade["ticker"]
@@ -300,6 +374,90 @@ class TradeManager:
                 },
                 actor="trade_manager",
             )
+            self._emit_position_changed(ticker, tid, "closed", exit_reason=exit_reason)
+            self._emit_portfolio_updated("trade.closed", ticker)
+
+    def record_partial_exit(
+        self,
+        trade_id: int,
+        qty: Decimal | float | int | str,
+        price: Decimal | float | int | str,
+        ts: str | None = None,
+        reason: str = "pm_sell",
+    ) -> None:
+        """Chiusura parziale: riduce la quantità aperta e accumula il PnL realizzato."""
+        trade = self.db.get_trade(trade_id)
+        if not trade or trade["closed_ts"] is not None:
+            raise KeyError(f"Open trade {trade_id} not found")
+        q = float(Decimal(str(qty)))
+        px = float(Decimal(str(price)))
+        remaining = float(trade["qty"]) - float(trade.get("closed_qty") or 0.0)
+        if q <= 0 or q > remaining + 1e-9:
+            raise ValueError(f"Invalid partial quantity {q}: remaining {remaining}")
+        now_ts = ts or utc_now_iso()
+        events = json.loads(trade["events_json"]) if trade["events_json"] else []
+        events.append({"ts": now_ts, "event": "partial_exit", "price": px, "qty": q,
+                       "reason": reason})
+        self.db.add_trade_partial_close(
+            trade_id, qty=q, pnl=(px - float(trade["entry_price"])) * q, events=events
+        )
+        ticker = trade["ticker"]
+        self.db.add_inbox(
+            "order_executed", f"Trade {trade_id} on {ticker} ridotto di {q} @ {px}", ts=now_ts
+        )
+        self._emit("trade.reduced", f"trade:{trade_id}",
+                   {"trade_id": trade_id, "ticker": ticker, "qty": q, "price": px, "ts": now_ts})
+        self._emit_position_changed(ticker, trade_id, "reduced", qty_closed=q, price=px)
+        self._emit_portfolio_updated("trade.reduced", ticker)
+
+    def set_exit_levels(
+        self,
+        ticker: str,
+        stop: Decimal | None = None,
+        target: Decimal | None = None,
+        reason: str = "manual",
+        actor: str = "trade_manager",
+    ) -> dict[str, Any]:
+        """Aggiorna stop/target dell'ordine protettivo aperto, del trade e dello stato trailing."""
+        sym = ticker.upper()
+        trade = self.get_open_trade(sym)
+        if trade is None:
+            raise KeyError(f"No open trade for {sym}")
+        tid = int(trade["id"])
+        order = self.db.get_order(int(trade["entry_order_id"]))
+        broker_id = order.get("broker_order_id") if order else None
+        if broker_id:
+            if stop is not None:
+                self.broker.modify_stop(broker_id, stop)
+            if target is not None:
+                self.broker.modify_take_profit(broker_id, target)
+        if order is not None:
+            self.db.insert_order_event(
+                int(order["id"]),
+                "modify_exit",
+                {"new_stop": str(stop) if stop is not None else None,
+                 "new_target": str(target) if target is not None else None,
+                 "reason": reason},
+            )
+        events = json.loads(trade["events_json"]) if trade["events_json"] else []
+        events.append({"ts": utc_now_iso(), "event": "exit_levels_updated", "actor": actor,
+                       "new_stop": float(stop) if stop is not None else None,
+                       "new_target": float(target) if target is not None else None})
+        self.db.update_trade_levels(
+            tid,
+            stop_price=float(stop) if stop is not None else None,
+            target_price=float(target) if target is not None else None,
+            events=events,
+        )
+        state = self._trailing_states.get(sym)
+        if state is not None and stop is not None:
+            from dataclasses import replace
+
+            self._trailing_states[sym] = replace(state, stop=stop)
+        self._emit_position_changed(sym, tid, "exit_levels")
+        updated = self.db.get_trade(tid) or {}
+        return {"trade_id": tid, "stop_price": updated.get("stop_price"),
+                "target_price": updated.get("target_price")}
 
     def on_price(
         self,
@@ -357,9 +515,10 @@ class TradeManager:
                         }
                     )
                     self.db.connection.execute(
-                        "UPDATE trades SET events_json = ? WHERE id = ?",
-                        (json.dumps(events), trade_id),
+                        "UPDATE trades SET events_json = ?, stop_price = ? WHERE id = ?",
+                        (json.dumps(events), float(res.state.stop), trade_id),
                     )
+                    self._emit_position_changed(sym, trade_id, "trailing_stop")
 
         return res
 

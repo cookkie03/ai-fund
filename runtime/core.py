@@ -14,11 +14,13 @@ from typing import TYPE_CHECKING, Any
 from runtime.commands import (
     AddWatchlist,
     ApproveOrder,
+    ClosePosition,
     CommandResult,
     EnqueueTask,
     Halt,
     IngestAlert,
     MarkInboxRead,
+    ModifyExit,
     ReconcileBroker,
     RefreshData,
     RejectOrder,
@@ -26,16 +28,19 @@ from runtime.commands import (
     Resume,
     Say,
     StrikeAnnotation,
+    UpdateRiskLimits,
     UpsertAnnotation,
 )
 from runtime.events import Event, EventBus, EventLog
 from runtime.handlers import (
     handle_add_watchlist,
     handle_approve_order,
+    handle_close_position,
     handle_enqueue_task,
     handle_halt,
     handle_ingest_alert,
     handle_mark_inbox_read,
+    handle_modify_exit,
     handle_reconcile_broker,
     handle_refresh_data,
     handle_reject_order,
@@ -43,6 +48,7 @@ from runtime.handlers import (
     handle_resume,
     handle_say,
     handle_strike_annotation,
+    handle_update_risk_limits,
     handle_upsert_annotation,
 )
 from runtime.jobs import (
@@ -77,6 +83,9 @@ _HANDLER_MAP = {
     AddWatchlist: handle_add_watchlist,
     RemoveWatchlist: handle_remove_watchlist,
     ApproveOrder: handle_approve_order,
+    UpdateRiskLimits: handle_update_risk_limits,
+    ClosePosition: handle_close_position,
+    ModifyExit: handle_modify_exit,
     RejectOrder: handle_reject_order,
     Halt: handle_halt,
     Resume: handle_resume,
@@ -266,6 +275,11 @@ class Runtime:
                 ok=False, reasons=[f"Unknown command type: {cmd.__class__.__name__}"]
             )
 
+        if getattr(cmd, "dry_run", False):
+            # Anteprima: nessuna scrittura, nessun evento di comando.
+            with self._command_lock:
+                return handler(self._ctx, cmd, actor)
+
         with self._command_lock:
             # 1. Idempotency check: if command_id exists, return saved result
             if command_id:
@@ -277,7 +291,9 @@ class Runtime:
             # Network commands (ApproveOrder, Halt, ReconcileBroker, RefreshData) manage their
             # own split transactions to avoid holding SQLite lock during network calls.
             # Purely local commands run in a single atomic transaction with command.accepted.
-            is_network_cmd = isinstance(cmd, (ApproveOrder, Halt, ReconcileBroker, RefreshData))
+            is_network_cmd = isinstance(
+                cmd, (ApproveOrder, Halt, ReconcileBroker, RefreshData, ClosePosition, ModifyExit)
+            )
 
             try:
                 if is_network_cmd:

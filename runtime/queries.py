@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
+
+from execution.risk_limits import (
+    ConnRiskLimitsReader,
+    RiskLimitsStore,
+    bounds_payload,
+    defaults_from_settings,
+)
+from runtime import portfolio
 
 if TYPE_CHECKING:
     from runtime.core import Runtime
@@ -72,6 +80,13 @@ class TradeDTO(BaseModel):
     exit_reason: str | None = None
     opened_ts: str
     closed_ts: str | None = None
+    pnl: float | None = None
+    r_multiple: float | None = None
+    duration_s: float | None = None
+    proposed_by: str | None = None
+    stop_price: float | None = None
+    target_price: float | None = None
+    qty_remaining: float | None = None
 
 
 class MessageDTO(BaseModel):
@@ -144,6 +159,95 @@ class ReadModel:
         conn = sqlite3.connect(uri, uri=True, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         return conn
+
+    # --- Portafoglio ---
+
+    def _now(self) -> datetime:
+        office = getattr(self._runtime, "office", None)
+        try:
+            return office.get_now().astimezone(UTC)
+        except Exception:
+            return datetime.now(UTC)
+
+    def _limits_store(self, conn: sqlite3.Connection) -> RiskLimitsStore:
+        office = getattr(self._runtime, "office", None)
+        if office is not None:
+            defaults = defaults_from_settings(office.settings.limits)
+        else:
+            from config.office_settings import OfficeSettings
+
+            defaults = defaults_from_settings(OfficeSettings().limits)
+        return RiskLimitsStore(ConnRiskLimitsReader(conn), defaults)  # type: ignore[arg-type]
+
+    def _with_conn(self, fn: Any) -> Any:
+        conn = self._get_connection()
+        try:
+            return fn(conn)
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    @staticmethod
+    def _trade_extras(conn: sqlite3.Connection, r: sqlite3.Row) -> dict[str, Any]:
+        keys = r.keys()
+        closed = r["closed_ts"] is not None
+        pnl = portfolio.trade_pnl(r) if closed and "realized_pnl" in keys else None
+        opened = portfolio._parse(r["opened_ts"])
+        end = portfolio._parse(r["closed_ts"]) if closed else None
+        stop, target = portfolio.trade_levels(conn, r)
+        qty = float(r["qty"])
+        done = float(r["closed_qty"] or 0.0) if "closed_qty" in keys else 0.0
+        return {
+            "pnl": pnl,
+            "r_multiple": portfolio.trade_r_multiple(r, pnl) if closed else None,
+            "duration_s": (end - opened).total_seconds() if opened and end else None,
+            "proposed_by": r["proposed_by"] if "proposed_by" in keys else None,
+            "stop_price": stop,
+            "target_price": target,
+            "qty_remaining": None if closed else max(qty - done, 0.0),
+        }
+
+    def risk_limits(self) -> dict[str, Any]:
+        def run(conn: sqlite3.Connection) -> dict[str, Any]:
+            active = self._limits_store(conn).active()
+            return {
+                "version": active.version,
+                "updated_ts": active.updated_ts,
+                "updated_by": active.updated_by,
+                "limits": active.limits,
+                "bounds": bounds_payload(),
+                "usage": portfolio.limits_usage(conn, self._now(), active.limits),
+            }
+
+        return self._with_conn(run)
+
+    def risk_limits_history(self, limit: int = 50) -> list[dict[str, Any]]:
+        return self._with_conn(lambda conn: self._limits_store(conn).history(limit))
+
+    def portfolio_summary(self) -> dict[str, Any]:
+        def run(conn: sqlite3.Connection) -> dict[str, Any]:
+            limits = self._limits_store(conn).active().limits
+            return portfolio.portfolio_summary(conn, self._now(), limits)
+
+        return self._with_conn(run)
+
+    def positions(self) -> list[dict[str, Any]]:
+        return self._with_conn(lambda conn: portfolio.open_positions(conn, self._now()))
+
+    def allocation(self) -> dict[str, Any]:
+        def run(conn: sqlite3.Connection) -> dict[str, Any]:
+            limits = self._limits_store(conn).active().limits
+            return portfolio.allocation(conn, self._now(), limits)
+
+        return self._with_conn(run)
+
+    def performance(self, period: str = "1M", benchmark: str | None = "SPY") -> dict[str, Any]:
+        return self._with_conn(
+            lambda conn: portfolio.performance(conn, self._now(), period, benchmark)
+        )
+
+    def attribution(self, period: str = "1M") -> dict[str, Any]:
+        return self._with_conn(lambda conn: portfolio.attribution(conn, self._now(), period))
 
     def agents(self) -> list[dict[str, Any]]:
         from datetime import UTC, datetime
@@ -327,7 +431,9 @@ class ReadModel:
                 sql += " AND ts <= ?"
                 params.append(to_ts)
             sql += " ORDER BY ts ASC"
-            return [dict(r) for r in conn.execute(sql, params).fetchall()]
+            return portfolio.equity_history_with_drawdown(
+                [dict(r) for r in conn.execute(sql, params).fetchall()]
+            )
         finally:
             if self.db_path != ":memory:":
                 conn.close()
@@ -472,6 +578,7 @@ class ReadModel:
                     exit_reason=r["exit_reason"],
                     opened_ts=str(r["opened_ts"]),
                     closed_ts=r["closed_ts"],
+                    **self._trade_extras(conn, r),
                 )
                 for r in rows
             ]
