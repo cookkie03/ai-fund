@@ -503,3 +503,31 @@ def test_bridge_conversation_pagination_and_search_filter(tmp_path):
     assert msgs[1]["id"] == mid1_2
     assert msgs[0]["text"] == "Primo messaggio"
     assert msgs[1]["text"] == "Secondo messaggio"
+
+
+def test_bridge_replaces_provisional_title_after_first_turn(tmp_path):
+    """TDD: verify that Bridge replaces provisional raw title with a crisp short title after turn 1."""
+    db = OfficeDB(tmp_path / "bridge.db")
+    office = build_test_office(db=db)
+    rt = Runtime(office=office)
+    rt.bridge_runner.set_backend(ScriptedBridgeBackend())
+
+    # Send say without conversation_id and a long initial message
+    long_prompt = "Vorrei controllare il portafoglio e vedere se le posizioni su AAPL sono sicure"
+    res = rt.execute(BridgeSay(conversation_id=None, text=long_prompt), actor="luca")
+    assert res.ok is True
+    conv_id = res.data["conversation_id"]
+
+    # Initial provisional title before the turn completes
+    initial_conv = db.get_bridge_conversation(conv_id)
+    assert initial_conv["title"].endswith("...")
+
+    _wait_for_turn(rt, conv_id)
+
+    # After first turn, the Bridge must have replaced the provisional title with a crisp title
+    updated_conv = db.get_bridge_conversation(conv_id)
+    assert not updated_conv["title"].endswith("...")
+    assert len(updated_conv["title"]) <= 35
+    # The crisp title must reference the discussed topic/ticker rather than being cut off mid-word
+    assert "AAPL" in updated_conv["title"] or "Portafoglio" in updated_conv["title"]
+    assert not updated_conv["title"].endswith("portafog")

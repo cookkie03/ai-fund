@@ -32,7 +32,24 @@ def _extract_refs(text: str, items: list[dict[str, Any]] | None = None) -> list[
     # Ticker mentions: 2-5 uppercase letters preceded by space or start, e.g. NVDA, AAPL, MSFT, AMD
     for m in re.finditer(r"\b([A-Z]{2,5})\b", text):
         sym = m.group(1)
-        if sym not in ("OK", "PM", "P&L", "ATR", "SMA", "EMA", "RSI", "MACD", "USD", "EUR", "SL", "TP", "LLM", "SSE", "UI", "DB"):
+        if sym not in (
+            "OK",
+            "PM",
+            "P&L",
+            "ATR",
+            "SMA",
+            "EMA",
+            "RSI",
+            "MACD",
+            "USD",
+            "EUR",
+            "SL",
+            "TP",
+            "LLM",
+            "SSE",
+            "UI",
+            "DB",
+        ):
             key = ("ticker", sym)
             if key not in seen:
                 seen.add(key)
@@ -207,7 +224,11 @@ class BridgeRunner:
             db_messages = db.list_bridge_messages(conversation_id, limit=50)
             chat_context: list[ChatMessage] = []
             for m in db_messages:
-                role = "assistant" if m["author"] == "bridge" else ("user" if m["author"] == "luca" else "system")
+                role = (
+                    "assistant"
+                    if m["author"] == "bridge"
+                    else ("user" if m["author"] == "luca" else "system")
+                )
                 content = m["text"]
                 if m["kind"] == "agent_relay":
                     content = f"[Relay da {m['author']}]: {content}"
@@ -292,7 +313,9 @@ class BridgeRunner:
 
                 # Log LLM Call
                 dur_ms = int((datetime.now(UTC) - started).total_seconds() * 1000)
-                usage = step_result.usage or Usage(prompt_tokens=250, completion_tokens=100, cost=0.01)
+                usage = step_result.usage or Usage(
+                    prompt_tokens=250, completion_tokens=100, cost=0.01
+                )
                 db.log_llm_call(
                     agent="bridge",
                     model=spec.model,
@@ -311,7 +334,11 @@ class BridgeRunner:
                             event_log.append(
                                 "bridge.status",
                                 f"bridge_conv:{conversation_id}",
-                                {"conversation_id": conversation_id, "status": "tool", "tool": tc.name},
+                                {
+                                    "conversation_id": conversation_id,
+                                    "status": "tool",
+                                    "tool": tc.name,
+                                },
                                 actor="bridge",
                             )
 
@@ -337,7 +364,11 @@ class BridgeRunner:
                         event_log.append(
                             "bridge.status",
                             f"bridge_conv:{conversation_id}",
-                            {"conversation_id": conversation_id, "status": "thinking", "tool": None},
+                            {
+                                "conversation_id": conversation_id,
+                                "status": "thinking",
+                                "tool": None,
+                            },
                             actor="bridge",
                         )
 
@@ -370,12 +401,18 @@ class BridgeRunner:
                     action_payload = {
                         "id": act_dict["id"],
                         "command": act_dict["command"],
-                        "payload": json.loads(act_dict["payload_json"]) if act_dict.get("payload_json") else {},
+                        "payload": json.loads(act_dict["payload_json"])
+                        if act_dict.get("payload_json")
+                        else {},
                         "summary": act_dict["summary"],
                         "capital": bool(act_dict["capital"]),
                         "status": act_dict["status"],
-                        "preview": json.loads(act_dict["preview_json"]) if act_dict.get("preview_json") else None,
-                        "result_reasons": json.loads(act_dict["result_reasons_json"]) if act_dict.get("result_reasons_json") else [],
+                        "preview": json.loads(act_dict["preview_json"])
+                        if act_dict.get("preview_json")
+                        else None,
+                        "result_reasons": json.loads(act_dict["result_reasons_json"])
+                        if act_dict.get("result_reasons_json")
+                        else [],
                         "decided_ts": act_dict["decided_ts"],
                         "decided_by": act_dict["decided_by"],
                     }
@@ -403,10 +440,35 @@ class BridgeRunner:
             # Auto-title conversation if needed
             conv = db.get_bridge_conversation(conversation_id)
             if conv and conv["title"].endswith("..."):
-                # Clean provisional title to a crisp one
-                new_title = conv["title"].removesuffix("...").strip()
-                if len(new_title) > 30:
-                    new_title = new_title[:30]
+                # Look for tickers in refs or messages
+                msgs = db.list_bridge_messages(conversation_id)
+                all_refs = [r for m in msgs for r in (m.get("refs") or [])]
+                tickers = [r["id"] for r in all_refs if r.get("type") == "ticker"]
+
+                lower_title = conv["title"].lower()
+                if tickers:
+                    ticker = tickers[0]
+                    if "chiudi" in lower_title or "vend" in lower_title or "close" in lower_title:
+                        new_title = f"Chiusura {ticker}"
+                    elif "portafoglio" in lower_title:
+                        new_title = f"Portafoglio e {ticker}"
+                    else:
+                        new_title = f"Analisi {ticker}"
+                elif "portafoglio" in lower_title:
+                    new_title = "Analisi Portafoglio"
+                else:
+                    # Clean provisional title without cutting words mid-way
+                    clean = conv["title"].removesuffix("...").strip()
+                    words = clean.split()
+                    short_words = []
+                    cur_len = 0
+                    for w in words:
+                        if cur_len + len(w) + (1 if short_words else 0) > 30:
+                            break
+                        short_words.append(w)
+                        cur_len += len(w) + (1 if len(short_words) > 1 else 0)
+                    new_title = " ".join(short_words) if short_words else clean[:30]
+
                 db.update_bridge_conversation(conversation_id, title=new_title)
                 if event_log:
                     updated_conv = db.get_bridge_conversation(conversation_id)
@@ -465,13 +527,17 @@ class BridgeRunner:
 
             parts: list[str] = []
             if portfolio:
-                parts.append(f"Portafoglio a ${portfolio.get('value', 0):,.2f} ({portfolio.get('change_fraction', 0)*100:+.2f}%).")
+                parts.append(
+                    f"Portafoglio a ${portfolio.get('value', 0):,.2f} ({portfolio.get('change_fraction', 0) * 100:+.2f}%)."
+                )
             if "trade" in types_count:
                 parts.append(f"{types_count['trade']} trade eseguiti o conclusi.")
             if "order_pending" in types_count:
                 parts.append(f"{types_count['order_pending']} ordini in attesa di approvazione.")
             if "proposal_pending" in types_count:
-                parts.append(f"{types_count['proposal_pending']} proposte di trading in attesa del PM.")
+                parts.append(
+                    f"{types_count['proposal_pending']} proposte di trading in attesa del PM."
+                )
             if "alert" in types_count:
                 parts.append(f"{types_count['alert']} alert registrati.")
             if "halt" in types_count:
@@ -479,7 +545,9 @@ class BridgeRunner:
             if "agent_error" in types_count:
                 parts.append(f"{types_count['agent_error']} errori o fallimenti degli agenti.")
 
-            summary = " ".join(parts) if parts else f"{len(items)} aggiornamenti registrati nell'ufficio."
+            summary = (
+                " ".join(parts) if parts else f"{len(items)} aggiornamenti registrati nell'ufficio."
+            )
 
         # Cache in briefing_state
         with db.transaction():
