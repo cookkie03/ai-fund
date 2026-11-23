@@ -236,6 +236,16 @@ def test_modify_exit_allowed_in_halt_when_tightening(env):
     assert env["db"].get_trade(tid)["stop_price"] == 99.0
 
 
+def test_modify_exit_widening_blocked_in_halt(env):
+    tid = seed_trade(env)
+    post(env["client"], "update_risk_limits",
+         {"limits": {"max_risk_per_trade_fraction": 0.02}, "reason": "più spazio", "confirm": True})
+    post(env["client"], "halt", {"cancel_open": False, "confirm": True})
+    res = post(env["client"], "modify_exit", {"ticker": "AAPL", "stop_price": 94.0, "confirm": True}).json()
+    assert res["ok"] is False and "halted" in res["reasons"][0]
+    assert env["db"].get_trade(tid)["stop_price"] == 95.0
+
+
 def test_modify_exit_dry_run_reports_risk_and_writes_nothing(env):
     tid = seed_trade(env)
     before = env["db"].connection.execute("SELECT COUNT(*) FROM events").fetchone()[0]

@@ -219,6 +219,9 @@ class PositionExits:
         if eff_stop is not None and eff_target is not None and eff_stop >= eff_target:
             reasons.append("Lo stop deve restare sotto il target")
         widening = stop is not None and cur_stop is not None and stop < cur_stop
+        # Halt blocks anything that adds risk; tightening the stop stays allowed (it only protects).
+        if widening and self.halt.is_halted():
+            reasons.append(f"{HALT_REASON}: allargare lo stop aumenta il rischio")
         if widening and not reasons:
             order = GateOrder(symbol=trade["ticker"], side="buy", quantity=remaining,
                               entry=price, stop=stop, take_profit=eff_target or price * 2,
