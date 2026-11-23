@@ -146,7 +146,7 @@ Action  = {id, command, payload, summary, capital: true, status: "pending"|"conf
 ```
 
 **Commands** (require `Idempotency-Key` and `X-Actor`, return `{ok, data, reasons}`)
-- `bridge_say {conversation_id: int|null, text, context: {page, ticker, ref}|null}`: Creates conversation (if `conversation_id: null`) or appends message, queues reasoning turn in Runtime background worker. Returns `{conversation_id, message_id}`.
+- `bridge_say {conversation_id: int|null, text, context: {page, ticker, ref}|null}`: Creates conversation (if `conversation_id: null` with provisional title, auto-synthesizing a crisp title after the first turn) or appends message, queues reasoning turn in Runtime background worker. Returns `{conversation_id, message_id}`.
 - `bridge_rename_conversation {conversation_id, title}`: Renames conversation title.
 - `bridge_archive_conversation {conversation_id, archived: bool}`: Archives or unarchives conversation.
 - `bridge_stop {conversation_id}`: Signals active reasoning turn to abort at the next tool/LLM step.
@@ -154,10 +154,11 @@ Action  = {id, command, payload, summary, capital: true, status: "pending"|"conf
 - `mark_briefing_seen {ts}`: Updates the baseline timestamp for the home briefing reading.
 
 **Read Endpoints**
-- `GET /v1/read/bridge_conversations?limit=&q=&archived=`: List conversations ordered by `updated_ts` DESC.
-- `GET /v1/read/bridge_conversation?id=&limit=&before=`: Chronological message stream for a conversation (default limit 100).
-- `GET /v1/read/bridge_actions?status=`: Actions proposed by Bridge with conversation ID and preview details.
-- `GET /v1/read/briefing?since=`: Home briefing update with portfolio change, key counts (trades, pending orders, proposals, alerts, errors), items list (newest first, max 50), and Bridge summary text.
+- `GET /v1/read/bridge_conversations?limit=&q=&archived=`: List conversations ordered by `updated_ts` DESC; `q` filters across conversation title and message text; `archived` filters archived/active conversations.
+- `GET /v1/read/bridge_conversation?id=&limit=&before=`: Chronological message stream for a conversation (default limit 100); `before` paginates backward returning messages strictly prior to message ID.
+- `GET /v1/read/bridge_actions?status=`: Actions proposed by Bridge with conversation ID and preview details (`pending`, `confirmed`, `dismissed`, `executed`, `failed`).
+- `GET /v1/read/briefing?since=`: Home briefing update with portfolio change, key counts (`trades`, `orders_pending`, `proposals_pending`, `proposals_decided`, `alerts`, `agent_errors`), items list of all 10 types (`trade`, `order_pending`, `proposal_pending`, `proposal_decided`, `alert`, `halt`, `resume`, `dossier`, `agent_error`, `risk_limits`), and cached Bridge `summary_text`.
+
 
 ## 3. Frontend Integration
 

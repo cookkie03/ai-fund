@@ -36,8 +36,13 @@ Inizialmente ipotizzato come "Configuration & State Agent" post-MVP, la decision
    - Se le condizioni di mercato o lo stato sono mutati, l'azione fallisce con motivazione chiara e l'esito viene commentato dal Bridge nella conversazione.
 
 6. **Briefing deterministico e aggiornato**:
-   - Endpoint `GET /v1/read/briefing?since=` che raccoglie in modo deterministico trade, ordini pendenti, proposte, alert, eventi Halt/Resume, aggiornamenti dossier, errori e cambi ai limiti di rischio da `since` (default: ultima lettura `mark_briefing_seen`, altrimenti 24h).
-   - Sintesi `summary_text` scritta dal Bridge, memorizzata in cache e invalidata dai nuovi eventi.
+   - Endpoint `GET /v1/read/briefing?since=` che raccoglie in modo deterministico le 10 categorie di eventi e aggiornamenti da `since` (default: ultima lettura `mark_briefing_seen`, altrimenti 24h): `trade`, `order_pending`, `proposal_pending`, `proposal_decided`, `alert`, `halt`, `resume`, `dossier`, `agent_error`, `risk_limits`.
+   - Sintesi `summary_text` scritta dal Bridge, memorizzata in cache SQLite (`briefing_state`) e invalidata dai nuovi eventi.
+
+7. **Ciclo di vita delle conversazioni e titolazione**:
+   - `bridge_say` senza ID crea un nuovo thread con titolo provvisorio ricavato dalle prime parole; al completamento del primo turno, il Bridge sintetizza automaticamente un titolo breve e nitido correlato al ticker o argomento trattato.
+   - Paginazione retrograda con `before` e ricerca full-text `q` su titolo e corpo dei messaggi.
+
 
 ## Conseguenze
 
