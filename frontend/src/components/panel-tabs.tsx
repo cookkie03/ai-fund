@@ -14,7 +14,7 @@ export function PanelTabsList({ className, children, end }: { className?: string
   );
 }
 
-export function PanelTab({ className, children, count, tone, ...props }: ComponentProps<typeof TabsPrimitive.Trigger> & { count?: number; tone?: "warn" }) {
+export function PanelTab({ className, children, count, tone, onClick, ...props }: ComponentProps<typeof TabsPrimitive.Trigger> & { count?: number; tone?: "warn" }) {
   return (
     <TabsPrimitive.Trigger
       data-part="tab"
@@ -22,6 +22,12 @@ export function PanelTab({ className, children, count, tone, ...props }: Compone
         "seg-item group outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
         className,
       )}
+      // Radix selects on mousedown; a bare click (assistive tech, scripted clicks) only lands here. Focus selects
+      // the tab under automatic activation, so the click works too.
+      onClick={(e) => {
+        onClick?.(e);
+        if (!e.defaultPrevented && document.activeElement !== e.currentTarget) e.currentTarget.focus();
+      }}
       {...props}
     >
       {children}

@@ -15,7 +15,7 @@ import { PANEL_SHORTCUT, useShell } from "@/shell/shell-state";
 type Scope = "ticker" | "all";
 
 /** Who signed the order: the PM drafts every order; Luca approves it, or the account approves on its own. */
-function Signature({ order }: { order: Order }) {
+export function Signature({ order }: { order: Order }) {
   const a = order.approval_status;
   return (
     <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -49,12 +49,12 @@ function Td({ children, right, className }: { children?: ReactNode; right?: bool
   return <td className={cn("h-8 whitespace-nowrap px-2.5 text-xs", right && "num text-right", className)}>{children}</td>;
 }
 
-function Side({ side }: { side: string }) {
+export function Side({ side }: { side: string }) {
   const buy = side.toLowerCase() === "buy";
   return <span className={cn("text-xs font-semibold", buy ? "text-up" : "text-down")}>{buy ? "Acquisto" : "Vendita"}</span>;
 }
 
-function StatusBadge({ order }: { order: Order }) {
+export function StatusBadge({ order }: { order: Order }) {
   const s = order.approval_status === "pending" && order.status === "pending" ? "pending" : order.status;
   const tone =
     s === "pending"
@@ -108,7 +108,7 @@ function gateChecks(o: Order, equity: number | null): GateCheck[] {
   return checks;
 }
 
-function ApproveDialog({ order, onClose }: { order: Order; onClose: () => void }) {
+export function ApproveDialog({ order, onClose }: { order: Order; onClose: () => void }) {
   const portfolio = usePortfolio();
   const { halted } = useShell();
   const [refusal, setRefusal] = useState<string[] | null>(null);
@@ -200,7 +200,7 @@ function ApproveDialog({ order, onClose }: { order: Order; onClose: () => void }
   );
 }
 
-function RejectDialog({ order, onClose }: { order: Order; onClose: () => void }) {
+export function RejectDialog({ order, onClose }: { order: Order; onClose: () => void }) {
   const [reason, setReason] = useState("");
   const reject = useCommand("reject_order", { success: `Ordine #${order.id} rifiutato`, invalidate: [["orders"], ["inbox"]] });
   const presets = ["Rischio troppo alto per ora", "Attendo la trimestrale", "Livello di ingresso non convincente"];

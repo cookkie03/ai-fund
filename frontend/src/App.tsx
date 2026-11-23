@@ -9,6 +9,7 @@ import { NAV } from "@/shell/nav";
 import { ShellStateProvider } from "@/shell/shell-state";
 
 const TerminalPage = lazy(() => import("@/pages/terminal/terminal-page").then((m) => ({ default: m.TerminalPage })));
+const PortafoglioPage = lazy(() => import("@/pages/portafoglio/portafoglio-page").then((m) => ({ default: m.PortafoglioPage })));
 const UfficioPage = lazy(() => import("@/pages/ufficio/ufficio-page").then((m) => ({ default: m.UfficioPage })));
 
 const pageFallback = <div className="flex-1 bg-ground" aria-busy />;
@@ -42,6 +43,14 @@ export function App() {
                     }
                   />
                 ))}
+                <Route
+                  path="/portafoglio"
+                  element={
+                    <Suspense fallback={pageFallback}>
+                      <PortafoglioPage />
+                    </Suspense>
+                  }
+                />
                 {NAV.filter((n) => !n.built).map((n) => (
                   <Route key={n.path} path={n.path} element={<PendingPage item={n} />} />
                 ))}
