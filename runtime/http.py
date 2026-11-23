@@ -24,9 +24,11 @@ from analysis.indicators import (
     simple_moving_average,
 )
 from runtime.commands import (
+    AddDossierNote,
     AddWatchlist,
     ApproveOrder,
     ClosePosition,
+    DecideProposal,
     EnqueueTask,
     Halt,
     IngestAlert,
@@ -54,7 +56,9 @@ _COMMAND_MAP = {
     "say": Say,
     "upsert_annotation": UpsertAnnotation,
     "strike_annotation": StrikeAnnotation,
+    "add_dossier_note": AddDossierNote,
     "add_watchlist": AddWatchlist,
+    "decide_proposal": DecideProposal,
     "remove_watchlist": RemoveWatchlist,
     "approve_order": ApproveOrder,
     "update_risk_limits": UpdateRiskLimits,
@@ -112,6 +116,10 @@ def create_app(
 
         command_id = request.headers.get("Idempotency-Key")
         actor = request.headers.get("X-Actor", "client")
+        if isinstance(cmd, (AddDossierNote, DecideProposal)) and (
+            not command_id or not command_id.strip() or not request.headers.get("X-Actor", "").strip()
+        ):
+            raise HTTPException(status_code=422, detail="Idempotency-Key and X-Actor are required")
 
         res = await asyncio.to_thread(runtime.execute, cmd, actor, command_id)
 
@@ -351,6 +359,22 @@ def create_app(
             return [
                 m.model_dump() for m in runtime.read.chat(agent=agent, topic=topic, limit=limit)
             ]
+        elif norm == "proposals":
+            return runtime.read.proposals(q.get("status"), q.get("ticker"), int(q.get("limit", 50)))
+        elif norm == "dossiers":
+            return runtime.read.dossiers(int(q.get("limit", 50)))
+        elif norm in ("dossier", "dossier_history"):
+            ticker = q.get("ticker", "").strip()
+            if not ticker:
+                raise HTTPException(status_code=422, detail="ticker is required")
+            if norm == "dossier_history":
+                return runtime.read.dossier_history(ticker, int(q.get("limit", 50)))
+            version = q.get("version")
+            dossier = (runtime.read.dossier_version(ticker, int(version)) if version
+                       else runtime.read.dossier(ticker))
+            if dossier is None:
+                raise HTTPException(status_code=404, detail="Dossier not found")
+            return dossier
         elif norm == "ticker_state":
             ticker = q.get("ticker", "")
             state = runtime.read.ticker_state(ticker)

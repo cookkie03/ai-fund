@@ -26,6 +26,8 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
     - `enqueue_task`: Enqueue manual analysis task for an agent on a ticker.
     - `say`: Post a user message to an agent's chat topic (sending to PM automatically schedules a task).
     - `add_watchlist` / `remove_watchlist`: Manage watchlist symbols. `added_by` is set from `X-Actor`.
+    - `add_dossier_note`: Add a signed ticker note (`ticker`, `text`); requires non-empty `Idempotency-Key` and `X-Actor` headers.
+    - `decide_proposal`: Decide a ticker proposal (`proposal_id`, `action`: `accept`|`defer`|`reject`|`ask`, `reason`, `when` optional, `confirm: true`); requires `Idempotency-Key` and `X-Actor`.
     - `upsert_annotation` / `strike_annotation`: Manage chart annotations (shared environment). `strike` marks them as struck without physical deletion.
     - `approve_order`: Approve a pending bracket order (requires `confirm: true`).
     - `reject_order`: Reject a pending order with a reason.
@@ -53,7 +55,11 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
     - `/v1/read/cycles?ticker=&status=&limit=`: Analysis cycles.
     - `/v1/read/cycle?id=`: Specific analysis cycle with full message audit trail.
     - `/v1/read/chat?agent=&topic=&limit=`: Agent chat messages: the most recent `limit` messages, oldest first.
-    - `/v1/read/ticker_state?ticker=`: Current analysis and state for symbol.
+    - `/v1/read/ticker_state?ticker=`: Current legacy analysis and state for symbol.
+    - `/v1/read/dossier?ticker=`: Latest structured dossier; `version` optionally reads a historical document snapshot. Missing dossiers return 404.
+    - `/v1/read/dossier_history?ticker=&limit=`: Version, timestamp, author and changed sections, newest first.
+    - `/v1/read/dossiers?limit=`: Latest dossier summaries.
+    - `/v1/read/proposals?status=&ticker=&limit=`: Proposals for the PM and Cockpit proposal queue.
     - `/v1/read/watchlist`: Current watchlist symbols, notes and author (`added_by`).
     - `/v1/read/bars?ticker=&timeframe=&start=&end=&limit=`: OHLCV bars for lightweight-charts (`time` as UTC epoch s). If omitted, `timeframe` uses `[market].bar_timeframe` in `config/office.toml` (default `1h`).
     - `/v1/read/indicators?ticker=&timeframe=1h&names=ema20,rsi14,atr14,sma20,macd,pivot`: Series aligned with bars.
@@ -78,6 +84,9 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
     - `chat.message`: Message appended to an agent's chat topic (`chat_id`, `message_id`, `agent`, `topic`, `author`, `text`, `kind`, `cycle_id`, `ts`).
     - `tool.called`: Tool invocation recorded with execution outcome and duration (`id`, `agent`, `tool`, `chat_id`, `topic`, `cycle_id`, `duration_ms`, `success`, `error`, `ts`, `compacted`).
     - `agent.status`: Agent status change (`agent`, `status` in `working` | `waiting` | `idle`, `current_task`, `ts`).
+    - `dossier.updated`: Committed dossier version (`ticker`, `version`, `sections`).
+    - `proposal.submitted`: Submitted proposal from ticker agent (`id`, `ticker`).
+    - `proposal.decided`: Decided proposal by PM or user (`id`, `ticker`, `action`, `status`).
   - Terminal & chart event types: `annotation.created`, `annotation.updated`, `annotation.struck`.
   - Portafoglio events (published only after the transaction commits, never on rollback): `portfolio.updated` (`reason`, `ticker`), `position.changed` (`ticker`, `trade_id`, `change` in `opened` | `reduced` | `closed` | `exit_levels` | `trailing_stop`, `qty_remaining`, `stop_price`, `target_price`), `risk_limits.updated` (`version`, `updated_by`, `reason`, `before`, `after`, `limits`), plus the existing `order.created`, `order.status_changed`, `trade.opened`, `trade.closed` and the new `trade.reduced` (partial close: `trade_id`, `ticker`, `qty`, `price`, `ts`). `portfolio.updated` is emitted by trade opens/reduces/closes and by `reconcile_broker` (which also keeps emitting `portfolio.synced`).
 

@@ -77,6 +77,12 @@ model = "my-combo"
 effort = "high"
 api_key_env = "OMNIROUTE_API_KEY"
 
+[agents.ticker_agent]
+endpoint = "http://localhost:20128/v1"
+model = "my-combo"
+effort = "medium"
+api_key_env = "OMNIROUTE_API_KEY"
+
 [agents.market_analyst]
 endpoint = "http://localhost:20128/v1"
 model = "my-combo"

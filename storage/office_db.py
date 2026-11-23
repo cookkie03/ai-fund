@@ -426,6 +426,23 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         ALTER TABLE trades ADD COLUMN realized_pnl REAL;
         """,
     ),
+    (
+        8,
+        "008_ticker_dossier_versions",
+        """
+        CREATE TABLE dossier_versions (
+            ticker TEXT NOT NULL, version INTEGER NOT NULL, ts TEXT NOT NULL,
+            author TEXT NOT NULL, sections_json TEXT NOT NULL, document_json TEXT NOT NULL,
+            PRIMARY KEY (ticker, version)
+        );
+        CREATE TABLE proposals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT NOT NULL, agent TEXT NOT NULL,
+            status TEXT NOT NULL, direction TEXT NOT NULL, conviction REAL NOT NULL,
+            sizing_fraction REAL, risk_reward REAL, submitted_ts TEXT NOT NULL,
+            decided_ts TEXT, decided_by TEXT, reason TEXT NOT NULL, cycle_id INTEGER
+        );
+        """,
+    ),
 ]
 
 
@@ -631,24 +648,19 @@ class OfficeDB:
     # --- Chats & Messages ---
 
     def create_chat(self, agent: str, topic: str) -> int:
-        self._connection.execute(
-            "INSERT INTO agents(name, role) VALUES (?, ?) ON CONFLICT(name) DO NOTHING",
-            (agent, agent),
-        )
-        cursor = self._connection.execute(
-            """
-            INSERT INTO chats (agent, topic, created_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(agent, topic) DO NOTHING
-            """,
-            (agent, topic, utc_now_iso()),
-        )
-        if cursor.rowcount == 0:
+        with self._lock:
+            self._connection.execute(
+                "INSERT INTO agents(name, role) VALUES (?, ?) ON CONFLICT(name) DO NOTHING",
+                (agent, agent),
+            )
+            self._connection.execute(
+                "INSERT INTO chats (agent, topic, created_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(agent, topic) DO NOTHING", (agent, topic, utc_now_iso()),
+            )
             row = self._connection.execute(
                 "SELECT id FROM chats WHERE agent = ? AND topic = ?", (agent, topic)
             ).fetchone()
             return int(row["id"])
-        return int(cursor.lastrowid)
 
     def get_chat(self, chat_id: int) -> dict | None:
         row = self._connection.execute("SELECT * FROM chats WHERE id = ?", (chat_id,)).fetchone()
@@ -825,14 +837,12 @@ class OfficeDB:
     ) -> int:
         opened_ts = opened_ts or utc_now_iso()
         budget_json = budget_used if isinstance(budget_used, str) else json.dumps(budget_used)
-        cursor = self._connection.execute(
-            """
-            INSERT INTO cycles (ticker, status, opened_ts, budget_used_json)
-            VALUES (?, ?, ?, ?)
-            """,
-            (ticker, status, opened_ts, budget_json),
-        )
-        return int(cursor.lastrowid)
+        with self._lock:
+            cursor = self._connection.execute(
+                "INSERT INTO cycles (ticker, status, opened_ts, budget_used_json) VALUES (?, ?, ?, ?)",
+                (ticker, status, opened_ts, budget_json),
+            )
+            return int(cursor.lastrowid)
 
     def close_cycle(
         self,
@@ -841,26 +851,27 @@ class OfficeDB:
         closed_ts: str | None = None,
         budget_used: dict | str | None = None,
     ) -> None:
-        closed_ts = closed_ts or utc_now_iso()
-        if budget_used is not None:
-            budget_json = budget_used if isinstance(budget_used, str) else json.dumps(budget_used)
-            self._connection.execute(
-                """
-                UPDATE cycles
-                SET status = 'closed', outcome = ?, closed_ts = ?, budget_used_json = ?
-                WHERE id = ?
-                """,
-                (outcome, closed_ts, budget_json, cycle_id),
-            )
-        else:
-            self._connection.execute(
-                """
-                UPDATE cycles
-                SET status = 'closed', outcome = ?, closed_ts = ?
-                WHERE id = ?
-                """,
-                (outcome, closed_ts, cycle_id),
-            )
+        with self._lock:
+            closed_ts = closed_ts or utc_now_iso()
+            if budget_used is not None:
+                budget_json = budget_used if isinstance(budget_used, str) else json.dumps(budget_used)
+                self._connection.execute(
+                    """
+                    UPDATE cycles
+                    SET status = 'closed', outcome = ?, closed_ts = ?, budget_used_json = ?
+                    WHERE id = ?
+                    """,
+                    (outcome, closed_ts, budget_json, cycle_id),
+                )
+            else:
+                self._connection.execute(
+                    """
+                    UPDATE cycles
+                    SET status = 'closed', outcome = ?, closed_ts = ?
+                    WHERE id = ?
+                    """,
+                    (outcome, closed_ts, cycle_id),
+                )
 
     def get_cycle(self, cycle_id: int) -> dict | None:
         row = self._connection.execute("SELECT * FROM cycles WHERE id = ?", (cycle_id,)).fetchone()
@@ -898,6 +909,38 @@ class OfficeDB:
         if not row:
             return None
         return dict(row)
+
+    def write_dossier_section(
+        self, ticker: str, section: str, value: Any, author: str, ts: str
+    ) -> int:
+        ticker = ticker.upper().strip()
+        with self.transaction():
+            row = self._connection.execute(
+                "SELECT version, document_json FROM dossier_versions "
+                "WHERE ticker = ? ORDER BY version DESC LIMIT 1", (ticker,)
+            ).fetchone()
+            document = json.loads(row["document_json"]) if row else {"ticker": ticker, "desks": []}
+            if isinstance(value, dict):
+                value = {"author": author, "ts": ts, "reference_date": ts[:10], "confidence": None,
+                         "status": "active", **value}
+            if section in ("notes", "lessons", "decisions"):
+                document.setdefault(section, []).append(value)
+            elif section == "desks":
+                document["desks"] = [item for item in document["desks"] if item["agent"] != author]
+                document["desks"].append(value)
+            else:
+                document[section] = value
+            version = row["version"] + 1 if row else 1
+            document.update(version=version, updated_ts=ts, updated_by=author)
+            self._connection.execute(
+                "INSERT INTO dossier_versions VALUES (?, ?, ?, ?, ?, ?)",
+                (ticker, version, ts, author, json.dumps([section]), json.dumps(document)),
+            )
+            if self.event_log is not None:
+                self.event_log.append("dossier.updated", ticker, {
+                    "ticker": ticker, "version": version, "sections": [section],
+                }, author)
+            return version
 
     # --- Watchlist ---
 

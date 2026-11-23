@@ -155,7 +155,9 @@ class AgentEnvironment:
     def _normalize_role(self, agent_name: str) -> str:
         """Map agent name to canonical role."""
         name = agent_name.lower().strip()
-        if name in ("pm", "portfolio_manager") or "pm" in name:
+        if name.startswith("ticker:"):
+            return "ticker_agent"
+        if name in ("pm", "portfolio_manager"):
             return "pm"
         if "market" in name:
             return "market_analyst"
@@ -279,6 +281,61 @@ class AgentEnvironment:
                 "decision": None,
             }
 
+    def decide_proposal(self, proposal_id: int, action: str, reason: str, when: str | None, actor: str) -> dict[str, Any]:
+        if action not in ("accept", "defer", "reject", "ask"):
+            raise ValueError("Unknown proposal action")
+        if not reason.strip():
+            raise ValueError("Decision reason is required")
+        if action == "defer":
+            if not when:
+                raise ValueError("Defer requires a future check date")
+            requested = datetime.fromisoformat(when.replace("Z", "+00:00"))
+            if requested.tzinfo is None:
+                raise ValueError("Check date must include a timezone")
+            if requested <= self.get_now():
+                raise ValueError("Check date must be in the future")
+            scheduled = clamp_schedule_date(requested, self.get_now(), self.min_trading_days,
+                                            self.max_trading_days, self.calendar)
+        now = self._now_iso()
+        with self.db.transaction():
+            row = self.db.connection.execute("SELECT * FROM proposals WHERE id = ?", (proposal_id,)).fetchone()
+            if not row or row["status"] != "pending":
+                raise ValueError("Proposal is not pending")
+
+            status = {"accept": "accepted", "defer": "deferred", "reject": "rejected", "ask": "asked"}[action]
+            if action == "accept" and row["direction"] not in ("buy", "sell"):
+                raise ValueError("Only buy or sell proposals can be accepted")
+            self.db.connection.execute(
+                "UPDATE proposals SET status=?, decided_ts=?, decided_by=?, reason=? WHERE id=? AND status='pending'",
+                (status, now, actor, reason.strip(), proposal_id),
+            )
+            sym = row["ticker"]
+            if action == "defer":
+                self.db.enqueue_scheduled_task(agent="portfolio_manager", chat=sym,
+                    when_ts=scheduled.isoformat().replace("+00:00", "Z"), source="agent",
+                    reason=reason.strip(), data={"ticker": sym})
+            if action == "ask":
+                chat = self.db.get_or_create_chat(row["agent"], sym)
+                self.db.append_message(chat_id=chat, author=actor, text=reason.strip(),
+                                       kind="original", cycle_id=row["cycle_id"], ts=now)
+            self.db.write_dossier_section(sym, "status", {
+                "accepted": "approved", "deferred": "monitoring", "rejected": "declined", "asked": "analyzing"
+            }[status], actor, now)
+            previous = self.db.connection.execute(
+                "SELECT document_json FROM dossier_versions WHERE ticker=? ORDER BY version DESC LIMIT 1", (sym,)
+            ).fetchone()
+            prior_proposal = json.loads(previous["document_json"]).get("proposal", {}) if previous else {}
+            self.db.write_dossier_section(sym, "proposal", {**prior_proposal, "id": proposal_id,
+                "status": status, "submitted_ts": row["submitted_ts"]}, actor, now)
+            self.db.write_dossier_section(sym, "decisions", {
+                "ts": now, "actor": actor, "action": action, "reason": reason.strip(),
+                "cycle_id": row["cycle_id"],
+            }, actor, now)
+            if self.db.event_log:
+                self.db.event_log.append("proposal.decided", f"proposal:{proposal_id}",
+                    {"id": proposal_id, "ticker": sym, "action": action, "status": status}, actor)
+        return {"id": proposal_id, "status": status}
+
     def _increment_cycle_budget(self, cycle_id: int | None, category: str) -> None:
         """Increment message or subagent call counters in cycle budget_used_json."""
         if cycle_id is None:
@@ -299,6 +356,11 @@ class AgentEnvironment:
             (json.dumps(budget_used), cycle_id),
         )
 
+    def current_draft(self, ticker: str) -> dict[str, Any]:
+        state = self._get_or_create_ticker_state(ticker)
+        self._recompute_draft_if_possible(ticker, state)
+        return {"ticker": ticker, "draft": state.get("draft")}
+
     def _recompute_draft_if_possible(self, ticker: str, state: dict[str, Any]) -> None:
         """Deterministically recompute the order draft if minimal inputs exist."""
         ticker = ticker.upper().strip()
@@ -310,6 +372,17 @@ class AgentEnvironment:
         if decision and isinstance(decision, dict) and decision.get("action") in ("buy", "sell"):
             direction = decision["action"]
 
+        if not direction:
+            p_row = self.db.connection.execute(
+                "SELECT direction, conviction FROM proposals WHERE ticker = ? ORDER BY id DESC LIMIT 1",
+                (ticker,),
+            ).fetchone()
+            if p_row and p_row["direction"] in ("buy", "sell"):
+                direction = p_row["direction"]
+                try:
+                    conviction = Decimal(str(p_row["conviction"]))
+                except Exception:
+                    pass
         if not direction:
             suggestions = state.get("suggestions", {})
             for sug in suggestions.values():
@@ -508,6 +581,19 @@ class AgentEnvironment:
             )
         )
 
+        def handle_read_dossier(ticker: str) -> dict[str, Any]:
+            row = self.db.connection.execute(
+                "SELECT document_json FROM dossier_versions WHERE ticker = ? "
+                "ORDER BY version DESC LIMIT 1", (ticker.upper().strip(),)
+            ).fetchone()
+            return json.loads(row["document_json"]) if row else {}
+
+        tools.append(make_tool(
+            name="read_dossier", description="Read the ticker dossier and senior colleague notes.",
+            input_model=schemas.ReadStateInput, handler=handle_read_dossier,
+            agent_name=agent_name, chat_id=chat_id,
+        ))
+
         def handle_read_portfolio() -> dict[str, Any]:
             account = self.broker_reader.get_account()
             positions = self.broker_reader.get_positions()
@@ -538,13 +624,21 @@ class AgentEnvironment:
             ) -> dict[str, Any]:
                 target_role = self._normalize_role(to_agent.strip())
                 canonical = {"pm": "portfolio_manager"}.get(target_role, target_role)
-                if canonical not in _MESSAGEABLE_AGENTS:
+                ticker_target = to_agent.strip() if to_agent.strip().startswith("ticker:") else None
+                if ticker_target:
+                    canonical = ticker_target
+                    if canonical != f"ticker:{ticker_or_theme.upper().strip()}":
+                        raise ValueError("Ticker recipient must match the chat topic")
+                if canonical not in _MESSAGEABLE_AGENTS and not ticker_target:
                     raise ValueError(
                         f"destinatario sconosciuto '{to_agent}'. Validi: "
                         f"{', '.join(_MESSAGEABLE_AGENTS)}"
                     )
                 target_agent = canonical
                 topic = ticker_or_theme.strip()
+
+                if role == "ticker_agent" and agent_name != f"ticker:{topic.upper()}":
+                    raise ValueError("Ticker agent cannot message another ticker")
 
                 # If request is to Market Analyst on a ticker, deliver into the chat of the
                 # ticker's SECTOR
@@ -607,6 +701,88 @@ class AgentEnvironment:
                 )
             )
 
+        if role == "ticker_agent":
+            def handle_write_lesson(ticker: str, text: str, exit_reason: str | None = None) -> dict[str, Any]:
+                sym = ticker.upper().strip()
+                if agent_name != f"ticker:{sym}" or not text.strip() or "\n" in text:
+                    raise ValueError("Lesson must be one line for your own ticker")
+                ts = self._now_iso()
+                version = self.db.write_dossier_section(sym, "lessons", {"text": text.strip(),
+                    "exit_reason": exit_reason}, agent_name, ts)
+                return {"ticker": sym, "version": version}
+
+            tools.append(make_tool(name="write_lesson", description="Record a one-line lesson from the previous outcome.",
+                                   input_model=schemas.WriteLessonInput, handler=handle_write_lesson,
+                                   agent_name=agent_name, chat_id=chat_id))
+
+            def handle_write_thesis(ticker: str, direction: str, conviction: float,
+                                    pro: list[str], contro: list[str], time_horizon: str | None = None,
+                                    catalysts: list[dict] | None = None, next_check_date: str | None = None) -> dict[str, Any]:
+                sym = ticker.upper().strip()
+                if agent_name != f"ticker:{sym}":
+                    raise ValueError("Ticker agent can only write its own ticker")
+                ts = self._now_iso()
+                thesis = {"direction": direction, "conviction": conviction, "pro": pro, "contro": contro,
+                          "time_horizon": time_horizon, "catalysts": catalysts or [], "next_check_date": next_check_date,
+                          "author": agent_name, "ts": ts}
+                version = self.db.write_dossier_section(sym, "thesis", thesis, agent_name, ts)
+                return {"ticker": sym, "version": version}
+
+            tools.append(make_tool(name="write_thesis", description="Update your ticker thesis.",
+                                   input_model=schemas.WriteThesisInput, handler=handle_write_thesis,
+                                   agent_name=agent_name, chat_id=chat_id))
+
+            def handle_submit_proposal(ticker: str, direction: str, conviction: float, reason: str) -> dict[str, Any]:
+                sym = ticker.upper().strip()
+                if agent_name != f"ticker:{sym}":
+                    raise ValueError("Ticker agent can only propose for its own ticker")
+                if cycle_id is not None:
+                    waiting = self.db.connection.execute(
+                        "SELECT a.agent FROM chats a JOIN messages m ON m.chat_id = a.id "
+                        "WHERE m.author = ? AND m.cycle_id = ? AND a.agent LIKE '%_analyst' "
+                        "AND NOT EXISTS (SELECT 1 FROM messages r WHERE r.cycle_id = ? AND r.author = a.agent AND r.id > m.id) LIMIT 1",
+                        (agent_name, cycle_id, cycle_id),
+                    ).fetchone()
+                    if waiting:
+                        raise ValueError(f"Await specialist reply: {waiting['agent']}")
+                    existing = self.db.connection.execute(
+                        "SELECT id FROM proposals WHERE cycle_id=? AND status IN ('pending','accepted') LIMIT 1", (cycle_id,)
+                    ).fetchone()
+                    if existing:
+                        raise ValueError("Cycle already has an open proposal")
+                if not reason.strip():
+                    raise ValueError("Proposal reason is required")
+                now = self._now_iso()
+                with self.db.transaction():
+                    cursor = self.db.connection.execute(
+                        "INSERT INTO proposals (ticker, agent, status, direction, conviction, submitted_ts, reason, cycle_id) "
+                        "VALUES (?, ?, 'pending', ?, ?, ?, ?, ?)",
+                        (sym, agent_name, direction, conviction, now, reason.strip(), cycle_id),
+                    )
+                    proposal_id = int(cursor.lastrowid)
+                    self.db.write_dossier_section(sym, "status", "proposed", agent_name, now)
+                    state = self._get_or_create_ticker_state(sym)
+                    coeff = state.get("coefficients", {})
+                    self.db.write_dossier_section(sym, "proposal", {
+                        "id": proposal_id, "status": "pending", "k_entry": coeff.get("k_entry"),
+                        "k_stop": coeff.get("k_stop"), "k_tp": coeff.get("k_tp"),
+                        "entry_price": None, "stop_price": None, "target_price": None,
+                        "sizing_fraction": None, "risk_reward": None, "submitted_ts": now,
+                    }, agent_name, now)
+                    pm_chat = self.db.get_or_create_chat("portfolio_manager", sym)
+                    self.db.append_message(chat_id=pm_chat, author=agent_name,
+                                           text=f"Proposta #{proposal_id} per {sym}: {reason.strip()}",
+                                           cycle_id=cycle_id, ts=now)
+                    self._increment_cycle_budget(cycle_id, "messages")
+                    if self.db.event_log is not None:
+                        self.db.event_log.append("proposal.submitted", f"proposal:{proposal_id}",
+                                                 {"id": proposal_id, "ticker": sym}, agent_name)
+                return {"id": proposal_id, "status": "pending"}
+
+            tools.append(make_tool(name="submit_proposal", description="Submit a proposal to the PM, without placing an order.",
+                                   input_model=schemas.SubmitProposalInput, handler=handle_submit_proposal,
+                                   agent_name=agent_name, chat_id=chat_id))
+
         # ---------------------------------------------------------------------
         # Analyst Tools: write_analysis, suggest, set_coefficients
         # ---------------------------------------------------------------------
@@ -625,7 +801,13 @@ class AgentEnvironment:
                 analyses = state.setdefault("analyses", {})
                 analyses[agent_name] = section_text
                 self._recompute_draft_if_possible(sym, state)
-                self.db.set_ticker_state(sym, state, updated_ts=self._now_iso())
+                with self.db.transaction():
+                    self.db.set_ticker_state(sym, state, updated_ts=self._now_iso())
+                    self.db.write_dossier_section(sym, "desks", {
+                        "agent": agent_name, "section": role, "text": section_text,
+                        "ts": self._now_iso(), "reference_date": self._now_iso()[:10],
+                        "confidence": None, "status": "active",
+                    }, agent_name, self._now_iso())
                 return {"status": "ok", "ticker": sym, "agent": agent_name}
 
             tools.append(
@@ -1278,6 +1460,25 @@ class AgentEnvironment:
         # Portfolio Manager (PM) Only Tools
         # ---------------------------------------------------------------------
         if role == "pm":
+            def handle_decide_proposal(proposal_id: int, action: str, reason: str, when: str | None = None) -> dict[str, Any]:
+                row = self.db.connection.execute("SELECT cycle_id FROM proposals WHERE id = ?", (proposal_id,)).fetchone()
+                if action == "accept" and (cycle_id is None or not row or row["cycle_id"] != cycle_id):
+                    raise ValueError("Accept requires the proposal's active supervised cycle")
+                return self.decide_proposal(proposal_id, action, reason, when, agent_name)
+
+            def handle_read_proposals(status: str | None = "pending", ticker: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+                query = "SELECT * FROM proposals WHERE (? IS NULL OR status=?) AND (? IS NULL OR ticker=?) ORDER BY id DESC LIMIT ?"
+                ticker = ticker.upper().strip() if ticker else None
+                rows = self.db.connection.execute(query, (status, status, ticker, ticker, min(max(limit, 1), 500))).fetchall()
+                return [dict(row) for row in rows]
+
+            tools.append(make_tool(name="read_proposals", description="Read open portfolio proposals.",
+                                   input_model=schemas.ReadProposalsInput, handler=handle_read_proposals,
+                                   agent_name=agent_name, chat_id=chat_id))
+            tools.append(make_tool(name="decide_proposal", description="Decide a pending ticker proposal.",
+                                   input_model=schemas.DecideProposalInput, handler=handle_decide_proposal,
+                                   agent_name=agent_name, chat_id=chat_id))
+
             def handle_read_draft(ticker: str) -> dict[str, Any]:
                 sym = ticker.upper().strip()
                 state = self._get_or_create_ticker_state(sym)

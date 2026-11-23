@@ -12,10 +12,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from runtime.commands import (
+    AddDossierNote,
     AddWatchlist,
     ApproveOrder,
     ClosePosition,
     CommandResult,
+    DecideProposal,
     EnqueueTask,
     Halt,
     IngestAlert,
@@ -33,9 +35,11 @@ from runtime.commands import (
 )
 from runtime.events import Event, EventBus, EventLog
 from runtime.handlers import (
+    handle_add_dossier_note,
     handle_add_watchlist,
     handle_approve_order,
     handle_close_position,
+    handle_decide_proposal,
     handle_enqueue_task,
     handle_halt,
     handle_ingest_alert,
@@ -80,7 +84,9 @@ _HANDLER_MAP = {
     Say: handle_say,
     UpsertAnnotation: handle_upsert_annotation,
     StrikeAnnotation: handle_strike_annotation,
+    AddDossierNote: handle_add_dossier_note,
     AddWatchlist: handle_add_watchlist,
+    DecideProposal: handle_decide_proposal,
     RemoveWatchlist: handle_remove_watchlist,
     ApproveOrder: handle_approve_order,
     UpdateRiskLimits: handle_update_risk_limits,
@@ -293,6 +299,8 @@ class Runtime:
             # Purely local commands run in a single atomic transaction with command.accepted.
             is_network_cmd = isinstance(
                 cmd, (ApproveOrder, Halt, ReconcileBroker, RefreshData, ClosePosition, ModifyExit)
+            ) or (
+                isinstance(cmd, DecideProposal) and cmd.action == "accept"
             )
 
             try:
@@ -381,8 +389,8 @@ class Runtime:
         row = self.office.db.connection.execute(
             """
             SELECT payload FROM events
-            WHERE command_id = ? AND type = 'command.accepted'
-            LIMIT 1
+            WHERE command_id = ? AND type IN ('command.accepted', 'command.rejected')
+            ORDER BY id DESC LIMIT 1
             """,
             (command_id,),
         ).fetchone()

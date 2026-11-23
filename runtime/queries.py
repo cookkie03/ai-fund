@@ -262,13 +262,20 @@ class ReadModel:
             usage = {row['agent']: row for row in rows}
             states = {row['name']: row for row in conn.execute('SELECT * FROM agents')}
             result = []
-            for name, config in self._runtime.office.settings.agents.items():
+            configs = self._runtime.office.settings.agents
+            agent_configs = [(name, config) for name, config in configs.items() if name != "ticker_agent"]
+            agent_configs.extend((name, configs["ticker_agent"]) for name in states
+                                 if name.startswith("ticker:") and "ticker_agent" in configs)
+            for name, config in agent_configs:
                 row = usage.get(name)
                 tokens_in = int(row['tokens_in']) if row else 0
                 tokens_out = int(row['tokens_out']) if row else 0
                 state = states.get(name)
                 result.append({
                     'name': name, 'role': name, 'model': config.model,
+                    'kind': 'ticker' if name.startswith('ticker:') else 'core',
+                    'ticker': name.removeprefix('ticker:') if name.startswith('ticker:') else None,
+                    'supervisor': 'portfolio_manager' if name.startswith('ticker:') else None,
                     'status': state['status'] if state else 'idle',
                     'current_task': json.loads(state['current_task_json']) if state and state['current_task_json'] else None,
                     'last_activity_ts': state['last_activity_ts'] if state else None,
@@ -700,6 +707,143 @@ class ReadModel:
         finally:
             if self.db_path != ":memory:":
                 conn.close()
+
+    def dossier_history(self, ticker: str, limit: int = 50) -> list[dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            rows = conn.execute(
+                "SELECT version, ts, author, sections_json FROM dossier_versions "
+                "WHERE ticker = ? ORDER BY version DESC LIMIT ?",
+                (ticker.upper().strip(), max(1, min(limit, 500))),
+            ).fetchall()
+            return [{"version": row["version"], "ts": row["ts"], "author": row["author"],
+                     "sections_changed": json.loads(row["sections_json"])} for row in rows]
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def dossier_version(self, ticker: str, version: int) -> dict[str, Any] | None:
+        conn = self._get_connection()
+        try:
+            row = conn.execute(
+                "SELECT document_json FROM dossier_versions WHERE ticker = ? AND version = ?",
+                (ticker.upper().strip(), version),
+            ).fetchone()
+            return json.loads(row["document_json"]) if row else None
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def proposals(self, status: str | None = None, ticker: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            clauses, params = [], []
+            if status:
+                clauses.append("status = ?")
+                params.append(status)
+            if ticker:
+                clauses.append("ticker = ?")
+                params.append(ticker.upper().strip())
+            where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+            params.append(max(1, min(limit, 500)))
+            rows = conn.execute(f"SELECT * FROM proposals {where} ORDER BY id DESC LIMIT ?", params).fetchall()
+            result = [dict(row) for row in rows]
+            for row in result:
+                if row["status"] == "processing":
+                    row["status"] = "accepted"
+            return result
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def dossier(self, ticker: str) -> dict[str, Any] | None:
+        ticker = ticker.upper().strip()
+        conn = self._get_connection()
+        try:
+            row = conn.execute(
+                "SELECT document_json FROM dossier_versions WHERE ticker = ? "
+                "ORDER BY version DESC LIMIT 1", (ticker,),
+            ).fetchone()
+            if row is None:
+                return None
+            document = json.loads(row["document_json"])
+            from datetime import UTC, datetime
+
+            thresholds = (self._runtime.office.settings.dossier_stale_days
+                          if self._runtime else {"default": 30})
+            now = self._runtime.office.get_now() if self._runtime else datetime.now(UTC)
+            for item in document.get("desks", []):
+                if item.get("status") != "active":
+                    continue
+                try:
+                    reference = datetime.fromisoformat(item["reference_date"].replace("Z", "+00:00"))
+                    if reference.tzinfo is None:
+                        reference = reference.replace(tzinfo=UTC)
+                    threshold = thresholds.get(item.get("section"), thresholds.get("default", 30))
+                    if (now - reference).total_seconds() > threshold * 86400:
+                        item["status"] = "stale"
+                except (KeyError, ValueError, TypeError):
+                    item["status"] = "stale"
+            security = conn.execute(
+                "SELECT name, sector, industry FROM securities WHERE symbol = ?", (ticker,)
+            ).fetchone()
+            portfolio = self.portfolio()
+            positions = portfolio.positions if portfolio else []
+            position = next((p for p in positions if str(p.get("symbol", "")).upper() == ticker), None)
+            equity = portfolio.equity if portfolio else 0
+            cash = portfolio.cash if portfolio else None
+            price = conn.execute(
+                "SELECT c, ts FROM prices_ohlcv WHERE UPPER(symbol)=? ORDER BY ts DESC LIMIT 1", (ticker,)
+            ).fetchone()
+            identity = {"name": security["name"] if security else None,
+                        "sector": security["sector"] if security else None,
+                        "industry": security["industry"] if security else None,
+                        "market_cap": None, "currency": None, "current_price": float(price["c"]) if price else None,
+                        "as_of": price["ts"] if price else None}
+            context = {"invested": bool(position), "qty": None, "position_weight": None,
+                       "avg_entry_price": None, "unrealized_pnl": None, "sector_exposure": None,
+                       "cash_fraction": cash / equity if cash is not None and equity else None}
+            if position:
+                market_value = position.get("market_value")
+                context.update(qty=position.get("qty", position.get("quantity")),
+                               position_weight=float(market_value) / equity if market_value is not None and equity else None,
+                               avg_entry_price=position.get("avg_entry_price", position.get("average_entry_price")),
+                               unrealized_pnl=position.get("unrealized_pl"))
+            return {"ticker": ticker, "version": document["version"],
+                    "updated_ts": document["updated_ts"], "updated_by": document["updated_by"],
+                    "status": document.get("status", "idle"), "identity": identity, "portfolio": context,
+                    "desks": document.get("desks", []), "thesis": document.get("thesis"),
+                    "proposal": document.get("proposal"), "risk": document.get("risk"),
+                    "decisions": document.get("decisions", []), "lessons": document.get("lessons", []),
+                    "notes": document.get("notes", []), "stale_count": sum(
+                        1 for item in document.get("desks", []) if item.get("status") == "stale")}
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def dossiers(self, limit: int = 50) -> list[dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            rows = conn.execute(
+                "SELECT ticker, MAX(version) FROM dossier_versions GROUP BY ticker "
+                "ORDER BY MAX(ts) DESC LIMIT ?", (max(1, min(limit, 500)),)
+            ).fetchall()
+            tickers = [row["ticker"] for row in rows]
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+        result = []
+        for ticker in tickers:
+            dossier = self.dossier(ticker)
+            if dossier is None:
+                continue
+            thesis = dossier["thesis"] or {}
+            proposal = dossier["proposal"] or {}
+            result.append({"ticker": ticker, "status": dossier["status"],
+                           "direction": thesis.get("direction"), "conviction": thesis.get("conviction"),
+                           "proposal_status": proposal.get("status"), "updated_ts": dossier["updated_ts"],
+                           "stale_count": dossier["stale_count"], "invested": dossier["portfolio"]["invested"]})
+        return result
 
     def watchlist(self) -> list[WatchlistItemDTO]:
         conn = self._get_connection()

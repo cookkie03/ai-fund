@@ -260,7 +260,12 @@ class Office:
             extras.append(f"Visione di settore ({sector or 'macro'}): {sector_view}")
 
         # Deterministic outcome of previous decision
-        prev_decision = st_data.get("decision")
+        previous = self.db.connection.execute(
+            "SELECT status, reason, direction FROM proposals WHERE ticker = ? AND decided_ts IS NOT NULL "
+            "ORDER BY id DESC LIMIT 1", (ticker,),
+        ).fetchone()
+        prev_decision = ({"action": previous["direction"], "status": previous["status"],
+                          "reason": previous["reason"]} if previous else st_data.get("decision"))
         if prev_decision and isinstance(prev_decision, dict):
             act = prev_decision.get("action", "")
             stat = prev_decision.get("status", "")
@@ -445,16 +450,17 @@ class Office:
             active_cycle = self.db.get_active_cycle(ticker)
             if active_cycle is not None:
                 cycle_id = active_cycle["id"]
-                pm_chat_id = self.db.get_or_create_chat("portfolio_manager", ticker)
                 prompt_text = translate_task(task)
-                self.db.append_message(
-                    chat_id=pm_chat_id,
-                    author="system",
-                    text=f"[Nuovo task durante ciclo aperto]\n{prompt_text}",
-                    kind="original",
-                    cycle_id=cycle_id,
-                    ts=now_iso,
-                )
+                for recipient in ("portfolio_manager", f"ticker:{ticker}"):
+                    c_id = self.db.get_or_create_chat(recipient, ticker)
+                    self.db.append_message(
+                        chat_id=c_id,
+                        author="system",
+                        text=f"[Nuovo task durante ciclo aperto]\n{prompt_text}",
+                        kind="original",
+                        cycle_id=cycle_id,
+                        ts=now_iso,
+                    )
                 return cycle_id
 
             # Open a new cycle
@@ -487,6 +493,13 @@ class Office:
                 ts=now_iso,
             )
 
+            desk = f"ticker:{ticker}"
+            self.db.register_agent(desk, "ticker_agent", self.settings.get_agent(desk).model_dump(mode="json"))
+            chat = self.db.get_or_create_chat(desk, ticker)
+            self._compact_pm_chat(chat, ticker, cycle_id)
+            self.db.append_message(chat_id=chat, author="system", text=opening_prompt,
+                                   cycle_id=cycle_id, ts=now_iso)
+            self.db.write_dossier_section(ticker, "status", "analyzing", desk, now_iso)
             env = self.get_env(cycle_id)
             runner = CycleRunner(
                 db=self.db,

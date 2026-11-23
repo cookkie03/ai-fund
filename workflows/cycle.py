@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
@@ -77,6 +77,8 @@ class CycleRunner:
 
     def _close_cycle(self, outcome: str) -> None:
         self.db.close_cycle(self.cycle_id, outcome=outcome, closed_ts=self.get_now_iso())
+        if outcome == "rimando":
+            self.db.write_dossier_section(self.ticker, "status", "monitoring", "system", self.get_now_iso())
         if self.event_log is not None:
             self.event_log.append(
                 type="cycle.closed",
@@ -110,6 +112,38 @@ class CycleRunner:
             (pm_chat_id, self.cycle_id),
         ).fetchone()
         self._last_seen_message_id[pm_chat_id] = int(prev_pm_msgs["max_id"]) if prev_pm_msgs else 0
+
+        ticker_agent = f"ticker:{self.ticker}"
+        ticker_chat = self.db.get_or_create_chat(ticker_agent, self.ticker)
+        has_ticker_agent = True
+        if hasattr(self.backend, "script"):
+            script = self.backend.script
+            if isinstance(script, Mapping):
+                has_ticker_agent = any(
+                    (k[0] in (ticker_agent, "ticker_agent") if isinstance(k, tuple) else k in (ticker_agent, "ticker_agent"))
+                    for k in script
+                )
+            elif callable(script):
+                code = getattr(script, "__code__", None)
+                consts = [str(c) for c in (code.co_consts if code else ())]
+                has_ticker_agent = any("ticker:" in c or "ticker_agent" in c for c in consts)
+            else:
+                has_ticker_agent = False
+
+        self.has_ticker_agent = has_ticker_agent
+        if self.has_ticker_agent:
+            pm_row = self.db.connection.execute("SELECT COALESCE(MAX(id), 0) AS m FROM messages WHERE chat_id = ?", (pm_chat_id,)).fetchone()
+            self._last_seen_message_id[pm_chat_id] = int(pm_row["m"]) if pm_row else 0
+            prev = self.db.connection.execute("SELECT COALESCE(MAX(id), 0) AS m FROM messages WHERE chat_id = ? AND (cycle_id IS NULL OR cycle_id != ?)", (ticker_chat, self.cycle_id)).fetchone()
+            self._last_seen_message_id[ticker_chat] = int(prev["m"]) if prev else 0
+        else:
+            prev_pm_msgs = self.db.connection.execute(
+                "SELECT COALESCE(MAX(id), 0) as max_id FROM messages WHERE chat_id = ? AND (cycle_id IS NULL OR cycle_id != ?)",
+                (pm_chat_id, self.cycle_id),
+            ).fetchone()
+            self._last_seen_message_id[pm_chat_id] = int(prev_pm_msgs["max_id"]) if prev_pm_msgs else 0
+            cur_ticker = self.db.connection.execute("SELECT COALESCE(MAX(id), 0) AS m FROM messages WHERE chat_id = ?", (ticker_chat,)).fetchone()
+            self._last_seen_message_id[ticker_chat] = int(cur_ticker["m"]) if cur_ticker else 0
 
         # For analysts, set to current max message ID so only new messages in this cycle
         # trigger them
@@ -299,12 +333,12 @@ class CycleRunner:
         equity_val = getattr(account, "equity", None)
         if equity_val is None and isinstance(account, dict):
             equity_val = account.get("equity")
-        equity = Decimal(str(equity_val or "100000.0"))
+        equity = Decimal(str(equity_val)) if equity_val is not None else Decimal("0")
 
         cash_val = getattr(account, "cash", None)
         if cash_val is None and isinstance(account, dict):
             cash_val = account.get("cash")
-        cash = Decimal(str(cash_val or "50000.0"))
+        cash = Decimal(str(cash_val)) if cash_val is not None else Decimal("0")
 
         pos_dict: dict[str, Decimal] = {}
         for p in positions:
@@ -391,18 +425,18 @@ class CycleRunner:
                     wait *= 2.0
                     continue
                 # All 2 retries exhausted
-                if agent_name in ("pm", "portfolio_manager"):
-                    # PM failure -> deterministic Rimando + inbox
+                if agent_name in ("pm", "portfolio_manager") or agent_name.startswith("ticker:"):
+                    # Coordinator failure -> deterministic Rimando + inbox
                     self.db.add_inbox(
                         "error",
-                        f"Fallimento PM su {self.ticker}: {exc}",
+                        f"Fallimento {'PM' if agent_name in ('pm', 'portfolio_manager') else agent_name} su {self.ticker}: {exc}",
                         ts=self.get_now_iso(),
                     )
                     pm_chat_id = self.db.get_or_create_chat("portfolio_manager", self.ticker)
                     self.db.append_message(
                         chat_id=pm_chat_id,
                         author="system",
-                        text=f"Rimando: fallimento persistente del Portfolio Manager ({exc}).",
+                        text=f"Rimando: fallimento persistente di {agent_name} ({exc}).",
                         kind="original",
                         cycle_id=self.cycle_id,
                         ts=self.get_now_iso(),
@@ -422,9 +456,9 @@ class CycleRunner:
                         self._last_seen_message_id.get(chat_id, 0), err_msg_id
                     )
 
-                    # Notify PM chat so PM knows specialist encountered an error and cycle can
-                    # continue
-                    pm_chat_id = self.db.get_or_create_chat("portfolio_manager", self.ticker)
+                    # Notify the coordinating agent so it can continue with the error in context.
+                    dest_coord = f"ticker:{self.ticker}" if self.has_ticker_agent else "portfolio_manager"
+                    pm_chat_id = self.db.get_or_create_chat(dest_coord, self.ticker)
                     self.db.append_message(
                         chat_id=pm_chat_id,
                         author=agent_name,
@@ -463,6 +497,59 @@ class CycleRunner:
                 self._ensure_future_scheduled_task()
                 self._close_cycle("rimando")
                 return "rimando"
+
+            proposal_row = self.db.connection.execute(
+                "SELECT * FROM proposals WHERE ticker = ? AND cycle_id = ? "
+                "AND status IN ('accepted', 'deferred', 'rejected') ORDER BY id DESC LIMIT 1",
+                (self.ticker, self.cycle_id),
+            ).fetchone()
+            if proposal_row:
+                p_status = proposal_row["status"]
+                if p_status == "accepted":
+                    with self.db.transaction():
+                        claim = self.db.connection.execute(
+                            "UPDATE proposals SET status='processing' WHERE id=? AND status='accepted'",
+                            (proposal_row["id"],),
+                        )
+                        if claim.rowcount != 1:
+                            self._ensure_future_scheduled_task()
+                            self._close_cycle("rimando")
+                            return "rimando"
+                if p_status == "deferred":
+                    self._ensure_future_scheduled_task()
+                    self._close_cycle("deferred")
+                    return "deferred"
+                if p_status == "rejected":
+                    self._ensure_future_scheduled_task()
+                    self._close_cycle("rimando")
+                    return "rimando"
+                if p_status == "accepted":
+                    try:
+                        draft = self.env.current_draft(self.ticker).get("draft")
+                        outcome = self._process_order_flow(proposal_row["direction"], {"draft": draft})
+                    except Exception as exc:
+                        logger.exception("Proposal order flow failed for %s", self.ticker)
+                        outcome = Outcome(status="deferred", reasons=(str(exc),), action=proposal_row["direction"])
+                    self._ensure_future_scheduled_task()
+                    if outcome.is_submitted or outcome.is_queued or outcome.is_pending:
+                        self.db.connection.execute("UPDATE proposals SET status='accepted' WHERE id=? AND status='processing'", (proposal_row["id"],))
+                        self.db.write_dossier_section(self.ticker, "risk", {
+                            "verdict": "approved", "rationale": "Risk Gate superato", "guardrails": [],
+                        }, "risk_gate", self.get_now_iso())
+                        self._close_cycle("accepted")
+                        return "accepted"
+                    reasons = "; ".join(outcome.reasons) or outcome.status
+                    self.db.connection.execute("UPDATE proposals SET status='deferred' WHERE id=? AND status='processing'", (proposal_row["id"],))
+                    self.db.add_inbox("warning", f"Risk Gate {self.ticker}: {reasons}", ts=self.get_now_iso())
+                    self.db.append_message(chat_id=pm_chat_id, author="system",
+                        text=f"Rimando: ordine non eseguito. Motivo: {reasons}",
+                        cycle_id=self.cycle_id, ts=self.get_now_iso())
+                    self.db.write_dossier_section(self.ticker, "status", "monitoring", "risk_gate", self.get_now_iso())
+                    self.db.write_dossier_section(self.ticker, "risk", {
+                        "verdict": "declined", "rationale": reasons, "guardrails": [],
+                    }, "risk_gate", self.get_now_iso())
+                    self._close_cycle("rimando")
+                    return "rimando"
 
             # 2. Check PM decision in ticker_state
             st_row = self.db.get_ticker_state(self.ticker)
@@ -523,6 +610,17 @@ class CycleRunner:
                 if row and row["max_id"] > last_seen:
                     agents_to_step.append((analyst, c_id))
 
+            if self.has_ticker_agent:
+                ticker_agent = f"ticker:{self.ticker}"
+                ticker_chat = self.db.get_or_create_chat(ticker_agent, self.ticker)
+                ticker_last_seen = self._last_seen_message_id.get(ticker_chat, 0)
+                ticker_row = self.db.connection.execute(
+                    "SELECT COALESCE(MAX(id), 0) AS m FROM messages WHERE chat_id = ? AND id > ? AND author != ?",
+                    (ticker_chat, ticker_last_seen, ticker_agent),
+                ).fetchone()
+                if ticker_row and ticker_row["m"] > ticker_last_seen:
+                    agents_to_step.append((ticker_agent, ticker_chat))
+
             # Check PM
             pm_last_seen = self._last_seen_message_id.get(pm_chat_id, 0)
             pm_row = self.db.connection.execute(
@@ -554,7 +652,7 @@ class CycleRunner:
 
                 step_res = self._step_agent(agent_name, chat_id)
                 if step_res is None:
-                    if agent_name in ("pm", "portfolio_manager"):
+                    if agent_name in ("pm", "portfolio_manager") or agent_name.startswith("ticker:"):
                         self._ensure_future_scheduled_task()
                         self._close_cycle("rimando")
                         return "rimando"
@@ -647,7 +745,13 @@ class CycleRunner:
                 # Deliver outgoing messages not already sent via tool_call
                 for out in step_res.outgoing_messages:
                     if (out.to_agent, out.chat, out.text) not in executed_send_keys:
-                        dest_chat_id = self.db.get_or_create_chat(out.to_agent, out.chat)
+                        dest_agent = out.to_agent
+                        if agent_name in _ANALYST_AGENTS and dest_agent in ("pm", "portfolio_manager") and self.has_ticker_agent:
+                            dest_agent = f"ticker:{self.ticker}"
+                        if dest_agent.startswith("ticker:") and dest_agent != f"ticker:{self.ticker}":
+                            logger.warning("Ignoring cross-ticker message to %s", dest_agent)
+                            continue
+                        dest_chat_id = self.db.get_or_create_chat(dest_agent, out.chat)
                         self.db.append_message(
                             chat_id=dest_chat_id,
                             author=agent_name,
@@ -672,15 +776,24 @@ class CycleRunner:
                 # An analyst's closing reply must reach the PM even if the model did not address
                 # it explicitly: relay the final content to the PM chat of this ticker.
                 if agent_name in _ANALYST_AGENTS and step_res.content:
-                    wrote_to_pm = any(
-                        k[0].lower() in ("pm", "portfolio_manager") for k in executed_send_keys
-                    ) or any(
-                        o.to_agent.lower() in ("pm", "portfolio_manager")
-                        for o in step_res.outgoing_messages
+                    last_msg = self.db.connection.execute(
+                        "SELECT author FROM messages WHERE chat_id = ? AND cycle_id = ? AND author != ? ORDER BY id DESC LIMIT 1",
+                        (chat_id, self.cycle_id, agent_name),
+                    ).fetchone()
+                    caller = last_msg["author"] if last_msg else None
+                    if caller in ("portfolio_manager", "pm"):
+                        dest = "portfolio_manager"
+                    elif caller and caller.startswith("ticker:"):
+                        dest = caller
+                    else:
+                        dest = f"ticker:{self.ticker}" if self.has_ticker_agent else "portfolio_manager"
+                    wrote_to_dest = any(k[0] == dest for k in executed_send_keys) or any(
+                        o.to_agent == dest for o in step_res.outgoing_messages
                     )
-                    if not wrote_to_pm:
+                    if not wrote_to_dest:
+                        dest_chat_id = self.db.get_or_create_chat(dest, self.ticker)
                         self.db.append_message(
-                            chat_id=pm_chat_id,
+                            chat_id=dest_chat_id,
                             author=agent_name,
                             text=step_res.content,
                             kind="original",

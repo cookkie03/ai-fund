@@ -222,7 +222,7 @@ Default: ATR(14), `k_stop` 2, `k_tp` 3, `k_trail_act` 1,5, `k_trail` 1; `k_entry
 
 **Limiti di default del Risk Gate** (configurabili): rischio per trade ≤ 1% dell'equity; posizione ≤ 10%; settore ≤ 30%; massimo 30 posizioni aperte; riserva di cassa ≥ 5%; R:R ≥ 1,5; nessuna nuova entrata entro 2 giorni di borsa da una trimestrale; arresto attivo blocca tutto.
 
-**Decisione del PM.** Azioni: `accept` (buy, o sell solo su posizione aperta), `defer`, oppure messaggi agli agenti. Ogni decisione richiede uno Scheduled task futuro sul ticker. Direzione e convinzione finali sono del PM, che aggrega i suggerimenti degli Analyst.
+**Decisione del PM e Agenti del ticker.** (Aggiornamento 2026-11-22, ADR 0004): architettura a due livelli. L'Agente del ticker (`ticker:<SYM>`) orchestra gli Analyst sul titolo, scrive tesi e coefficienti nella Scheda del ticker (dossier versionato) e sottopone una proposta (`submit_proposal`) al PM senza poter creare ordini. Il Portfolio Manager confronta le proposte con il portafoglio e delibera con `decide_proposal`: `accept` (con eventuale ridimensionamento), `defer` (con data di verifica futura obbligatoria), `reject` o `ask` (domande all'agente del ticker). Solo `accept` avvia la Bozza deterministica e il Risk Gate sovrano.
 
 **Flusso ordine.** accept → Bozza → Risk Gate → Coda di approvazione (modalità `auto` attiva per ora; `manual` con approvazione da CLI legata all'hash della bozza, Risk Gate ripetuto all'approvazione, scadenza a fine seduta) → invio seriale al broker a mercato aperto. Blocco del Risk Gate, rifiuto dell'utente o scadenza dell'approvazione = Rimando con motivazione nella chat del PM e Scheduled task al giorno di borsa successivo.
 
@@ -230,11 +230,11 @@ Default: ATR(14), `k_stop` 2, `k_tp` 3, `k_trail_act` 1,5, `k_trail` 1; `k_entry
 
 **Budget e concorrenza.** Budget del ciclo unico e generoso su messaggi e chiamate a subagent; budget proprio per ogni attivazione del Market Analyst. Cicli paralleli fino a `max_parallel` (default 3); Risk Gate, approvazione e invio serializzati.
 
-**Sforzo e modelli.** Per agente: endpoint, modello, `effort` (default Analyst medio, PM alto, subagent basso) tradotto nel parametro di ragionamento del provider o ignorato se non supportato.
+**Sforzo e modelli.** Per agente: endpoint, modello, `effort` (default Analyst medio, PM alto, subagent basso, ticker_agent medio) tradotto nel parametro di ragionamento del provider o ignorato se non supportato.
 
 **Schema del DB** (SQLite in WAL, migrazioni versionate):
-- *Agenti e conversazioni*: agenti (configurazione, hash del prompt), chat (agente, ticker o tema), messaggi (chat, autore, orario, testo; archivio originale e riassunti di compattazione).
-- *Lavoro*: Scheduled task (stato, fonte, fusione), cicli, state per ticker (sezioni testuali per agente, suggerimenti, coefficienti, bozza, decisioni, visioni di settore), watchlist.
+- *Agenti e conversazioni*: agenti (configurazione, hash del prompt, stato `working`/`waiting`/`idle`), chat (agente, ticker o tema), messaggi (chat, autore, orario, testo; archivio originale e riassunti di compattazione).
+- *Lavoro*: Scheduled task (stato, fonte, fusione), cicli, dossier versionati (`dossier_versions`: fatti con autore, ts, reference_date, confidenza, marcatura deterministica `stale`), proposte (`proposals`), state per ticker, watchlist.
 - *Ordini e Trade*: ordini (bozza, hash, stato di approvazione, identificativo client, esiti broker), eventi dell'ordine, Trade (entrata, eventi di trailing, uscita e motivo), snapshot del portafoglio.
 - *Registro*: chiamate LLM (agente, chat, token, costo, durata, riferimento a prompt e risposta), chiamate tool (agente, tool, parametri, risultato, errore), comandi CLI e modifiche di configurazione; testi grandi in una tabella di blob compressi e deduplicati per hash.
 - *Dati finanziari*: anagrafica titoli (settore, industria), prezzi OHLCV, fondamentali, indicatori di bilancio, trimestrali, rating, insider, news, serie macro, calendario economico, performance settoriali; ogni riga con fonte e data di download e chiave unica.

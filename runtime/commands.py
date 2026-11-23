@@ -41,6 +41,19 @@ class AddWatchlist(BaseModel):
     note: str | None = None
 
 
+class AddDossierNote(BaseModel):
+    ticker: str = Field(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9.\-]+$")
+    text: str = Field(min_length=1, max_length=10000)
+
+
+class DecideProposal(BaseModel):
+    proposal_id: int = Field(gt=0)
+    action: Literal["accept", "defer", "reject", "ask"]
+    reason: str = Field(min_length=1, max_length=10000)
+    when: str | None = None
+    confirm: bool = False
+
+
 class RemoveWatchlist(BaseModel):
     ticker: str
 
