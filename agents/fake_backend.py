@@ -143,6 +143,11 @@ class ScriptedBridgeBackend(AgentBackend):
         has_tool_result = any(m.role == "system" and "Risultato tool" in m.content for m in chat_context)
         if not has_tool_result:
             if "chiudi" in lower or "vendi" in lower or "close" in lower:
+                target_ticker = "NVDA"
+                for sym in ("AAPL", "GOOGL", "META", "MSFT", "AMD", "JPM", "XOM", "LLY", "TSLA", "NVDA"):
+                    if sym.lower() in lower:
+                        target_ticker = sym
+                        break
                 return StepResult(
                     tool_calls=[
                         ToolCall(
@@ -150,8 +155,8 @@ class ScriptedBridgeBackend(AgentBackend):
                             name="propose_action",
                             args={
                                 "command": "close_position",
-                                "payload": {"ticker": "NVDA", "qty": 10},
-                                "summary": "Chiudi 10 azioni NVDA a mercato",
+                                "payload": {"ticker": target_ticker, "qty": 5},
+                                "summary": f"Chiudi 5 azioni {target_ticker} a mercato",
                             },
                         )
                     ],
@@ -195,8 +200,13 @@ class ScriptedBridgeBackend(AgentBackend):
 
         # Step 1: respond with content
         if "chiudi" in lower or "vendi" in lower or "close" in lower:
+            target_ticker = "NVDA"
+            for sym in ("AAPL", "GOOGL", "META", "MSFT", "AMD", "JPM", "XOM", "LLY", "TSLA", "NVDA"):
+                if sym.lower() in lower:
+                    target_ticker = sym
+                    break
             content = (
-                "Ho esaminato la posizione su NVDA e ho preparato la proposta per chiudere 10 azioni a mercato. "
+                f"Ho esaminato la posizione su {target_ticker} e ho preparato la proposta per chiudere 5 azioni a mercato. "
                 "L'azione è registrata in attesa della tua conferma esplicita nella UI."
             )
         elif "chiedi a" in lower or "messaggio a" in lower or "relay" in lower:
