@@ -33,6 +33,21 @@ Vale per **qualsiasi** task, anche solo documentale, e per **entrambi** i reposi
 
 Se trovi modifiche locali che non sono tue, non scartarle: salvale su un branch `backup/<macchina>-<data>`, pushalo e segnalalo a Luca.
 
-## Convenzione Git e workspace
+## GitHub: issue → branch → PR → check → merge
 
-Per commit, push, merge, Pull Request e uso dei worktree, segui `docs/git-workflow.md`.
+1. **Issue.** Riusa la GitHub Issue del task o aprine una con risultato atteso e criteri di accettazione. GitHub Issues è il tracker operativo; la wiki conserva decisioni e contesto. Non duplicare le issue in Linear.
+2. **Branch.** Parti da `origin/main` aggiornato. Per il cockpit: **una branch per pagina**, `<pagina>-frontend` (es. `settings-frontend`), che contiene backend e frontend della pagina; le sessioni di frontend e backend lavorano in worktree propri e convergono su quella branch. Per lavori fuori dalle pagine: `<tipo>/<numero>-<slug>` (es. `fix/42-cockpit`). Riprendi il branch già associato se esiste. Non lavorare direttamente su `main`.
+3. **PR.** Esegui i controlli locali pertinenti (test, ruff, typecheck, build, verifica nel browser per le pagine), pusha il branch e apri la PR verso `main` con `Closes #<numero>`, riepilogo e verifiche. Indica l'impatto di release più alto fra le modifiche: `none`, `patch`, `minor` o `major`.
+4. **Check.** Controlla GitHub Actions: test backend offline e build frontend devono essere verdi prima di segnalare la PR come pronta. Se falliscono, correggi o segnala il blocco.
+5. **Merge.** Lo esegue manualmente Luca, o l'agente quando Luca lo chiede esplicitamente per quella PR. L'agente non abilita auto-merge.
+
+## Versioni e release
+
+Usa SemVer `vMAJOR.MINOR.PATCH` per il prodotto integrato. Classifica per effetto su chi usa il prodotto o integra i suoi contratti, non per dimensione del diff:
+
+- **`none`** — documentazione interna, CI o refactor senza effetti osservabili per chi usa il prodotto.
+- **`patch`** — bug fix, sicurezza o prestazioni compatibili; nessuna nuova capacità.
+- **`minor`** — nuova capacità compatibile, per esempio una vista del cockpit o un endpoint aggiuntivo.
+- **`major`** — rottura di un contratto supportato, per esempio API/config incompatibile, migrazione manuale obbligatoria o funzione rimossa. Prima di `v1.0.0`, le rotture deliberate possono uscire con un bump `0.x.0` (mai `0.x.y` come patch): chiamale `major` nella PR e documenta la migrazione. `v1.0.0` è una decisione esplicita di stabilizzazione.
+
+Il bump della release segue l'impatto più alto dall'ultimo tag stabile; se tutte le modifiche sono `none`, salta la release. Luca sceglie il tag e avvia manualmente **Actions → Release** da `main`. Il workflow ricontrolla il commit e pubblica tag e note, senza deploy. Per comandi, worktree e procedura di rilascio, leggi `docs/git-workflow.md`.

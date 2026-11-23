@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Tag SemVer (es. v0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-release
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: checks
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate tag and publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          if [[ ! $TAG =~ $semver ]]; then
+            printf 'Use a stable vMAJOR.MINOR.PATCH tag, without leading zeros.\n' >&2
+            exit 1
+          fi
+          latest=$(git tag --sort=-version:refname | grep -m1 -E "$semver" || true)
+          if [[ -n $latest ]] && { [[ $TAG == "$latest" ]] ||
+              [[ $(printf '%s\n%s\n' "$TAG" "$latest" | sort -V | tail -n 1) != "$TAG" ]]; }; then
+            printf 'The new tag must be greater than %s.\n' "$latest" >&2
+            exit 1
+          fi
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes
