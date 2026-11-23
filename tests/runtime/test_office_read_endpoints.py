@@ -170,3 +170,17 @@ def test_dev_cockpit_scenario_has_ticker_dossiers_and_mixed_proposals(tmp_path):
     assert dossier["stale_count"] >= 1
     assert dossier["notes"] and dossier["lessons"]
 
+
+
+def test_dossier_price_matches_portfolio_for_invested_ticker(tmp_path):
+    from runtime import portfolio
+    from scripts.dev_cockpit_scenario import ScenarioMarketData, seed_scenario
+
+    db = OfficeDB(tmp_path / "scenario.db")
+    rt = Runtime(office=build_test_office(db=db))
+    seed_scenario(rt, ScenarioMarketData())
+    dossier = rt.read.dossier("LLY")
+    assert dossier["portfolio"]["invested"] is True
+    expected = portfolio.current_price(db.connection, "LLY")
+    assert expected is not None
+    assert dossier["identity"]["current_price"] == expected

@@ -792,14 +792,15 @@ class ReadModel:
             position = next((p for p in positions if str(p.get("symbol", "")).upper() == ticker), None)
             equity = portfolio.equity if portfolio else 0
             cash = portfolio.cash if portfolio else None
-            price = conn.execute(
-                "SELECT c, ts FROM prices_ohlcv WHERE UPPER(symbol)=? ORDER BY ts DESC LIMIT 1", (ticker,)
-            ).fetchone()
+            # Same price source as the Portafoglio: latest snapshot, then the last daily close.
+            from runtime import portfolio as portfolio_math
+
+            price = portfolio_math.current_price(conn, ticker)
             identity = {"name": security["name"] if security else None,
                         "sector": security["sector"] if security else None,
                         "industry": security["industry"] if security else None,
-                        "market_cap": None, "currency": None, "current_price": float(price["c"]) if price else None,
-                        "as_of": price["ts"] if price else None}
+                        "market_cap": None, "currency": None, "current_price": price,
+                        "as_of": ((portfolio_math.latest_snapshot(conn) or {}).get("ts") if price is not None else None)}
             context = {"invested": bool(position), "qty": None, "position_weight": None,
                        "avg_entry_price": None, "unrealized_pnl": None, "sector_exposure": None,
                        "cash_fraction": cash / equity if cash is not None and equity else None}
