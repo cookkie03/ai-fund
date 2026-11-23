@@ -682,7 +682,10 @@ class OfficeDB:
         )
 
     def set_agent_status(
-        self, agent: str, status: str, current_task: dict | None = None,
+        self,
+        agent: str,
+        status: str,
+        current_task: dict | None = None,
         ts: str | None = None,
     ) -> None:
         if status not in ("working", "waiting", "idle"):
@@ -698,7 +701,8 @@ class OfficeDB:
             )
             if self.event_log:
                 self.event_log.append(
-                    "agent.status", f"agent:{agent}",
+                    "agent.status",
+                    f"agent:{agent}",
                     {"agent": agent, "status": status, "current_task": current_task, "ts": ts},
                     actor=agent,
                 )
@@ -717,7 +721,8 @@ class OfficeDB:
             )
             self._connection.execute(
                 "INSERT INTO chats (agent, topic, created_at) VALUES (?, ?, ?) "
-                "ON CONFLICT(agent, topic) DO NOTHING", (agent, topic, utc_now_iso()),
+                "ON CONFLICT(agent, topic) DO NOTHING",
+                (agent, topic, utc_now_iso()),
             )
             row = self._connection.execute(
                 "SELECT id FROM chats WHERE agent = ? AND topic = ?", (agent, topic)
@@ -764,11 +769,19 @@ class OfficeDB:
             chat = self.get_chat(chat_id)
             if self.event_log:
                 self.event_log.append(
-                    "chat.message", f"chat:{chat_id}",
-                    {"chat_id": chat_id, "message_id": message_id,
-                     "agent": chat["agent"] if chat else None,
-                     "topic": chat["topic"] if chat else None, "author": author,
-                     "text": text, "kind": kind, "cycle_id": cycle_id, "ts": ts},
+                    "chat.message",
+                    f"chat:{chat_id}",
+                    {
+                        "chat_id": chat_id,
+                        "message_id": message_id,
+                        "agent": chat["agent"] if chat else None,
+                        "topic": chat["topic"] if chat else None,
+                        "author": author,
+                        "text": text,
+                        "kind": kind,
+                        "cycle_id": cycle_id,
+                        "ts": ts,
+                    },
                     actor=author,
                 )
 
@@ -778,7 +791,11 @@ class OfficeDB:
                 topic_name = str(chat["topic"])
                 conv_ids = self.list_bridge_relay_subscriptions(agent_name, topic_name)
                 if conv_ids:
-                    ctx = {"page": "ufficio", "ticker": topic_name, "ref": {"type": "agent", "id": author}}
+                    ctx = {
+                        "page": "ufficio",
+                        "ticker": topic_name,
+                        "ref": {"type": "agent", "id": author},
+                    }
                     for conv_id in conv_ids:
                         b_msg_id = self.append_bridge_message(
                             conversation_id=conv_id,
@@ -809,7 +826,9 @@ class OfficeDB:
                                     actor=author,
                                 )
                         if self.on_bridge_relay:
-                            self.add_on_commit(lambda cid=conv_id, callback=self.on_bridge_relay: callback(cid))
+                            self.add_on_commit(
+                                lambda cid=conv_id, callback=self.on_bridge_relay: callback(cid)
+                            )
                     self._connection.execute(
                         "DELETE FROM bridge_relay_subscriptions WHERE agent = ? AND topic = ?",
                         (agent_name, topic_name),
@@ -960,7 +979,9 @@ class OfficeDB:
         with self._lock:
             closed_ts = closed_ts or utc_now_iso()
             if budget_used is not None:
-                budget_json = budget_used if isinstance(budget_used, str) else json.dumps(budget_used)
+                budget_json = (
+                    budget_used if isinstance(budget_used, str) else json.dumps(budget_used)
+                )
                 self._connection.execute(
                     """
                     UPDATE cycles
@@ -1023,12 +1044,19 @@ class OfficeDB:
         with self.transaction():
             row = self._connection.execute(
                 "SELECT version, document_json FROM dossier_versions "
-                "WHERE ticker = ? ORDER BY version DESC LIMIT 1", (ticker,)
+                "WHERE ticker = ? ORDER BY version DESC LIMIT 1",
+                (ticker,),
             ).fetchone()
             document = json.loads(row["document_json"]) if row else {"ticker": ticker, "desks": []}
             if isinstance(value, dict):
-                value = {"author": author, "ts": ts, "reference_date": ts[:10], "confidence": None,
-                         "status": "active", **value}
+                value = {
+                    "author": author,
+                    "ts": ts,
+                    "reference_date": ts[:10],
+                    "confidence": None,
+                    "status": "active",
+                    **value,
+                }
             if section in ("notes", "lessons", "decisions"):
                 document.setdefault(section, []).append(value)
             elif section == "desks":
@@ -1043,9 +1071,16 @@ class OfficeDB:
                 (ticker, version, ts, author, json.dumps([section]), json.dumps(document)),
             )
             if self.event_log is not None:
-                self.event_log.append("dossier.updated", ticker, {
-                    "ticker": ticker, "version": version, "sections": [section],
-                }, author)
+                self.event_log.append(
+                    "dossier.updated",
+                    ticker,
+                    {
+                        "ticker": ticker,
+                        "version": version,
+                        "sections": [section],
+                    },
+                    author,
+                )
             return version
 
     # --- Watchlist ---
@@ -1268,8 +1303,8 @@ class OfficeDB:
         self, trade_id: int, qty: float, pnl: float, events: list | str | None = None
     ) -> None:
         """Registra una chiusura parziale: quantità chiusa e PnL realizzato cumulati."""
-        events_json = None if events is None else (
-            events if isinstance(events, str) else json.dumps(events)
+        events_json = (
+            None if events is None else (events if isinstance(events, str) else json.dumps(events))
         )
         self._connection.execute(
             """
@@ -1474,18 +1509,38 @@ class OfficeDB:
                     duration_ms, cycle_id, compacted
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (ts, agent, chat_id, tool, params_json, result_json, error,
-                 duration_ms, cycle_id, int(compacted)),
+                (
+                    ts,
+                    agent,
+                    chat_id,
+                    tool,
+                    params_json,
+                    result_json,
+                    error,
+                    duration_ms,
+                    cycle_id,
+                    int(compacted),
+                ),
             )
             call_id = int(cursor.lastrowid)
             if self.event_log:
                 chat = self.get_chat(chat_id) if chat_id is not None else None
                 self.event_log.append(
-                    "tool.called", f"tool:{call_id}",
-                    {"id": call_id, "agent": agent, "tool": tool, "chat_id": chat_id,
-                     "topic": chat["topic"] if chat else None, "cycle_id": cycle_id,
-                     "duration_ms": duration_ms, "success": error is None,
-                     "error": error, "ts": ts, "compacted": compacted},
+                    "tool.called",
+                    f"tool:{call_id}",
+                    {
+                        "id": call_id,
+                        "agent": agent,
+                        "tool": tool,
+                        "chat_id": chat_id,
+                        "topic": chat["topic"] if chat else None,
+                        "cycle_id": cycle_id,
+                        "duration_ms": duration_ms,
+                        "success": error is None,
+                        "error": error,
+                        "ts": ts,
+                        "compacted": compacted,
+                    },
                     actor=agent,
                 )
             return call_id
@@ -1520,7 +1575,16 @@ class OfficeDB:
                 """,
                 (title, ts, ts, status, int(archived)),
             )
-            return int(cursor.lastrowid)
+            conv_id = int(cursor.lastrowid)
+            if self.event_log:
+                conv = self.get_bridge_conversation(conv_id)
+                self.event_log.append(
+                    "bridge.conversation",
+                    f"bridge_conv:{conv_id}",
+                    {"conversation": conv},
+                    actor="bridge",
+                )
+            return conv_id
 
     def get_bridge_conversation(self, conversation_id: int) -> dict | None:
         with self._lock:
@@ -1591,6 +1655,15 @@ class OfficeDB:
                 f"UPDATE bridge_conversations SET {', '.join(sets)} WHERE id = ?",
                 params,
             )
+            if self.event_log:
+                conv = self.get_bridge_conversation(conversation_id)
+                if conv:
+                    self.event_log.append(
+                        "bridge.conversation",
+                        f"bridge_conv:{conversation_id}",
+                        {"conversation": conv},
+                        actor="bridge",
+                    )
 
     def append_bridge_message(
         self,
@@ -1622,6 +1695,27 @@ class OfficeDB:
                 "UPDATE bridge_conversations SET updated_ts = ? WHERE id = ?",
                 (ts, conversation_id),
             )
+            if self.event_log:
+                action = self.get_bridge_action(action_id) if action_id else None
+                self.event_log.append(
+                    "bridge.message",
+                    f"bridge_conv:{conversation_id}",
+                    {
+                        "conversation_id": conversation_id,
+                        "message": {
+                            "id": msg_id,
+                            "conversation_id": conversation_id,
+                            "author": author,
+                            "kind": kind,
+                            "text": text,
+                            "ts": ts,
+                            "context": context,
+                            "refs": refs or [],
+                            "action": action,
+                        },
+                    },
+                    actor=author,
+                )
             return msg_id
 
     def list_bridge_messages(
@@ -1696,7 +1790,16 @@ class OfficeDB:
                     ts,
                 ),
             )
-            return int(cursor.lastrowid)
+            action_id = int(cursor.lastrowid)
+            if self.event_log:
+                act = self.get_bridge_action(action_id)
+                self.event_log.append(
+                    "bridge.action",
+                    f"bridge_action:{action_id}",
+                    {"conversation_id": conversation_id, "action": act},
+                    actor="bridge",
+                )
+            return action_id
 
     def get_bridge_action(self, action_id: int) -> dict | None:
         with self._lock:
@@ -1755,6 +1858,15 @@ class OfficeDB:
                 f"UPDATE bridge_actions SET {', '.join(sets)} WHERE id = ?",
                 params,
             )
+            if self.event_log:
+                act = self.get_bridge_action(action_id)
+                if act:
+                    self.event_log.append(
+                        "bridge.action",
+                        f"bridge_action:{action_id}",
+                        {"conversation_id": act["conversation_id"], "action": act},
+                        actor=decided_by or "system",
+                    )
 
     def subscribe_bridge_relay(
         self,
@@ -1795,6 +1907,10 @@ class OfficeDB:
                 """,
                 (ts, ts),
             )
+            if self.event_log:
+                self.event_log.append(
+                    "briefing.updated", f"briefing:{ts}", {"since": ts}, actor="system"
+                )
         return ts
 
     def get_briefing_seen(self) -> str | None:
@@ -1803,4 +1919,3 @@ class OfficeDB:
                 "SELECT value FROM briefing_state WHERE key = 'last_seen_ts'"
             ).fetchone()
             return str(row["value"]) if row else None
-

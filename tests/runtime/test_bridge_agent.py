@@ -26,7 +26,10 @@ def _wait_for_turn(runtime: Runtime, conv_id: int, timeout: float = 3.0) -> None
     time.sleep(0.05)
     while time.time() < deadline:
         with runtime.bridge_runner._lock:
-            active = conv_id in runtime.bridge_runner._active_conversations or conv_id in runtime.bridge_runner._queued_conversations
+            active = (
+                conv_id in runtime.bridge_runner._active_conversations
+                or conv_id in runtime.bridge_runner._queued_conversations
+            )
         conv = runtime.office.db.get_bridge_conversation(conv_id)
         if not active and conv and conv["status"] == "idle":
             return
@@ -63,7 +66,9 @@ def test_bridge_say_creates_conversation_and_turn_with_status_transitions(tmp_pa
     assert msgs[1]["kind"] == "text"
 
     # Status transitioned: thinking -> tool -> thinking -> idle
-    status_types = [ev.payload["status"] for ev in statuses if ev.payload["conversation_id"] == conv_id]
+    status_types = [
+        ev.payload["status"] for ev in statuses if ev.payload["conversation_id"] == conv_id
+    ]
     assert "thinking" in status_types
     assert "idle" in status_types
 
@@ -114,7 +119,11 @@ def test_message_agent_and_agent_relay_and_pm_task(tmp_path):
     _wait_for_turn(rt, conv_id)
 
     # Check chat of technical_analyst
-    tech_chat = db.get_chat_by_agent_topic("technical_analyst", "AMD") if hasattr(db, "get_chat_by_agent_topic") else None
+    tech_chat = (
+        db.get_chat_by_agent_topic("technical_analyst", "AMD")
+        if hasattr(db, "get_chat_by_agent_topic")
+        else None
+    )
     if not tech_chat:
         cid = db.get_or_create_chat("technical_analyst", "AMD")
     else:
@@ -192,7 +201,9 @@ def test_capital_action_only_proposed_pending_and_confirmation_flow(tmp_path):
     tools = build_bridge_tools(rt, conversation_id=conv_id)
     tool_names = {t.name for t in tools}
     for cap_cmd in CAPITAL_COMMAND_MODELS:
-        assert cap_cmd not in tool_names, f"Capital command '{cap_cmd}' must NOT be in tool registry"
+        assert cap_cmd not in tool_names, (
+            f"Capital command '{cap_cmd}' must NOT be in tool registry"
+        )
 
     assert "propose_action" in tool_names
 
@@ -389,3 +400,56 @@ def test_bridge_http_endpoints_and_idempotency(tmp_path):
     r_brief = client.get("/v1/read/briefing")
     assert r_brief.status_code == 200
     assert "counts" in r_brief.json()
+
+
+def test_bridge_agent_appears_in_read_agents_as_core_without_supervisor(tmp_path):
+    db = OfficeDB(tmp_path / "bridge.db")
+    office = build_test_office(db=db)
+    rt = Runtime(office=office)
+    client = TestClient(create_app(rt))
+
+    response = client.get("/v1/read/agents")
+    assert response.status_code == 200
+    agents = response.json()
+
+    bridge = next((a for a in agents if a["name"] == "bridge"), None)
+    assert bridge is not None, "Bridge agent must appear in GET /v1/read/agents"
+    assert bridge["kind"] == "core"
+    assert bridge["supervisor"] is None
+    assert bridge["role"] == "bridge"
+    assert bridge["model"] == office.settings.agents["bridge"].model
+    assert bridge["status"] == "idle"
+
+
+def test_bridge_events_published_only_at_commit_never_on_rollback(tmp_path):
+    db = OfficeDB(tmp_path / "bridge.db")
+    office = build_test_office(db=db)
+    rt = Runtime(office=office)
+
+    received_events = []
+    rt.bus.add_listener(lambda ev: received_events.append(ev))
+
+    # 1. Rollback test: events emitted inside a rolling back transaction must NOT reach bus
+    try:
+        with db.transaction():
+            cid = db.create_bridge_conversation(title="Rollback Test")
+            db.append_bridge_message(cid, "luca", "text", "Test che fallisce")
+            db.set_briefing_seen()
+            assert received_events == [], "No events should be published before commit"
+            raise RuntimeError("Forced rollback")
+    except RuntimeError:
+        pass
+
+    assert received_events == [], "Events from rolled back transaction must never be published"
+
+    # 2. Commit test: events are only published when transaction commits
+    with db.transaction():
+        cid2 = db.create_bridge_conversation(title="Commit Test")
+        db.append_bridge_message(cid2, "luca", "text", "Messaggio valido")
+        db.set_briefing_seen()
+        assert received_events == [], "No events should be published while transaction is active"
+
+    # Now transaction has committed
+    types = [ev.type for ev in received_events]
+    assert "briefing.updated" in types
+    assert len(received_events) > 0
