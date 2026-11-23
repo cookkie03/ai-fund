@@ -28,6 +28,7 @@ colors:
   author-fundamental: "oklch(0.8 0.075 58)"
   author-risk: "oklch(0.74 0.1 276)"
   author-system: "oklch(0.7 0.01 255)"
+  author-ticker: "oklch(0.87 0.022 240)"
 typography:
   price:
     fontFamily: "Inter Variable, ui-sans-serif, system-ui, sans-serif"
@@ -162,7 +163,7 @@ The page is a near-black desk carrying rounded graphite tiles: watchlist, chart,
 - **Halt** (`halt`, `halt-ground`): the top bar and a banner tile while trading is halted.
 
 ### Authors
-- **Luca** amber, **Portfolio Manager** violet, **Tecnico** cyan, **Mercato** lime, **Sentiment** pink, **Fondamentali** sand, **Rischio** indigo, **Sistema** grey. Each author colour appears only on that author's marks: avatar, chart drawings and their labels.
+- **Luca** amber, **Portfolio Manager** violet, **Tecnico** cyan, **Mercato** lime, **Sentiment** pink, **Fondamentali** sand, **Rischio** indigo, **Sistema** grey. Each author colour appears only on that author's marks: avatar, chart drawings and their labels. **Agenti del ticker** (`ticker:<SYM>`) share one porcelain colour (`author-ticker`): they are many and alike, so the monogram is the ticker itself (full symbol on 36 px seats) and colour stays the core team's identity.
 
 ### Named Rules
 **The Meaning-Only Rule.** Every saturated pixel means something: direction, selection, warning, Halt or author. A colour that only decorates is removed.
@@ -277,6 +278,21 @@ Costi e token tile: a period control (Oggi, 7 giorni, 30 giorni), rows with the 
 
 ### Avatars
 Author avatars have two more sizes for the office: 28 px (`md`, messages) and 36 px (`lg`, seats).
+
+### Ticker desk (Ufficio)
+The office reads left to right as the agent graph: the PM seat with its **In attesa del PM** queue, then the **Desk dei ticker** (one 40 px row per ticker agent, "riporta a PM" from `supervisor`), then the specialists they call on. Rows carry the porcelain avatar, ticker, direction tag, conviction, stale count (history icon + number, warn), state word, proposal tag and age; specialist avatars and cost appear only when the tile is wide enough (container queries). Filters as a segmented control with counts (Tutti, In analisi, In attesa del PM, In portafoglio, Inattivi), a filter field above 10 rows. Hovering a ticker row lights the specialists working on it and the reverse. Ticker agents fold into one expandable row in Costi e token and into a collapsible section of the side list.
+
+### Proposal queue
+Oldest first: ticker agent avatar, ticker (link to its dossier), direction, "da X" waiting time, conviction, sizing and R:R (warn under 1,5), and a ghost **Decidi**. In the PM's agent view the same queue sits above the tool stream.
+
+### Decide dialog
+"Decidi al posto del PM": a summary strip (avatar, ticker, direction, conviction, sizing, R:R), a segmented Accetta / Rimanda / Rifiuta / Chiedi, a resize field for Accetta and a date for Rimanda, a required reason, and one primary labelled with the action. Sends `decide_proposal` with `confirm: true`; Halt disables Accetta and says why; refusals show verbatim in the dialog.
+
+### Dossier (Scheda del ticker)
+`/ticker/:symbol` is a mosaic of tiles. A full-width header: symbol over a 30 px price, name, sector and cap; Scheda status with version and who updated it; the ticker agent with its status mark; the position when invested (P&L in up/down); links to Grafico, Chat dell'agente, Portafoglio; a Halt line when halted; the **Firme** legend. Then Tesi (7 columns) beside **Proposta e Risk Gate** (5: a stop–entry–target ladder with the current price as an accent diamond, levels, the verdict and every guardrail, Decidi as the tile's primary), five specialist tiles (lead fact in body size, older facts smaller; stale facts recede in `fg-muted` with a warn "Vecchio · age" tag; superseded ones are struck through and folded behind "Mostra n fatti superati"), Storico decisioni beside Lezioni, Note di Luca (amber-tinted, signed, composer with Invio to sign) beside Versioni. Confidence and conviction are a number plus a 4 px track in the author's colour. On a phone the order is decision first (Proposta, Tesi, Analisi, Note, Decisioni, Lezioni, Versioni) under a sticky section index that marks the current section.
+
+### Signature on the dossier
+As on the chart: hovering an author's avatar, or a name in the Firme legend, lights every fact they signed across the mosaic and dims the rest to 30%; clicking a legend name pins it.
 
 ### Honest sources
 Data the Runtime does not expose yet is either rebuilt from real reads (with a quiet info note that says how) or shown as unavailable with the endpoint it waits for. Never sample data. Dev fixtures (`COCKPIT_*_FIXTURES=1`, dev server only) put a warn **Dati di esempio** tag in the page header, so a synthetic figure is never mistaken for the account.

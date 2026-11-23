@@ -47,6 +47,8 @@
   --author-fundamental: oklch(0.8 0.075 58);
   --author-risk: oklch(0.74 0.1 276);
   --author-system: oklch(0.7 0.01 255);
+  /* every ticker agent shares one porcelain tone: the many sit under the PM; the symbol is their monogram */
+  --author-ticker: oklch(0.87 0.022 240);
 
   /* radius scale (concentric: an element inset by N px inside a parent uses parent radius minus N) */
   --radius: 0.5rem; /* shadcn base = control */

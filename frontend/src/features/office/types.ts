@@ -19,9 +19,17 @@ export type UsageTotals = {
   calls: number;
 };
 
-/** One row of `GET /v1/read/agents`. */
+export type AgentKind = "core" | "ticker";
+
+/** One row of `GET /v1/read/agents`. `kind`, `ticker`, `supervisor` are the ticker-agent contract (.scratch/ticker-agents/handoff-backend.md). */
 export type OfficeAgent = {
   name: string;
+  /** "core" (PM, specialists, subagent) or "ticker" (`ticker:<SYM>`). */
+  kind: AgentKind;
+  /** Only for kind "ticker". */
+  ticker: string | null;
+  /** "portfolio_manager" for ticker agents, null for the others. */
+  supervisor: string | null;
   role: string | null;
   model: string | null;
   /** Null when the Runtime does not expose it (derived mode). */

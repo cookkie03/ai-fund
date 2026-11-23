@@ -1,4 +1,5 @@
-import { Plus, Trash2, X, PanelLeftClose } from "lucide-react";
+import { FileText, Plus, Trash2, X, PanelLeftClose } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type CSSProperties } from "react";
 import { AuthorChip } from "@/components/author-chip";
 import { IconButton, TileHeader } from "@/components/tile";
@@ -302,6 +303,16 @@ export function Watchlist({
                   <span className="num shrink-0" title={new Date(parseTs(item.added_ts) ?? 0).toLocaleString("it-IT")}>
                     {fmtAge(parseTs(item.added_ts), now)}
                   </span>
+                  <Link
+                    to={`/ticker/${item.ticker}`}
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    aria-label={`Scheda di ${item.ticker}`}
+                    title={`Scheda di ${item.ticker}`}
+                    className="grid size-6 place-items-center rounded-item text-fg-subtle opacity-0 outline-none transition-opacity hover:bg-hover hover:text-fg focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/60 group-hover:opacity-100 group-data-[active=true]:opacity-100"
+                  >
+                    <FileText className="size-3.5" strokeWidth={1.75} />
+                  </Link>
                   <RemoveButton item={item} />
                 </div>
               </li>

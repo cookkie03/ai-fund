@@ -12,6 +12,8 @@ const TerminalPage = lazy(() => import("@/pages/terminal/terminal-page").then((m
 const PortafoglioPage = lazy(() => import("@/pages/portafoglio/portafoglio-page").then((m) => ({ default: m.PortafoglioPage })));
 const UfficioPage = lazy(() => import("@/pages/ufficio/ufficio-page").then((m) => ({ default: m.UfficioPage })));
 
+const TickerPage = lazy(() => import("@/pages/ticker/ticker-page").then((m) => ({ default: m.TickerPage })));
+
 const pageFallback = <div className="flex-1 bg-ground" aria-busy />;
 
 export function App() {
@@ -48,6 +50,14 @@ export function App() {
                   element={
                     <Suspense fallback={pageFallback}>
                       <PortafoglioPage />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="/ticker/:symbol"
+                  element={
+                    <Suspense fallback={pageFallback}>
+                      <TickerPage />
                     </Suspense>
                   }
                 />

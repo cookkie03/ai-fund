@@ -1,6 +1,7 @@
 import type { DrawingKind } from "lightweight-charts-drawing";
-import { ChartNoAxesCombined, Eye, EyeOff, Minus, MousePointer2, MoveUpRight, RectangleHorizontal, RotateCw, Rows3, Slash } from "lucide-react";
+import { ChartNoAxesCombined, Eye, FileText, EyeOff, Minus, MousePointer2, MoveUpRight, RectangleHorizontal, RotateCw, Rows3, Slash } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { AuthorChip } from "@/components/author-chip";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -228,7 +229,20 @@ export function ChartPanel({
       {/* header: the instrument and its price lead, controls sit to the right */}
       <div data-region="chart-toolbar" className={cn("flex shrink-0 items-center gap-2 overflow-x-auto px-4", compact ? "h-14" : "h-[68px]")}>
         <div className="mr-3 flex min-w-0 shrink-0 flex-col justify-center">
-          <span data-role="symbol" className="text-[13px] font-semibold leading-4 tracking-[-0.005em] text-fg-muted">{symbol ?? "—"}</span>
+          {symbol ? (
+            <Link
+              to={`/ticker/${symbol}`}
+              data-role="symbol"
+              title={`Apri la scheda di ${symbol}`}
+              className="group/sym inline-flex items-center gap-1 self-start rounded-item text-[13px] font-semibold leading-4 tracking-[-0.005em] text-fg-muted outline-none hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/60"
+            >
+              {symbol}
+              <FileText className="size-3 opacity-60 group-hover/sym:opacity-100" strokeWidth={1.75} aria-hidden />
+              <span className="sr-only">: apri la scheda</span>
+            </Link>
+          ) : (
+            <span data-role="symbol" className="text-[13px] font-semibold leading-4 tracking-[-0.005em] text-fg-muted">—</span>
+          )}
           <span className="flex items-baseline gap-2.5">
             {last ? (
               <span data-role="price" className={cn("num font-semibold leading-tight tracking-[-0.025em] text-fg", compact ? "text-[22px]" : "text-[30px]")}>{fmtPrice(last.close)}</span>

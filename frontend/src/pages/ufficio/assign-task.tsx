@@ -5,7 +5,7 @@ import { AuthorChip } from "@/components/author-chip";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AGENTS, AGENT_IDS } from "@/lib/authors";
+import { AGENT_IDS, author } from "@/lib/authors";
 import { CommandRefused, useCommand } from "@/lib/runtime/hooks";
 import { cn } from "@/lib/utils";
 import { useShell } from "@/shell/shell-state";
@@ -47,7 +47,7 @@ export function AssignTask({ agent: initialAgent, ticker: initialTicker, trigger
       { agent, ticker: symbol, reason: reason.trim() || `Richiesta di Luca dall'Ufficio: analizzare ${symbol}` },
       {
         onSuccess: () => {
-          toast.success(`Task accodato a ${AGENTS[agent]?.short ?? agent} su ${symbol}`);
+          toast.success(`Task accodato a ${author(agent).short} su ${symbol}`);
           setOpen(false);
         },
         onError: (err) => {
@@ -92,25 +92,25 @@ export function AssignTask({ agent: initialAgent, ticker: initialTicker, trigger
           <fieldset className="px-4 py-2">
             <legend className="mb-1.5 text-2xs text-fg-subtle">Agente</legend>
             <div role="radiogroup" aria-label="Agente" className="flex flex-wrap gap-1" onKeyDown={onRadioKeys}>
-              {AGENT_IDS.map((id) => (
+              {(initialAgent && !AGENT_IDS.includes(initialAgent) ? [initialAgent, ...AGENT_IDS] : AGENT_IDS).map((id) => (
                     <button
                       key={id}
                       type="button"
                       role="radio"
                       aria-checked={agent === id}
                       tabIndex={agent === id ? 0 : -1}
-                      aria-label={AGENTS[id].name}
+                      aria-label={author(id).name}
                       onClick={() => setAgent(id)}
                       className={cn(
                         "grid size-8 place-items-center rounded-item transition-[background-color,box-shadow,transform] duration-150 active:scale-[0.94]",
                         agent === id ? "bg-selected shadow-[inset_0_0_0_1px_var(--line-strong)]" : "hover:bg-hover",
                       )}
                     >
-                      <AuthorChip actor={id} size="sm" tooltip={AGENTS[id].name} />
+                      <AuthorChip actor={id} size="sm" tooltip={author(id).name} />
                     </button>
               ))}
             </div>
-            <p className="mt-1.5 text-xs text-fg">{AGENTS[agent]?.name ?? agent}</p>
+            <p className="mt-1.5 text-xs text-fg">{author(agent).name}</p>
           </fieldset>
 
           <label className="block px-4 py-2">

@@ -4,7 +4,7 @@ import { AuthorChip } from "@/components/author-chip";
 import { Button } from "@/components/ui/button";
 import { COCKPIT_TOPIC, topicTitle } from "@/features/office/api";
 import { useChat } from "@/features/office/hooks";
-import { AGENTS, author } from "@/lib/authors";
+import { author } from "@/lib/authors";
 import { parseTs } from "@/lib/format";
 import { CommandRefused, useCommand } from "@/lib/runtime/hooks";
 import { useNow } from "@/lib/runtime/provider";
@@ -79,7 +79,7 @@ function Composer({ agent, topic }: { agent: string; topic: string }) {
   const [refusal, setRefusal] = useState<string[] | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
   const say = useCommand("say", { invalidate: [["office", "chat"], ["office", "topics"]], toastRefusal: false });
-  const name = AGENTS[agent]?.short ?? agent;
+  const name = author(agent).short;
   const where = topic === COCKPIT_TOPIC ? "nella vostra chat" : `in ${topicTitle(topic)}`;
 
   useEffect(() => {
@@ -137,7 +137,7 @@ function Composer({ agent, topic }: { agent: string; topic: string }) {
           rows={1}
           disabled={!writable}
           placeholder={writable ? `Scrivi a ${name} ${where}` : "Runtime irraggiungibile: invio sospeso"}
-          aria-label={`Messaggio a ${AGENTS[agent]?.name ?? agent}`}
+          aria-label={`Messaggio a ${author(agent).name}`}
           className="block min-h-[44px] w-full resize-none bg-transparent px-3 pt-3 text-sm leading-5 text-fg outline-none placeholder:text-fg-subtle disabled:cursor-not-allowed"
         />
         <div className="flex items-center gap-2 pb-2 pl-3 pr-2">
@@ -172,10 +172,10 @@ export function Conversation({ agent, topic, header, className }: { agent: strin
     if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [messages.length, agent, topic]);
 
-  const name = AGENTS[agent]?.short ?? agent;
+  const name = author(agent).short;
 
   return (
-    <section aria-label={`Chat ${topicTitle(topic)} di ${AGENTS[agent]?.name ?? agent}`} className={cn("flex min-h-0 min-w-0 flex-col bg-ground", className)}>
+    <section aria-label={`Chat ${topicTitle(topic)} di ${author(agent).name}`} className={cn("flex min-h-0 min-w-0 flex-col bg-ground", className)}>
       {header}
       <div
         ref={listRef}
