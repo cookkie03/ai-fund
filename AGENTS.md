@@ -9,6 +9,7 @@ Per ogni richiesta relativa a questo progetto, prima di proporre soluzioni, prog
 3. Basa il lavoro sui requisiti pertinenti e sulle istruzioni correnti di Luca. Segnala le contraddizioni che incidono sulla richiesta; distingui decisioni consolidate, proposte e reference storiche.
 4. Verifica nel repository il comportamento effettivo: la wiki descrive specifiche e decisioni, non dimostra che codice, test o deploy funzionino. Il codice preesistente è materiale da valutare rispetto al piano di ripartenza; conserva quanto presente finché il lavoro richiesto non ne definisce la destinazione.
 5. Registra nella wiki decisioni e avanzamenti rilevanti, seguendo la sua taxonomy e le regole di board, log e hot-cache.
+6. Aggiorna la wiki man mano che ogni decisione viene presa (anche durante interviste di design come `grill-with-docs`), non a fine sessione: pagina tematica, `decision-log`, board, log e hot-cache. Committa e pusha la wiki insieme al lavoro.
 
 Il codice Python vive in questo repository; documentazione, decisioni e backlog condivisi vivono nella wiki adiacente. Se la wiki non è accessibile, rendi esplicita la lacuna prima di procedere con attività che dipendono dai suoi requisiti.
 
@@ -21,6 +22,16 @@ Conserva le skill installate in `.agents/skills/` e i relativi collegamenti. Per
 Quando lavori con sub-agent, assegna a un consulente dedicato le domande sulla wiki: le sue risposte devono derivare esclusivamente dalla wiki locale e indicare pagine e passaggi pertinenti. Usa il suo contesto per il lavoro sul codice; mantieni distinta la ricerca esterna sulla documentazione dei provider. Nelle sessioni successive ricrea il consulente se quello precedente non è disponibile.
 
 A ogni modifica rilevante aggiorna insieme al codice i documenti interessati: README per avvio/stato, `docs/architecture.md` per struttura e dipendenze, ricerca tecnica per vincoli dei servizi, wiki per requisiti/decisioni/board/log/hot-cache. Distingui proposte, implementazioni e verifiche eseguite. Usa un sub-agent dedicato alla documentazione quando disponibile; le istruzioni di manutenzione sono in `docs/documentation.md`.
+
+## Allineamento con GitHub — ogni task
+
+Vale per **qualsiasi** task, anche solo documentale, e per **entrambi** i repository: `trading-agent` e `trading-agent-wiki`.
+
+1. All'inizio: `git fetch` e `git pull --rebase` sul branch corrente di ciascun repository.
+2. Alla fine: committa le modifiche del task, rifai `git pull --rebase` e pusha. Non committare mai i file esclusi (DB locali, `.env`, `.serena/`, `graphify-out/`, `nohup.out`).
+3. Il task è finito solo quando `git status -sb` mostra il branch senza `ahead` né `behind` in entrambi i repository.
+
+Se trovi modifiche locali che non sono tue, non scartarle: salvale su un branch `backup/<macchina>-<data>`, pushalo e segnalalo a Luca.
 
 ## Convenzione Git e workspace
 

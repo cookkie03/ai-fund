@@ -22,3 +22,18 @@ docs/claude-chats/
 # Telegram bridge local state
 telegram-claude/sessions.sqlite3
 telegram-claude/__pycache__/
+.agents/
+.claude
+.codex
+.qwen
+.hermes
+.impeccable
+.serena
+graphify_out
+graphify-out/
+nohup.out
+*.db
+*.db-shm
+*.db-wal
+*.db.lock
+frontend/tsconfig.tsbuildinfo

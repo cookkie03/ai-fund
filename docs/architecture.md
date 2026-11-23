@@ -2,9 +2,35 @@
 
 Stato: alberatura approvata da Luca il 2026-10-30; creato lo scheletro dei package. Primo contratto Broker di sola lettura e adapter Alpaca paper implementati il 2026-10-31; execution e agenti ancora da sviluppare.
 
-## Review PM sperimentale
+## Runtime unico (implementato e verificato 2026-11-20, ADR 0003)
 
-`agents/pm_omniroute.py` offre un reviewer OmniRoute locale; il grafo valida identità, campi e citazioni prima del risk gate. La validazione non certifica la qualità della tesi. Il runtime persiste la review e rifiuta conflitti; dopo un submit incerto occorre riconciliare esplicitamente prima di riprendere. Verificato OmniRoute reale con provider e broker simulati e decisione pending; non è una verifica operativa con broker.
+Il sistema adotta un'architettura a **Runtime unico single-writer**:
+- **Processo Runtime**: un solo processo Python (`runtime/core.py`) sempre attivo, unico writer del database SQLite sotto lock OS esclusivo (`<db>.lock` con `fcntl.flock`).
+- **Event Bus & Event Log** (`runtime/events.py`): tabella append-only `events` in SQLite con hook transazionali `on_commit` in `OfficeDB.transaction()`. Rollback scarta gli eventi non committati.
+- **Scheduler event-driven a zero polling** (`runtime/scheduler.py`, `runtime/jobs.py`): calcola `min(next_due_ts(), min(job.next_run()))` e dorme fino al timeout o a un evento di dominio (`task.enqueued`, `halt.changed`, `stop`). Nessun polling busy-loop.
+- **Broker Stream & Fills** (`execution/alpaca_stream.py`, `execution/order_flow.py`): stream websocket Alpaca `trade_updates` in thread proprio; `apply_broker_update` gestisce fill di entrata (`trade.opened`) e di uscita TP/SL (`trade.closed`) collegati al `TradeManager`. Riconciliazione automatica all'avvio e a ogni riconnessione.
+- **Trasporto HTTP & SSE** (`runtime/http.py`): FastAPI serve su `127.0.0.1:8765` endpoint per comandi (`/v1/commands/{name}` con idempotenza), letture serializzabili (`/v1/read/{name}`) ed eventi SSE (`/v1/events` con replay storico e streaming live). Autenticazione Bearer obbligatoria su bind non-loopback.
+- **Client sottili** (`interface/client.py`, `interface/cli.py`): CLI, cockpit frontend e Telegram comunicano esclusivamente via HTTP/SSE con il Runtime. A Runtime spento la CLI esce pulita con codice 2. Decisione: [ADR 0003](adr/0003-runtime-unico-writer-event-driven.md); spec: `.scratch/core-runtime/spec.md`.
+
+## Prototipo grafo agentico — 2026-11-05
+
+`agents/graph.py` contiene un prototipo separato dal runtime esistente: riceve cinque callable analisti e un PM, oltre a gate di rischio e controllo di completezza iniettati. Valida ruolo, contenuto e timestamp delle analisi; il routing è provvisorio e non esegue trade. Non integra provider né broker. Separatamente, `agents/desks.py` offre quattro desk deterministici limitati; `agents/portfolio_manager.py` un Portfolio Manager con backend iniettato e astensione; `agents/risk_adapter.py` applica `execution.risk` a proposte long. `agents/desk_adapters.py` collega i quattro desk al grafo richiedendo evidence e timestamp con fuso orario, usando il più vecchio delle fonti; il gate controlla identità del symbol e direzione long. `agents/portfolio_manager_adapter.py` espone `pm_decision` e restituisce sempre `pending` al grafo. Il clock è iniettabile: senza clock si usa `now` del chiamante, utile per replay ma incapace di rilevare il tempo trascorso durante il PM. Nessun backend reale, ragionamento agentico pieno o routing definitivo. Verificati `uv run pytest -q` (200 passati, 1 saltato, 2 warning) e `uv run ruff check agents/graph.py agents/desks.py agents/desk_adapters.py agents/portfolio_manager.py agents/portfolio_manager_adapter.py agents/risk_adapter.py tests/agents` (superato). La definizione di Risk e dei confini resta aperta nella [wiki](../../trading-agent-wiki/wiki/system/foundation/codebase-architecture.md#decisione-e-confini--2026-11-05).
+
+Le sezioni storiche successive, inclusa l'attribuzione della topologia agentica a `workflows`, non prevalgono sulla decisione corrente: il grafo agentico sta sotto `agents`.
+
+## Motore dell'ufficio di agenti (MVP)
+
+Il motore sostituisce la review PM sperimentale via OmniRoute (rimossa, ADR 0002). Spec: `.scratch/agent-mvp/spec.md`; guida operativa: `docs/office-engine.md`.
+
+- `workflows/office.py` (Office: scheduler, `deliver`, `run`) e `workflows/cycle.py` (CycleRunner: un Ciclo di analisi).
+- `workflows/scheduling.py`: Scheduled task, fusione, limiti di data, traduttori (funzioni pure).
+- `agents/backend.py`: interfaccia `AgentBackend` sostituibile; `agents/fake_backend.py` per i test; `prompts/` con i system prompt (bozze da rivedere).
+- `tools/environment.py`: tool degli agenti per ruolo; nessun tool invia ordini al broker.
+- `execution/order_draft.py`, `risk_gate.py`, `trailing.py`: Bozza dell'ordine, Risk Gate (solo blocca), trailing stop deterministici. `execution/order_flow.py` e `trade_manager.py`: coda di approvazione, invio seriale idempotente, Trade.
+- `storage/office_db.py` (SQLite WAL, migrazioni), `storage/registry.py` (registro asincrono), `storage/retention.py` (downsampling); `data/cache.py` e `data/refresh.py` (dati DB-first).
+- `interface/cli.py` (`trading-agent`) e `bootstrap.py` (cablaggio); `config/office.toml` e `config/office_settings.py`.
+
+Il vecchio grafo agentico del prototipo (`agents/desks`, `graph`, `portfolio_manager*`, `research`, `risk*`, `workflows/langgraph_workflow`, `paper_runtime`, `trade_cycle`, `triggers`, `analysis/strategy_state`) è stato rimosso il 2026-11-18 con i relativi test. Il 2026-11-18 sono stati rimossi anche `execution/paper.py` e `execution/risk.py` (sostituiti da `order_flow`, `order_draft` e `risk_gate`). Anche il prototipo legacy (`storage/sqlite.py`, `portfolio.py`, `data/ingestion.py`, `analysis/indicator_worker.py`, `interface/dashboard.py`, `interface/server.py`, la directory `scripts/`, `compose.yaml` e `Dockerfile`) è stato rimosso.
 
 ## Obiettivo
 
@@ -38,7 +64,7 @@ trading-agent/
 ├── .env.example                   # nomi dei segreti, senza valori reali
 ├── agents/ · analysis/ · brokers/ · data/
 ├── execution/ · interface/ · storage/ · tools/ · workflows/
-│   ├── execution/risk.py          # veto deterministico prima del broker
+│   ├── execution/risk_gate.py     # veto deterministico prima del broker
 │   ├── brokers/                   # conto, posizioni, ordini; broker intercambiabili
 │   │   ├── interface.py           # contratto Broker, indipendente da SDK
 │   │   ├── models.py              # dati ed errori normalizzati del broker
@@ -72,7 +98,6 @@ trading-agent/
 - `brokers` parla con il broker; `execution` decide come eseguire un intento già validato, conserva l'intent e riconcilia gli esiti. Il broker non sceglie investimenti.
 - `data` acquisisce e normalizza, con storico DB-first e live decision-critical con write-through secondo la wiki. `data/providers` confina gli SDK esterni: `YahooFinanceProvider` è l'adapter diretto e `OpenBBProvider` è l'adapter OpenBB; entrambi implementano `MarketDataProvider` e normalizzano OHLCV in `PriceBar`. OpenBB può delegare a un provider sottostante, ma la selezione e la provenance restano nostre. Gli agenti non chiamano vendor direttamente. `storage` persiste; non chiama vendor o LLM.
 - `analysis` contiene la complessità di un'analisi; `tools` presenta agli agenti un'interfaccia piccola. Un tool complesso può usare un intero package analitico.
-- `analysis.strategy_state` espone lo state comune delle valutazioni strategiche; parametri e feature restano estensibili, mentre le regole specifiche vengono validate dalla strategia concreta.
 - `agents` definisce comportamenti riutilizzabili; `workflows` decide chi chiama chi, sequenza, parallelismo e state isolato per ticker/run.
 - `bootstrap.py` è il punto di composizione: sceglie adapter e strumenti e li passa ai chiamanti. I moduli ricevono dipendenze invece di creare client esterni nascosti.
 - Eventuali funzioni numeriche pure rimangono funzioni. Protocollo astratto soltanto dove serve sostituire un'implementazione reale, ad esempio Alpaca e fake offline.
@@ -115,7 +140,7 @@ I link alla wiki richiedono entrambe le repository affiancate. L'alberatura è a
 
 Luca richiede che il progetto sia distribuibile in produzione con Docker. Il package Python deve essere installabile nell'immagine e avviabile senza dipendenze dal percorso del Mac o dalla wiki locale.
 
-Il rilascio dovrà includere Dockerfile e procedura di build riproducibile con dipendenze bloccate; configurazione e segreti forniti a runtime; dati persistenti esterni al filesystem effimero del container; log su stdout/stderr; processo senza privilegi e gestione SIGTERM con riconciliazione degli ordini. La modalità paper/live dovrà essere esplicita. Il database può essere un servizio separato pur mantenendo l'applicazione come monolite modulare.
+Il rilascio dovrà includere Dockerfile e procedura di build riproducibile con dipendenze bloccate; configurazione e segreti forniti a runtime; dati persistenti esterni al filesystem effimero del container; log su stdout/stderr; processo senza privilegi e gestione SIGTERM con riconciliazione degli ordini. Paper o live dipende solo dalle credenziali dell'account configurato (un Runtime per account), non da una modalità separata. Il database può essere un servizio separato pur mantenendo l'applicazione come monolite modulare.
 
 Stato di questo step: packaging `src/` e `.dockerignore` presenti. Dockerfile, comando applicativo, lock delle dipendenze e validazione container arriveranno con il primo flusso eseguibile. Nessuna immagine o distribuzione produzione è attestata da questo scaffolding.
 
@@ -143,7 +168,6 @@ Il grafo di ricerca lascia `pending` la decisione quando mancano evidenze dei de
 
 ## Composizione paper — 2026-11-02
 
-`workflows.paper_runtime` collega trade cycle, adapter Alpaca e repository SQLite per ordini e decisioni. La factory Alpaca usa `paper=True`, non accetta override URL e rifiuta configurazioni diverse dall'endpoint paper. È una composizione invocabile, non ancora un runtime automatico provider→agenti; persistenza e riconciliazione sono verificate offline con client simulato. Il 2026-11-02 è stato verificato anche un bracket AAPL non marketable attraverso `TradeCycle` e questa factory sul conto paper: cancellazione confermata dal broker, quantità eseguita 0, riconciliazione SQLite `CANCELLED`. Lo state e il portfolio del test erano fixture controllate, non dati di ricerca o portfolio reali; non è un E2E provider→decisione.
 
 ## Rischio condiviso — 2026-11-02
 

@@ -1,0 +1,114 @@
+# ==============================================================================
+# Configurazione dell'Ufficio di Agenti di Trading
+# Spec: .scratch/agent-mvp/spec.md
+#
+# REGOLE DI SICUREZZA:
+# I segreti (chiavi API, password) vivono ESCLUSIVAMENTE in .env.
+# In questo file si fa riferimento solo al NOME della variabile d'ambiente (api_key_env).
+# ==============================================================================
+
+# Concorrenza massima: numero massimo di cicli di analisi eseguiti in parallelo
+max_parallel = 3
+
+# Modalità di approvazione ordini: 'auto' (invia subito al broker) o 'manual' (richiede CLI)
+approval_mode = "auto"
+
+# Soglia in MB per l'avviso di dimensione del database SQLite
+db_size_alert_mb = 500
+
+# Limiti in giorni di borsa per la pianificazione degli Scheduled task futuri
+scheduled_task_min_days = 1
+scheduled_task_max_days = 60
+
+# ------------------------------------------------------------------------------
+# Timeframe predefinito del grafico (1m, 5m, 15m, 1h, 1d)
+[market]
+bar_timeframe = "1h"
+
+# ------------------------------------------------------------------------------
+# Orari e sessione di mercato (US / New York)
+# ------------------------------------------------------------------------------
+[schedule]
+market_open = "09:30"
+market_close = "16:00"
+premarket_open = "09:00"
+timezone = "America/New_York"
+
+# ------------------------------------------------------------------------------
+# Budget del ciclo e di attivazione (per prevenire loop infiniti)
+# ------------------------------------------------------------------------------
+[budgets]
+cycle_budget = 50                           # Budget generoso messaggi e chiamate subagent per ciclo
+market_analyst_activation_budget = 15       # Budget per singola attivazione del Market Analyst
+
+# ------------------------------------------------------------------------------
+# Limiti rigidi del Risk Gate (funzione pura che può solo bloccare ordini)
+# ------------------------------------------------------------------------------
+[limits]
+max_risk_per_trade_fraction = 0.01          # Rischio massimo per trade <= 1% dell'equity
+max_position_fraction = 0.10                # Esposizione massima per singola posizione <= 10%
+max_sector_fraction = 0.30                  # Esposizione massima per settore <= 30%
+max_open_positions = 30                     # Massimo 30 posizioni aperte contemporaneamente
+min_cash_reserve_fraction = 0.05            # Riserva minima di cassa >= 5%
+min_risk_reward_ratio = 1.5                 # Rapporto R:R minimo >= 1.5
+earnings_embargo_days = 2                   # Nessuna nuova entrata entro 2 giorni di borsa da trimestrale
+
+# ------------------------------------------------------------------------------
+# Politiche di conservazione dati e log (giorni)
+# ------------------------------------------------------------------------------
+[retention]
+daily_prices_days = 1825                    # Barre giornaliere 5 anni, poi settimanali fino a 10
+weekly_prices_days = 3650                   # Barre settimanali fino a 10 anni, poi mensili
+hourly_bars_days = 90                       # Barre orarie 90 giorni, poi ridotte a giornaliere
+full_news_days = 90                         # Testo completo news 90 giorni, poi solo titolo e sintesi
+llm_logs_days = 180                         # Prompt e risposte completi 180 giorni, poi solo metadati
+
+# ------------------------------------------------------------------------------
+# Configurazione degli Agenti dell'Ufficio
+# Sforzo predefinito (effort):
+# - Portfolio Manager: high
+# - Specialist Analysts (Market, Sentiment, Technical, Fundamental, Risk): medium
+# - Subagent: low
+# ------------------------------------------------------------------------------
+
+[agents.portfolio_manager]
+endpoint = "http://localhost:20128/v1"
+model = "my-combo"
+effort = "high"
+api_key_env = "OMNIROUTE_API_KEY"
+
+[agents.market_analyst]
+endpoint = "http://localhost:20128/v1"
+model = "my-combo"
+effort = "medium"
+api_key_env = "OMNIROUTE_API_KEY"
+
+[agents.sentiment_analyst]
+endpoint = "http://localhost:20128/v1"
+model = "my-combo"
+effort = "medium"
+api_key_env = "OMNIROUTE_API_KEY"
+
+[agents.technical_analyst]
+endpoint = "http://localhost:20128/v1"
+model = "my-combo"
+effort = "medium"
+api_key_env = "OMNIROUTE_API_KEY"
+
+[agents.fundamental_analyst]
+endpoint = "http://localhost:20128/v1"
+model = "my-combo"
+effort = "medium"
+api_key_env = "OMNIROUTE_API_KEY"
+
+[agents.risk_analyst]
+endpoint = "http://localhost:20128/v1"
+model = "my-combo"
+effort = "medium"
+api_key_env = "OMNIROUTE_API_KEY"
+
+[agents.subagent]
+endpoint = "http://localhost:20128/v1"
+model = "my-combo"
+effort = "low"
+api_key_env = "OMNIROUTE_API_KEY"

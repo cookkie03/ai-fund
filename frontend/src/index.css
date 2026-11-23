@@ -1,0 +1,340 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/inter";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Cockpit: single dark theme, "Legend" direction. A near-black desk carries the shell (rail, top bar);
+   every module is a tile that sits clearly above it. One azure accent, market colours, one colour per author. */
+:root {
+  color-scheme: dark;
+
+  /* surfaces: desk < tile < raised. The desk/tile step is the main depth cue. */
+  --desk: oklch(0.1 0.004 260); /* shell background, gaps between tiles */
+  --ground: oklch(0.19 0.007 260); /* tile: chart, tables, panels */
+  --panel: var(--ground);
+  --raised: oklch(0.235 0.009 260); /* popovers, menus, dialogs, inputs */
+  --hover: oklch(0.225 0.008 260);
+  --selected: oklch(0.25 0.014 258);
+  --line: oklch(0.255 0.008 260); /* hairlines inside a tile, used sparingly */
+  --line-strong: oklch(0.33 0.01 260);
+
+  /* text */
+  --fg: oklch(0.94 0.004 255);
+  --fg-muted: oklch(0.74 0.012 255);
+  --fg-subtle: oklch(0.64 0.013 255);
+  --fg-faint: oklch(0.5 0.012 255); /* decorative only, never body text */
+
+  /* accent + semantics */
+  --accent-c: oklch(0.7 0.15 251);
+  --accent-strong: oklch(0.62 0.17 252);
+  --accent-soft: oklch(0.7 0.15 251 / 0.16);
+  --up: oklch(0.8 0.17 152);
+  --up-soft: oklch(0.8 0.17 152 / 0.14);
+  --down: oklch(0.7 0.19 25);
+  --down-soft: oklch(0.7 0.19 25 / 0.15);
+  --warn: oklch(0.82 0.14 78);
+  --warn-soft: oklch(0.82 0.14 78 / 0.14);
+  --halt: oklch(0.58 0.2 25);
+  --halt-ground: oklch(0.24 0.06 22);
+
+  /* authors */
+  --author-luca: oklch(0.82 0.135 72);
+  --author-pm: oklch(0.74 0.13 302);
+  --author-technical: oklch(0.78 0.11 206);
+  --author-market: oklch(0.8 0.13 138);
+  --author-sentiment: oklch(0.76 0.13 352);
+  --author-fundamental: oklch(0.8 0.075 58);
+  --author-risk: oklch(0.74 0.1 276);
+  --author-system: oklch(0.7 0.01 255);
+  /* every ticker agent shares one porcelain tone: the many sit under the PM; the symbol is their monogram */
+  --author-ticker: oklch(0.87 0.022 240);
+
+  /* radius scale (concentric: an element inset by N px inside a parent uses parent radius minus N) */
+  --radius: 0.5rem; /* shadcn base = control */
+  --r-tile: 12px; /* tiles, dialogs, sheets, popovers */
+  --r-control: 8px; /* buttons, inputs, segmented controls, tab and tool groups */
+  --r-item: 6px; /* items inset 6 px in a tile or 2 px in a control: rows, menu items, tabs, thumbs */
+  --r-tag: 4px; /* badges, counts, keyboard hints */
+
+  --ease-settle-curve: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* shadcn mapping */
+  --background: var(--ground);
+  --foreground: var(--fg);
+  --card: var(--panel);
+  --card-foreground: var(--fg);
+  --popover: var(--raised);
+  --popover-foreground: var(--fg);
+  --primary: var(--accent-strong);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: var(--hover);
+  --secondary-foreground: var(--fg);
+  --muted: var(--hover);
+  --muted-foreground: var(--fg-muted);
+  --accent: var(--hover);
+  --accent-foreground: var(--fg);
+  --destructive: var(--down);
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--accent-c);
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.05rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.2rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.35rem;
+
+  --color-desk: var(--desk);
+  --color-ground: var(--ground);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-hover: var(--hover);
+  --color-selected: var(--selected);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-faint: var(--fg-faint);
+  --color-accent-c: var(--accent-c);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-up: var(--up);
+  --color-up-soft: var(--up-soft);
+  --color-down: var(--down);
+  --color-down-soft: var(--down-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-halt: var(--halt);
+  --color-halt-ground: var(--halt-ground);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --radius-tile: var(--r-tile);
+  --radius-control: var(--r-control);
+  --radius-item: var(--r-item);
+  --radius-tag: var(--r-tag);
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-settle: var(--ease-settle-curve);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-desk text-fg font-sans text-sm antialiased;
+    font-feature-settings: "cv11", "ss03";
+    overflow: hidden;
+  }
+  ::selection {
+    background: oklch(0.7 0.15 251 / 0.35);
+    color: var(--fg);
+  }
+  input,
+  textarea {
+    caret-color: var(--accent-c);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent-c);
+    outline-offset: 1px;
+  }
+  /* themed scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  a {
+    text-underline-offset: 3px;
+  }
+}
+
+@layer components {
+  /* Segmented control: control radius outside, 2 px inset, item radius inside (8 - 2 = 6). */
+  .seg {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border-radius: var(--r-control);
+    background: oklch(0 0 0 / 0.3);
+    box-shadow: inset 0 0 0 1px oklch(1 0 0 / 0.035);
+  }
+  .seg-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: var(--r-item);
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    color: var(--fg-subtle);
+    transition:
+      background-color 160ms var(--ease-out-quint),
+      color 160ms var(--ease-out-quint),
+      box-shadow 160ms var(--ease-out-quint);
+  }
+  .seg-item:hover:not(:disabled) {
+    color: var(--fg);
+  }
+  .seg-item:disabled {
+    opacity: 0.4;
+  }
+  .seg-item[aria-checked="true"],
+  .seg-item[aria-selected="true"],
+  .seg-item[data-state="active"] {
+    background: var(--raised);
+    color: var(--fg);
+    box-shadow:
+      0 1px 2px oklch(0 0 0 / 0.45),
+      inset 0 0.5px 0 oklch(1 0 0 / 0.08);
+  }
+  /* Table rows inside a tile: no rules, an inset row that lights on hover. */
+  .tile-table tbody td:first-child {
+    border-top-left-radius: var(--r-item);
+    border-bottom-left-radius: var(--r-item);
+  }
+  .tile-table tbody td:last-child {
+    border-top-right-radius: var(--r-item);
+    border-bottom-right-radius: var(--r-item);
+  }
+}
+
+@layer utilities {
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum", "cv11", "ss03";
+  }
+  .flash-up {
+    animation: flash-up 900ms var(--ease-out-quint);
+  }
+  .flash-down {
+    animation: flash-down 900ms var(--ease-out-quint);
+  }
+}
+
+@keyframes flash-up {
+  from {
+    background-color: var(--up-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+@keyframes flash-down {
+  from {
+    background-color: var(--down-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+  /* The price flash is information, not movement: keep the colour fade. */
+  .flash-up,
+  .flash-down {
+    animation-duration: 900ms !important;
+  }
+}
+
+/* Fingers need bigger targets than the pointer the dense desk is drawn for. */
+@media (pointer: coarse) {
+  .seg-item {
+    height: 32px;
+  }
+}
+
+/* Tiles arrive instead of popping in; a resize in progress keeps the cursor and stops text selection. */
+@keyframes tile-in-left { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+@keyframes tile-in-right { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+@keyframes tile-in-bottom { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.tile-enter-left { animation: tile-in-left 260ms var(--ease-settle-curve) both; }
+.tile-enter-right { animation: tile-in-right 260ms var(--ease-settle-curve) both; }
+.tile-enter-bottom { animation: tile-in-bottom 260ms var(--ease-settle-curve) both; }
+:root[data-resizing] { user-select: none; }
+:root[data-resizing="vertical"] * { cursor: col-resize !important; }
+:root[data-resizing="horizontal"] * { cursor: row-resize !important; }
+
+/* Ufficio: a working agent's dot breathes in its own colour; a tool block opens in place. */
+@keyframes agent-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.agent-working { animation: agent-breathe 2.4s ease-in-out infinite; }
+.expand {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 220ms var(--ease-settle-curve);
+}
+.expand[data-open="true"] { grid-template-rows: 1fr; }
+.expand > * { min-height: 0; overflow: hidden; }
+@keyframes row-arrive { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.row-arrive { animation: row-arrive 260ms var(--ease-settle-curve) both; }
+
+/* Portafoglio: exposure bars grow once from their baseline; tab content settles in. */
+@keyframes bar-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.bar-grow { transform-origin: left; animation: bar-grow 520ms var(--ease-settle-curve) both; }
+@keyframes tab-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.tab-in[data-state="active"] { animation: tab-in 220ms var(--ease-settle-curve) both; }
