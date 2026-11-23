@@ -357,6 +357,22 @@ def test_briefing_reading_and_marking_seen(tmp_path):
     assert b2["since"] == new_seen
     assert len(b2["items"]) == 0
 
+    # Exhaust bridge daily budget -> summary_text is None for uncached since
+    office.settings.agents["bridge"].daily_budget = 0.01
+    db.log_llm_call(
+        agent="bridge",
+        model="my-combo",
+        tokens_in=1000,
+        tokens_out=200,
+        cost=0.05,
+        duration_ms=500,
+        ts=datetime.now(UTC).isoformat(),
+    )
+    custom_since = (datetime.now(UTC) - timedelta(hours=2)).isoformat().replace("+00:00", "Z")
+    b_no_budget = rt.read.briefing(since=custom_since)
+    assert b_no_budget["summary_text"] is None
+
+
 
 def test_bridge_http_endpoints_and_idempotency(tmp_path):
     db = OfficeDB(tmp_path / "bridge.db")
