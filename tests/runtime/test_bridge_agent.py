@@ -453,3 +453,53 @@ def test_bridge_events_published_only_at_commit_never_on_rollback(tmp_path):
     types = [ev.type for ev in received_events]
     assert "briefing.updated" in types
     assert len(received_events) > 0
+
+
+def test_bridge_conversation_pagination_and_search_filter(tmp_path):
+    """TDD red-green verification for conversation search q and pagination before."""
+    db = OfficeDB(tmp_path / "bridge.db")
+    office = build_test_office(db=db)
+    rt = Runtime(office=office)
+    client = TestClient(create_app(rt))
+
+    # Phase 2 (GREEN): Complete test implementation
+    # Create 2 conversations: one matching on title, one on message text
+    cid1 = db.create_bridge_conversation(title="Analisi Ticker TSLA")
+    mid1_1 = db.append_bridge_message(cid1, "luca", "text", "Primo messaggio")
+    mid1_2 = db.append_bridge_message(cid1, "bridge", "text", "Secondo messaggio")
+    mid1_3 = db.append_bridge_message(
+        cid1, "luca", "text", "Terzo messaggio con parola speciale: SegretoInfrasettimanale"
+    )
+
+    cid2 = db.create_bridge_conversation(title="Discussione Macro Generale")
+    db.append_bridge_message(cid2, "luca", "text", "Nessun segreto qui")
+
+    # 1. Search 'q' on title
+    resp_q_title = client.get("/v1/read/bridge_conversations", params={"q": "TSLA"}).json()
+    assert len(resp_q_title) == 1
+    assert resp_q_title[0]["id"] == cid1
+    assert resp_q_title[0]["title"] == "Analisi Ticker TSLA"
+    assert resp_q_title[0]["message_count"] == 3
+    assert (
+        resp_q_title[0]["last_message"]["text"]
+        == "Terzo messaggio con parola speciale: SegretoInfrasettimanale"
+    )
+
+    # 2. Search 'q' on message text
+    resp_q_text = client.get(
+        "/v1/read/bridge_conversations", params={"q": "SegretoInfrasettimanale"}
+    ).json()
+    assert len(resp_q_text) == 1
+    assert resp_q_text[0]["id"] == cid1
+
+    # 3. Pagination with 'before' and 'limit'
+    # Requesting limit=2 before mid1_3 should return [mid1_1, mid1_2] in chronological order
+    resp_page = client.get(
+        "/v1/read/bridge_conversation", params={"id": cid1, "limit": 2, "before": mid1_3}
+    ).json()
+    msgs = resp_page["messages"]
+    assert len(msgs) == 2
+    assert msgs[0]["id"] == mid1_1
+    assert msgs[1]["id"] == mid1_2
+    assert msgs[0]["text"] == "Primo messaggio"
+    assert msgs[1]["text"] == "Secondo messaggio"
