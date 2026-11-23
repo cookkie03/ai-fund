@@ -76,6 +76,13 @@ export const EVENT_TYPES = [
   "dossier.updated",
   "proposal.submitted",
   "proposal.decided",
+  // Bridge agent (assistente backend): conversation, live turn, proposed actions, briefing.
+  "bridge.message",
+  "bridge.status",
+  "bridge.action",
+  "bridge.conversation",
+  "briefing.updated",
+  "tool.finished",
   "annotation.created",
   "annotation.updated",
   "annotation.struck",

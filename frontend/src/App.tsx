@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { BridgeProvider } from "@/features/bridge/state";
 import { RuntimeProvider } from "@/lib/runtime/provider";
 import { PendingPage } from "@/pages/pending";
 import { AppShell } from "@/shell/app-shell";
@@ -12,6 +13,7 @@ const TerminalPage = lazy(() => import("@/pages/terminal/terminal-page").then((m
 const PortafoglioPage = lazy(() => import("@/pages/portafoglio/portafoglio-page").then((m) => ({ default: m.PortafoglioPage })));
 const UfficioPage = lazy(() => import("@/pages/ufficio/ufficio-page").then((m) => ({ default: m.UfficioPage })));
 
+const AssistentePage = lazy(() => import("@/pages/assistente/assistente-page").then((m) => ({ default: m.AssistentePage })));
 const TickerPage = lazy(() => import("@/pages/ticker/ticker-page").then((m) => ({ default: m.TickerPage })));
 
 const pageFallback = <div className="flex-1 bg-ground" aria-busy />;
@@ -22,10 +24,21 @@ export function App() {
       <ShellStateProvider>
         <TooltipProvider>
           <BrowserRouter>
+            <BridgeProvider>
             <AppShell>
               <Routes>
-                {/* Home is the Assistente; until it is built the cockpit opens on the Terminale. */}
-                <Route path="/" element={<Navigate to="/terminale" replace />} />
+                {/* Home is the Assistente: the conversation with the Bridge. */}
+                {["/", "/assistente"].map((path) => (
+                  <Route
+                    key={path}
+                    path={path}
+                    element={
+                      <Suspense fallback={pageFallback}>
+                        <AssistentePage />
+                      </Suspense>
+                    }
+                  />
+                ))}
                 <Route
                   path="/terminale"
                   element={
@@ -64,9 +77,10 @@ export function App() {
                 {NAV.filter((n) => !n.built).map((n) => (
                   <Route key={n.path} path={n.path} element={<PendingPage item={n} />} />
                 ))}
-                <Route path="*" element={<Navigate to="/terminale" replace />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </AppShell>
+            </BridgeProvider>
           </BrowserRouter>
             <Toaster position="bottom-right" />
         </TooltipProvider>

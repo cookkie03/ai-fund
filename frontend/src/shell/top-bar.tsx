@@ -176,16 +176,24 @@ const OFFICE_TOGGLES: typeof LAYOUT_TOGGLES = [
   { id: "right", icon: PanelRight, hiddenIcon: PanelRightDashed, label: "Tool" },
 ];
 
+/** On the Assistente the side bars hold the conversations and the live state. */
+const ASSISTANT_TOGGLES: typeof LAYOUT_TOGGLES = [
+  { id: "left", icon: PanelLeft, hiddenIcon: PanelLeftDashed, label: "Conversazioni" },
+  { id: "right", icon: PanelRight, hiddenIcon: PanelRightDashed, label: "Stato vivo" },
+];
+
+const isAssistente = (p: string) => p === "/" || p.startsWith("/assistente");
+
 /** VS Code's layout controls: show or hide each tile around the page's main tile. Pages without side tiles show none. */
 function LayoutToggles() {
   const { layout, togglePanel } = useShell();
   const { pathname } = useLocation();
   const orders = useOrders();
   const pending = (orders.data ?? []).filter((o) => orderBucket(o) === "pending").length;
-  const toggles = pathname.startsWith("/terminale") ? LAYOUT_TOGGLES : /^\/ufficio\/[^/]+/.test(pathname) ? OFFICE_TOGGLES : [];
+  const toggles = pathname.startsWith("/terminale") ? LAYOUT_TOGGLES : /^\/ufficio\/[^/]+/.test(pathname) ? OFFICE_TOGGLES : isAssistente(pathname) ? ASSISTANT_TOGGLES : [];
   if (!toggles.length) return null;
   return (
-    <div role="group" aria-label="Layout" className="hidden items-center gap-0.5 md:flex">
+    <div role="group" aria-label="Layout" className={cn("hidden items-center gap-0.5", isAssistente(pathname) ? "lg:flex" : "md:flex")}>
       {toggles.map(({ id, icon, hiddenIcon, label }) => (
         <span key={id} className="relative">
           <IconButton icon={layout.open[id] ? icon : hiddenIcon} label={`${layout.open[id] ? "Nascondi" : "Mostra"} ${label.toLowerCase()}`} shortcut={PANEL_SHORTCUT[id]} active={layout.open[id]} onClick={() => togglePanel(id)} />
@@ -202,6 +210,7 @@ function LayoutToggles() {
 
 export function TopBar() {
   const { halted, bridgeOpen, setBridgeOpen } = useShell();
+  const { pathname } = useLocation();
   return (
     <header
       data-region="topbar"
@@ -229,7 +238,7 @@ export function TopBar() {
         <EquityReadout />
         <span className="hidden h-4 w-px bg-line md:block" aria-hidden />
         <LayoutToggles />
-        <IconButton icon={MessagesSquare} label={bridgeOpen ? "Chiudi il Bridge" : "Bridge e messaggi agli agenti"} active={bridgeOpen} onClick={() => setBridgeOpen(!bridgeOpen)} />
+        {!isAssistente(pathname) && <IconButton icon={MessagesSquare} label={bridgeOpen ? "Chiudi il Bridge" : "Bridge"} active={bridgeOpen} onClick={() => setBridgeOpen(!bridgeOpen)} />}
         <HaltControl />
       </div>
     </header>

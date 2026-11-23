@@ -1,7 +1,8 @@
-import { ArrowUpRight, Check, ChevronDown, ChevronLeft, FileText, ListPlus } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, ChevronLeft, FileText, ListPlus, UsersRound, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AuthorChip } from "@/components/author-chip";
+import { CollapsedRail } from "@/components/collapsed-rail";
 import { Gutter } from "@/components/gutter";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -13,7 +14,7 @@ import { AGENTS, author, tickerOf } from "@/lib/authors";
 import { fmtWhen } from "@/lib/format";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
-import { PANEL_LIMITS, useShell } from "@/shell/shell-state";
+import { PANEL_LIMITS, PANEL_SHORTCUT, useShell } from "@/shell/shell-state";
 import { AssignTask } from "./assign-task";
 import { Conversation, TopicIcon } from "./conversation";
 import { ROLE, StatusMark } from "./parts";
@@ -159,6 +160,7 @@ function DesktopAgentView({ agent }: { agent: string }) {
           />
         </>
       )}
+      {!open.left && <CollapsedRail side="left" label="Agenti e chat" icon={UsersRound} shortcut={PANEL_SHORTCUT.left} onOpen={() => setPanelOpen("left", true)} className="mr-2.5" />}
       {topic ? (
         <Conversation
           agent={agent}
@@ -196,6 +198,7 @@ function DesktopAgentView({ agent }: { agent: string }) {
           )}
         </>
       )}
+      {!open.right && <CollapsedRail side="right" label={agent === "portfolio_manager" ? "Coda e tool" : "Tool"} icon={Wrench} shortcut={PANEL_SHORTCUT.right} onOpen={() => setPanelOpen("right", true)} className="ml-2.5" />}
     </div>
   );
 }

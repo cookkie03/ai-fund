@@ -77,6 +77,11 @@ function keysFor(type: string): string[][] {
   if (type === "dossier.updated") return [["dossier"], ["dossier_history"], ["dossiers"]];
   if (type.startsWith("proposal.")) return [["proposals"], ["dossier"], ["dossiers"], ["dossier_history"], ["office", "agents"]];
   if (type === "data.refreshed") return [["bars"], ["indicators"]];
+  if (type === "bridge.message") return [["bridge", "conversation"], ["bridge", "conversations"]];
+  if (type === "bridge.action") return [["bridge", "conversation"], ["bridge", "conversations"], ["bridge", "actions"]];
+  if (type === "bridge.conversation") return [["bridge", "conversations"], ["bridge", "conversation"]];
+  if (type === "bridge.status") return [["bridge", "conversations"]];
+  if (type === "briefing.updated") return [["bridge", "briefing"]];
   return [];
 }
 

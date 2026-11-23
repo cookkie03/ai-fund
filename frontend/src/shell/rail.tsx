@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { InboxButton } from "./inbox";
@@ -13,7 +13,14 @@ function Mark() {
   );
 }
 
+/** "/" is the Assistente too: its rail item stays lit on the home. */
+function useHomeActive() {
+  const { pathname } = useLocation();
+  return (path: string, isActive: boolean) => isActive || (path === "/assistente" && pathname === "/");
+}
+
 export function Rail() {
+  const active = useHomeActive();
   return (
     <nav data-region="rail" aria-label="Pagine" className="hidden w-[56px] shrink-0 flex-col items-center gap-1 bg-desk pb-2.5 pt-2 md:flex">
       <div className="mb-2 grid size-9 place-items-center" title="Cockpit">
@@ -28,7 +35,7 @@ export function Rail() {
               className={({ isActive }) =>
                 cn(
                   "grid size-9 place-items-center rounded-control transition-[background-color,color,transform] duration-150 active:scale-[0.94]",
-                  isActive ? "bg-ground text-fg shadow-[inset_0_0.5px_0_oklch(1_0_0/0.06)]" : "text-fg-subtle hover:bg-hover hover:text-fg",
+                  active(item.path, isActive) ? "bg-ground text-fg shadow-[inset_0_0.5px_0_oklch(1_0_0/0.06)]" : "text-fg-subtle hover:bg-hover hover:text-fg",
                 )
               }
             >
@@ -46,6 +53,7 @@ export function Rail() {
 }
 
 export function BottomNav() {
+  const active = useHomeActive();
   return (
     <nav data-region="bottomnav" aria-label="Pagine" className="flex h-14 shrink-0 items-stretch bg-desk pb-[env(safe-area-inset-bottom)] md:hidden">
       {NAV.map((item) => (
@@ -53,7 +61,7 @@ export function BottomNav() {
           key={item.path}
           to={item.path}
           className={({ isActive }) =>
-            cn("flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] transition-colors", isActive ? "text-accent-c" : "text-fg-subtle")
+            cn("flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] transition-colors", active(item.path, isActive) ? "text-accent-c" : "text-fg-subtle")
           }
         >
           <item.icon className="size-5" strokeWidth={1.75} />

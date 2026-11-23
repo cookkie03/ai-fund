@@ -1,5 +1,6 @@
 import { CloudOff, OctagonPause, RotateCw } from "lucide-react";
 import type { ReactNode } from "react";
+import { useLocation } from "react-router-dom";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { fmtAge } from "@/lib/format";
 import { queryClient, useNow, useRuntime } from "@/lib/runtime/provider";
@@ -51,6 +52,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { bridgeOpen, setBridgeOpen, halted } = useShell();
   const wide = useMediaQuery("(min-width: 1280px)");
   const down = !connection.booting && !connection.reachable;
+  // The Assistente is the Bridge at full size: the side panel would only duplicate it.
+  const { pathname } = useLocation();
+  const onAssistente = pathname === "/" || pathname.startsWith("/assistente");
 
   return (
     <div data-region="shell" className="flex h-dvh w-full overflow-hidden bg-desk">
@@ -64,7 +68,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
         <BottomNav />
       </div>
-      {wide ? (
+      {onAssistente ? null : wide ? (
         bridgeOpen && (
           <div data-region="bridge" className="tile-enter-right w-[340px] shrink-0 py-2.5 pr-2.5">
             <div className="h-full overflow-hidden rounded-tile bg-ground">
