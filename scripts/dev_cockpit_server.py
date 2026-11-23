@@ -17,6 +17,7 @@ if __package__ in (None, ""):
     # `python scripts/dev_cockpit_server.py` from the repo root: make the root importable.
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from agents.fake_backend import ScriptedBridgeBackend  # noqa: E402
 from bootstrap import build_test_office  # noqa: E402
 from runtime.core import Runtime  # noqa: E402
 from runtime.http import create_app  # noqa: E402
@@ -33,6 +34,7 @@ def create_dev_app(db_path: str = "data/dev-cockpit.db", approval_mode: str = "m
     market = ScenarioMarketData()
     office = build_test_office(db=db, market_data=market, approval_mode=approval_mode)
     rt = Runtime(office=office, account_label="dev-cockpit")
+    rt.bridge_runner.set_backend(ScriptedBridgeBackend())
     seed_scenario(rt, market)
     app = create_app(rt, token=None, host="127.0.0.1")
 

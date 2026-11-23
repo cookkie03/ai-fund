@@ -941,3 +941,428 @@ class ReadModel:
         finally:
             if self.db_path != ":memory:":
                 conn.close()
+
+    # --- Bridge & Briefing Read Endpoints ---
+
+    def bridge_conversations(
+        self,
+        limit: int = 50,
+        q: str | None = None,
+        archived: bool | None = False,
+    ) -> list[dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            query = """
+                SELECT c.*,
+                       (SELECT COUNT(*) FROM bridge_messages m WHERE m.conversation_id = c.id) AS message_count,
+                       (SELECT COUNT(*) FROM bridge_actions a WHERE a.conversation_id = c.id AND a.status = 'pending') AS pending_actions
+                FROM bridge_conversations c
+                WHERE 1=1
+            """
+            params: list[Any] = []
+            if archived is not None:
+                query += " AND c.archived = ?"
+                params.append(1 if archived else 0)
+            if q and q.strip():
+                pattern = f"%{q.strip()}%"
+                query += " AND (c.title LIKE ? OR EXISTS (SELECT 1 FROM bridge_messages m WHERE m.conversation_id = c.id AND m.text LIKE ?))"
+                params.extend([pattern, pattern])
+            query += " ORDER BY c.updated_ts DESC, c.id DESC LIMIT ?"
+            params.append(limit)
+
+            rows = conn.execute(query, params).fetchall()
+            result: list[dict[str, Any]] = []
+            for r in rows:
+                conv = dict(r)
+                conv["archived"] = bool(conv["archived"])
+                last_msg_row = conn.execute(
+                    "SELECT author, text, ts FROM bridge_messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 1",
+                    (conv["id"],),
+                ).fetchone()
+                conv["last_message"] = dict(last_msg_row) if last_msg_row else None
+                result.append(conv)
+            return result
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def bridge_conversation(
+        self,
+        id: int,
+        limit: int = 100,
+        before: int | None = None,
+    ) -> dict[str, Any] | None:
+        conn = self._get_connection()
+        try:
+            row = conn.execute("SELECT * FROM bridge_conversations WHERE id = ?", (id,)).fetchone()
+            if not row:
+                return None
+            conv = dict(row)
+            conv["archived"] = bool(conv["archived"])
+
+            if before is not None:
+                msg_rows = conn.execute(
+                    """
+                    SELECT * FROM (
+                        SELECT * FROM bridge_messages
+                        WHERE conversation_id = ? AND id < ?
+                        ORDER BY id DESC LIMIT ?
+                    ) ORDER BY id ASC
+                    """,
+                    (id, before, limit),
+                ).fetchall()
+            else:
+                msg_rows = conn.execute(
+                    """
+                    SELECT * FROM (
+                        SELECT * FROM bridge_messages
+                        WHERE conversation_id = ?
+                        ORDER BY id DESC LIMIT ?
+                    ) ORDER BY id ASC
+                    """,
+                    (id, limit),
+                ).fetchall()
+
+            messages: list[dict[str, Any]] = []
+            for mr in msg_rows:
+                m = dict(mr)
+                m["context"] = json.loads(m["context_json"]) if m.get("context_json") else None
+                m["refs"] = json.loads(m["refs_json"]) if m.get("refs_json") else []
+                action_id = m.get("action_id")
+                action_dict = None
+                if action_id:
+                    act_row = conn.execute("SELECT * FROM bridge_actions WHERE id = ?", (action_id,)).fetchone()
+                    if act_row:
+                        action_dict = dict(act_row)
+                        action_dict["payload"] = json.loads(action_dict["payload_json"]) if action_dict.get("payload_json") else {}
+                        action_dict["preview"] = json.loads(action_dict["preview_json"]) if action_dict.get("preview_json") else None
+                        action_dict["result_reasons"] = json.loads(action_dict["result_reasons_json"]) if action_dict.get("result_reasons_json") else []
+                        action_dict["capital"] = bool(action_dict["capital"])
+                        action_dict.pop("payload_json", None)
+                        action_dict.pop("preview_json", None)
+                        action_dict.pop("result_reasons_json", None)
+                m["action"] = action_dict
+                m.pop("context_json", None)
+                m.pop("refs_json", None)
+                m.pop("action_id", None)
+                messages.append(m)
+
+            conv["messages"] = messages
+            return conv
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def bridge_actions(self, status: str | None = None) -> list[dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            query = "SELECT * FROM bridge_actions"
+            params: list[Any] = []
+            if status:
+                query += " WHERE status = ?"
+                params.append(status)
+            query += " ORDER BY id DESC"
+            rows = conn.execute(query, params).fetchall()
+            actions: list[dict[str, Any]] = []
+            for r in rows:
+                a = dict(r)
+                a["payload"] = json.loads(a["payload_json"]) if a.get("payload_json") else {}
+                a["preview"] = json.loads(a["preview_json"]) if a.get("preview_json") else None
+                a["result_reasons"] = json.loads(a["result_reasons_json"]) if a.get("result_reasons_json") else []
+                a["capital"] = bool(a["capital"])
+                a.pop("payload_json", None)
+                a.pop("preview_json", None)
+                a.pop("result_reasons_json", None)
+                actions.append(a)
+            return actions
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def briefing(self, since: str | None = None) -> dict[str, Any]:
+        from datetime import timedelta
+
+        conn = self._get_connection()
+        try:
+            now_dt = self._now()
+            now_iso = now_dt.isoformat().replace("+00:00", "Z")
+
+            if not since:
+                row_seen = conn.execute("SELECT value FROM briefing_state WHERE key = 'last_seen_ts'").fetchone()
+                if row_seen and row_seen["value"]:
+                    since_ts = str(row_seen["value"])
+                else:
+                    since_ts = (now_dt - timedelta(hours=24)).isoformat().replace("+00:00", "Z")
+            else:
+                since_ts = since
+
+            # 1. Portfolio stats
+            port = self.portfolio()
+            portfolio_data = None
+            if port:
+                val = float(port.equity)
+                snap = conn.execute(
+                    "SELECT equity FROM portfolio_snapshots WHERE ts <= ? ORDER BY ts DESC LIMIT 1",
+                    (since_ts,),
+                ).fetchone()
+                if snap:
+                    base_eq = float(snap["equity"])
+                    change = val - base_eq
+                    chg_frac = (change / base_eq) if base_eq > 0 else 0.0
+                else:
+                    change = float(port.realized_pnl_today + port.unrealized_pnl)
+                    base = val - change
+                    chg_frac = (change / base) if base > 0 else 0.0
+                portfolio_data = {
+                    "value": round(val, 2),
+                    "change": round(change, 2),
+                    "change_fraction": round(chg_frac, 4),
+                }
+
+            items: list[dict[str, Any]] = []
+
+            # 2. Trades
+            trade_rows = conn.execute(
+                """
+                SELECT id, ticker, CASE WHEN closed_ts IS NULL THEN 'open' ELSE 'closed' END AS status,
+                       qty, entry_price, exit_price, realized_pnl, opened_ts, closed_ts
+                FROM trades
+                WHERE opened_ts >= ? OR (closed_ts IS NOT NULL AND closed_ts >= ?)
+                ORDER BY COALESCE(closed_ts, opened_ts) DESC LIMIT 50
+                """,
+                (since_ts, since_ts),
+            ).fetchall()
+            for tr in trade_rows:
+                ts_val = tr["closed_ts"] or tr["opened_ts"]
+                pnl_str = f" P&L: {round(float(tr['realized_pnl']), 2)}" if tr["realized_pnl"] is not None else ""
+                items.append({
+                    "id": f"trade-{tr['id']}",
+                    "type": "trade",
+                    "ts": ts_val,
+                    "title": f"Trade {tr['ticker']} {tr['status']} ({tr['qty']} @ {tr['entry_price'] or 0}){pnl_str}",
+                    "detail": f"Uscita: {tr['exit_price']}" if tr["exit_price"] else None,
+                    "ticker": tr["ticker"],
+                    "ref": {"type": "trade", "id": int(tr["id"])},
+                    "severity": "info",
+                })
+
+            # 3. Orders pending approval
+            ord_rows = self.orders(status="pending", limit=50)
+            for o in ord_rows:
+                items.append({
+                    "id": f"order-pending-{o.id}",
+                    "type": "order_pending",
+                    "ts": o.created_ts,
+                    "title": f"Ordine in attesa: {o.ticker} {o.side} {o.qty}",
+                    "detail": f"{o.order_type} limit {o.limit_price}" if o.limit_price else o.order_type,
+                    "ticker": o.ticker,
+                    "ref": {"type": "order", "id": int(o.id)},
+                    "severity": "attention",
+                })
+
+            # 4. Proposals pending
+            prop_pending = conn.execute(
+                """
+                SELECT id, ticker, agent, direction, conviction, submitted_ts, reason
+                FROM proposals
+                WHERE status = 'pending'
+                ORDER BY id DESC LIMIT 50
+                """
+            ).fetchall()
+            for p in prop_pending:
+                items.append({
+                    "id": f"proposal-pending-{p['id']}",
+                    "type": "proposal_pending",
+                    "ts": p["submitted_ts"],
+                    "title": f"Proposta in attesa: {p['ticker']} ({p['direction']})",
+                    "detail": p["reason"],
+                    "ticker": p["ticker"],
+                    "ref": {"type": "proposal", "id": int(p["id"])},
+                    "severity": "attention",
+                })
+
+            # 5. Proposals decided
+            prop_decided = conn.execute(
+                """
+                SELECT id, ticker, agent, status, direction, decided_ts, decided_by, reason
+                FROM proposals
+                WHERE status IN ('accepted', 'rejected', 'deferred') AND decided_ts >= ?
+                ORDER BY decided_ts DESC LIMIT 50
+                """,
+                (since_ts,),
+            ).fetchall()
+            for p in prop_decided:
+                items.append({
+                    "id": f"proposal-decided-{p['id']}",
+                    "type": "proposal_decided",
+                    "ts": p["decided_ts"],
+                    "title": f"Proposta {p['ticker']} {p['status']} da {p['decided_by'] or 'PM'}",
+                    "detail": p["reason"],
+                    "ticker": p["ticker"],
+                    "ref": {"type": "proposal", "id": int(p["id"])},
+                    "severity": "info",
+                })
+
+            # 6. Alerts
+            alert_rows = conn.execute(
+                """
+                SELECT id, text, ts FROM inbox
+                WHERE kind = 'alert' AND ts >= ?
+                ORDER BY id DESC LIMIT 50
+                """,
+                (since_ts,),
+            ).fetchall()
+            for a in alert_rows:
+                items.append({
+                    "id": f"alert-{a['id']}",
+                    "type": "alert",
+                    "ts": a["ts"],
+                    "title": f"Alert: {a['text'][:80]}",
+                    "detail": a["text"],
+                    "ticker": None,
+                    "ref": None,
+                    "severity": "attention",
+                })
+
+            # 7. Halt / Resume
+            halt_rows = conn.execute(
+                """
+                SELECT id, payload, ts FROM events
+                WHERE type = 'halt.changed' AND ts >= ?
+                ORDER BY id DESC LIMIT 50
+                """,
+                (since_ts,),
+            ).fetchall()
+            for h in halt_rows:
+                payload = json.loads(h["payload"]) if h["payload"] else {}
+                status = payload.get("status")
+                if status == "halted":
+                    items.append({
+                        "id": f"halt-{h['id']}",
+                        "type": "halt",
+                        "ts": h["ts"],
+                        "title": "Trading Halt attivato",
+                        "detail": payload.get("reason"),
+                        "ticker": None,
+                        "ref": None,
+                        "severity": "critical",
+                    })
+                elif status == "resumed":
+                    items.append({
+                        "id": f"resume-{h['id']}",
+                        "type": "resume",
+                        "ts": h["ts"],
+                        "title": "Trading ripreso",
+                        "detail": payload.get("reason"),
+                        "ticker": None,
+                        "ref": None,
+                        "severity": "info",
+                    })
+
+            # 8. Dossiers
+            dos_rows = conn.execute(
+                """
+                SELECT ticker, version, ts, author FROM dossier_versions
+                WHERE ts >= ?
+                ORDER BY ts DESC LIMIT 50
+                """,
+                (since_ts,),
+            ).fetchall()
+            for d in dos_rows:
+                items.append({
+                    "id": f"dossier-{d['ticker']}-{d['version']}",
+                    "type": "dossier",
+                    "ts": d["ts"],
+                    "title": f"Scheda {d['ticker']} aggiornata (v{d['version']})",
+                    "detail": f"Aggiornata da {d['author']}",
+                    "ticker": d["ticker"],
+                    "ref": {"type": "ticker", "id": d["ticker"]},
+                    "severity": "info",
+                })
+
+            # 9. Agent errors
+            err_rows = conn.execute(
+                """
+                SELECT id, text, ts FROM inbox
+                WHERE kind = 'error' AND ts >= ?
+                ORDER BY id DESC LIMIT 50
+                """,
+                (since_ts,),
+            ).fetchall()
+            for er in err_rows:
+                items.append({
+                    "id": f"agent-error-{er['id']}",
+                    "type": "agent_error",
+                    "ts": er["ts"],
+                    "title": f"Errore: {er['text'][:80]}",
+                    "detail": er["text"],
+                    "ticker": None,
+                    "ref": None,
+                    "severity": "critical",
+                })
+
+            # 10. Risk limits
+            lim_rows = conn.execute(
+                """
+                SELECT version, ts, actor, reason FROM risk_limits_versions
+                WHERE ts >= ?
+                ORDER BY version DESC LIMIT 50
+                """,
+                (since_ts,),
+            ).fetchall()
+            for lr in lim_rows:
+                items.append({
+                    "id": f"risk-limits-{lr['version']}",
+                    "type": "risk_limits",
+                    "ts": lr["ts"],
+                    "title": f"Limiti di rischio v{lr['version']} modificati da {lr['actor']}",
+                    "detail": lr["reason"],
+                    "ticker": None,
+                    "ref": {"type": "risk_limits", "id": lr["version"]},
+                    "severity": "attention",
+                })
+
+            # Counts
+            counts = {
+                "trades": len(trade_rows),
+                "orders_pending": len(ord_rows),
+                "proposals_pending": len(prop_pending),
+                "proposals_decided": len(prop_decided),
+                "alerts": len(alert_rows),
+                "agent_errors": len(err_rows),
+            }
+
+            # Sort all items by ts DESC and cap at 50
+            items.sort(key=lambda x: str(x.get("ts", "")), reverse=True)
+            capped_items = items[:50]
+
+            # Summary text from cache or Bridge
+            summary_text = None
+            summary_ts = None
+            cached_sum_row = conn.execute(
+                "SELECT value, updated_ts FROM briefing_state WHERE key = ?",
+                (f"summary:{since_ts}",),
+            ).fetchone()
+            if cached_sum_row:
+                summary_text = str(cached_sum_row["value"])
+                summary_ts = str(cached_sum_row["updated_ts"])
+            elif getattr(self._runtime, "bridge_runner", None):
+                res = self._runtime.bridge_runner.generate_briefing_summary(
+                    since=since_ts, items=capped_items, portfolio=portfolio_data
+                )
+                if res:
+                    summary_text, summary_ts = res
+
+            return {
+                "since": since_ts,
+                "generated_ts": now_iso,
+                "summary_text": summary_text,
+                "summary_ts": summary_ts,
+                "portfolio": portfolio_data,
+                "counts": counts,
+                "items": capped_items,
+            }
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+

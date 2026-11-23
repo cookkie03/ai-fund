@@ -164,3 +164,43 @@ class IngestAlert(BaseModel):
     source: str
     reason: str
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+# --- Bridge & Briefing Commands ---
+
+
+class BridgeSay(BaseModel):
+    conversation_id: int | None = None
+    text: str = Field(min_length=1)
+    context: dict[str, Any] | None = None
+
+
+class BridgeRenameConversation(BaseModel):
+    conversation_id: int = Field(gt=0)
+    title: str = Field(min_length=1, max_length=200)
+
+
+class BridgeArchiveConversation(BaseModel):
+    conversation_id: int = Field(gt=0)
+    archived: bool = True
+
+
+class BridgeStop(BaseModel):
+    conversation_id: int = Field(gt=0)
+
+
+class BridgeActionDecide(BaseModel):
+    action_id: int = Field(gt=0)
+    decision: Literal["confirm", "dismiss"]
+    confirm: bool = False
+
+    @model_validator(mode="after")
+    def _validate_confirm(self) -> BridgeActionDecide:
+        if self.decision == "confirm" and not self.confirm:
+            raise ValueError("bridge_action_decide requires confirm: true for decision: 'confirm'")
+        return self
+
+
+class MarkBriefingSeen(BaseModel):
+    ts: str | None = None
+

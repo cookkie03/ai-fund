@@ -11,7 +11,9 @@ from agents.backend import (
     AgentSpec,
     ChatMessage,
     StepResult,
+    ToolCall,
     ToolSpec,
+    Usage,
 )
 
 
@@ -102,3 +104,114 @@ class ScriptedBackend(AgentBackend):
     def calls_for_agent(self, agent_name: str) -> list[RecordedCall]:
         """Return calls recorded for a specific agent."""
         return [c for c in self.calls if c.agent.name == agent_name]
+
+
+class ScriptedBridgeBackend(AgentBackend):
+    """Deterministic scripted backend for the Bridge Agent in development and tests."""
+
+    def __init__(self, fallback: AgentBackend | None = None) -> None:
+        self.fallback = fallback
+        self.calls: list[RecordedCall] = []
+        self._turn_counts: dict[str, int] = defaultdict(int)
+
+    def step(
+        self,
+        agent: AgentSpec,
+        chat_context: list[ChatMessage],
+        tools: Sequence[ToolSpec],
+    ) -> StepResult:
+        if agent.name != "bridge":
+            if self.fallback:
+                return self.fallback.step(agent, chat_context, tools)
+            return StepResult(content="OK", done=True)
+
+        turn = self._turn_counts[agent.name]
+        self._turn_counts[agent.name] += 1
+        self.calls.append(
+            RecordedCall(
+                agent=agent,
+                chat_context=list(chat_context),
+                tools=tools,
+                turn_index=turn,
+            )
+        )
+
+        last_user_msg = next((m.content for m in reversed(chat_context) if m.role == "user"), "")
+        lower = last_user_msg.lower()
+
+        # Step 0: invoke tool
+        has_tool_result = any(m.role == "system" and "Risultato tool" in m.content for m in chat_context)
+        if not has_tool_result:
+            if "chiudi" in lower or "vendi" in lower or "close" in lower:
+                return StepResult(
+                    tool_calls=[
+                        ToolCall(
+                            id="tc-close-1",
+                            name="propose_action",
+                            args={
+                                "command": "close_position",
+                                "payload": {"ticker": "NVDA", "qty": 10},
+                                "summary": "Chiudi 10 azioni NVDA a mercato",
+                            },
+                        )
+                    ],
+                    done=False,
+                    usage=Usage(prompt_tokens=200, completion_tokens=50, cost=0.01),
+                )
+            if "chiedi a" in lower or "messaggio a" in lower or "relay" in lower:
+                return StepResult(
+                    tool_calls=[
+                        ToolCall(
+                            id="tc-msg-1",
+                            name="message_agent",
+                            args={
+                                "agent": "technical_analyst",
+                                "topic": "AMD",
+                                "text": "Puoi verificare i livelli tecnici?",
+                            },
+                        )
+                    ],
+                    done=False,
+                    usage=Usage(prompt_tokens=200, completion_tokens=50, cost=0.01),
+                )
+            if "watchlist" in lower:
+                return StepResult(
+                    tool_calls=[
+                        ToolCall(
+                            id="tc-watch-1",
+                            name="add_watchlist",
+                            args={"ticker": "TSLA", "note": "Segnalato da Luca"},
+                        )
+                    ],
+                    done=False,
+                    usage=Usage(prompt_tokens=200, completion_tokens=50, cost=0.01),
+                )
+            # Default read tool
+            return StepResult(
+                tool_calls=[ToolCall(id="tc-read-1", name="read_portfolio", args={})],
+                done=False,
+                usage=Usage(prompt_tokens=200, completion_tokens=50, cost=0.01),
+            )
+
+        # Step 1: respond with content
+        if "chiudi" in lower or "vendi" in lower or "close" in lower:
+            content = (
+                "Ho esaminato la posizione su NVDA e ho preparato la proposta per chiudere 10 azioni a mercato. "
+                "L'azione è registrata in attesa della tua conferma esplicita nella UI."
+            )
+        elif "chiedi a" in lower or "messaggio a" in lower or "relay" in lower:
+            content = (
+                "Ho inoltrato la richiesta a Technical Analyst per conto tuo sulla chat AMD. "
+                "Non appena risponderà, la sintesi comparirà qui."
+            )
+        elif "watchlist" in lower:
+            content = "Ho inserito TSLA nella watchlist dell'ufficio come richiesto."
+        else:
+            content = "Ho verificato la situazione del portafoglio e delle operazioni in corso. Tutto è allineato."
+
+        return StepResult(
+            content=content,
+            done=True,
+            usage=Usage(prompt_tokens=300, completion_tokens=80, cost=0.015),
+        )
+

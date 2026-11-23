@@ -580,3 +580,148 @@ def seed_scenario(rt: Any, market: ScenarioMarketData) -> None:
             db.log_llm_call(agent="portfolio_manager", model="my-combo", tokens_in=3500, tokens_out=700, cost=0.150, duration_ms=2200, ts=_iso(day_ts.replace(hour=14, minute=30)))
             db.log_llm_call(agent="technical_analyst", model="my-combo", tokens_in=2800, tokens_out=550, cost=0.110, duration_ms=1800, ts=_iso(day_ts.replace(hour=15, minute=0)))
             db.log_llm_call(agent="market_analyst", model="my-combo", tokens_in=2200, tokens_out=420, cost=0.085, duration_ms=1500, ts=_iso(day_ts.replace(hour=10, minute=15)))
+
+        # ----------------------------------------------------------------------
+        # Bridge Agent Scenario Seeding
+        # ----------------------------------------------------------------------
+        # Costi e chiamate LLM del Bridge
+        db.log_llm_call(agent="bridge", model="my-combo", tokens_in=950, tokens_out=180, cost=0.035, duration_ms=620, ts=_iso(now - timedelta(minutes=25)))
+        db.log_llm_call(agent="bridge", model="my-combo", tokens_in=1400, tokens_out=260, cost=0.055, duration_ms=890, ts=_iso(now - timedelta(minutes=10)))
+
+        # Conversazione 1: Con agent_relay da Technical Analyst su AMD
+        c1_id = db.create_bridge_conversation(title="Livelli e supporti AMD", created_ts=_iso(now - timedelta(minutes=40)))
+        db.append_bridge_message(
+            c1_id, "luca", "text", "Chiedi al Technical Analyst di verificare i livelli di supporto su AMD.",
+            ts=_iso(now - timedelta(minutes=39)), context={"page": "terminale", "ticker": "AMD"},
+            refs=[{"type": "ticker", "id": "AMD", "label": "AMD"}, {"type": "agent", "id": "technical_analyst", "label": "Technical Analyst"}],
+        )
+        db.append_bridge_message(
+            c1_id, "bridge", "text", "Ho inoltrato la richiesta al Technical Analyst per conto tuo sulla chat AMD.",
+            ts=_iso(now - timedelta(minutes=38)),
+            refs=[{"type": "ticker", "id": "AMD", "label": "AMD"}],
+        )
+        db.append_bridge_message(
+            c1_id, "technical_analyst", "agent_relay",
+            "Supporto chiave confermato a 118.50$, RSI a 32 su candela 1h in ipervenduto con divergenza volumetrica.",
+            ts=_iso(now - timedelta(minutes=36)),
+            context={"page": "ufficio", "ticker": "AMD", "ref": {"type": "agent", "id": "technical_analyst"}},
+            refs=[{"type": "ticker", "id": "AMD", "label": "AMD"}],
+        )
+        db.append_bridge_message(
+            c1_id, "bridge", "text",
+            "Il Technical Analyst ha risposto: conferma il supporto di AMD a 118.50$, evidenziando RSI a 32 e una divergenza rialzista su orario.",
+            ts=_iso(now - timedelta(minutes=35)),
+            refs=[{"type": "ticker", "id": "AMD", "label": "AMD"}, {"type": "agent", "id": "technical_analyst", "label": "Technical Analyst"}],
+        )
+
+        # Conversazione 2: Con azione 'pending' di close_position con preview
+        c2_id = db.create_bridge_conversation(title="Riduzione esposizione semiconduttori", created_ts=_iso(now - timedelta(minutes=25)))
+        db.append_bridge_message(
+            c2_id, "luca", "text", "Chiudi 10 azioni di NVDA a mercato per proteggere i profitti.",
+            ts=_iso(now - timedelta(minutes=24)), context={"page": "portafoglio", "ticker": "NVDA"},
+            refs=[{"type": "ticker", "id": "NVDA", "label": "NVDA"}],
+        )
+        act_preview = {
+            "ok": True,
+            "reasons": [],
+            "detail": {
+                "ticker": "NVDA", "qty": 10.0, "current_price": 181.0,
+                "estimated_proceeds": 1810.0, "realized_pnl_estimate": 310.0,
+            },
+        }
+        act_c2 = db.create_bridge_action(
+            conversation_id=c2_id,
+            command="close_position",
+            payload={"ticker": "NVDA", "qty": 10.0, "order_type": "market"},
+            summary="Chiudi 10 azioni di NVDA a mercato",
+            capital=True,
+            status="pending",
+            preview=act_preview,
+            created_ts=_iso(now - timedelta(minutes=23)),
+        )
+        db.append_bridge_message(
+            c2_id, "bridge", "action",
+            "Ho preparato la proposta di vendita parziale per 10 azioni di NVDA a mercato. L'azione tocca capitale ed è in attesa della tua conferma esplicita.",
+            ts=_iso(now - timedelta(minutes=23)),
+            action_id=act_c2,
+            refs=[{"type": "ticker", "id": "NVDA", "label": "NVDA"}],
+        )
+
+        # Conversazione 3: Con un'azione eseguita e una respinta
+        c3_id = db.create_bridge_conversation(title="Gestione posizioni tech", created_ts=_iso(now - timedelta(hours=3)))
+        db.append_bridge_message(
+            c3_id, "luca", "text", "Alza lo stop loss di MSFT a 415$.",
+            ts=_iso(now - timedelta(hours=2, minutes=58)),
+            refs=[{"type": "ticker", "id": "MSFT", "label": "MSFT"}],
+        )
+        act_c3_exec = db.create_bridge_action(
+            conversation_id=c3_id,
+            command="modify_exit",
+            payload={"ticker": "MSFT", "stop_price": 415.0},
+            summary="Modifica stop loss MSFT a 415.00$",
+            capital=True,
+            status="executed",
+            result_reasons=[],
+            created_ts=_iso(now - timedelta(hours=2, minutes=57)),
+        )
+        db.update_bridge_action(act_c3_exec, status="executed", decided_ts=_iso(now - timedelta(hours=2, minutes=50)), decided_by="luca")
+        db.append_bridge_message(
+            c3_id, "bridge", "text",
+            "Azione 'Modifica stop loss MSFT a 415.00$' confermata ed eseguita con successo.",
+            ts=_iso(now - timedelta(hours=2, minutes=50)),
+            action_id=act_c3_exec,
+            refs=[{"type": "ticker", "id": "MSFT", "label": "MSFT"}],
+        )
+        db.append_bridge_message(
+            c3_id, "luca", "text", "Rifiuta la proposta di acquisto su TSLA.",
+            ts=_iso(now - timedelta(hours=1, minutes=30)),
+            refs=[{"type": "ticker", "id": "TSLA", "label": "TSLA"}],
+        )
+        act_c3_dism = db.create_bridge_action(
+            conversation_id=c3_id,
+            command="decide_proposal",
+            payload={"proposal_id": 1, "action": "reject", "reason": "Non allineato con preferenza corrente"},
+            summary="Rifiuta proposta buy TSLA",
+            capital=True,
+            status="dismissed",
+            created_ts=_iso(now - timedelta(hours=1, minutes=28)),
+        )
+        db.update_bridge_action(act_c3_dism, status="dismissed", decided_ts=_iso(now - timedelta(hours=1, minutes=20)), decided_by="luca")
+        db.append_bridge_message(
+            c3_id, "bridge", "text",
+            "Azione 'Rifiuta proposta buy TSLA' respinta.",
+            ts=_iso(now - timedelta(hours=1, minutes=20)),
+            action_id=act_c3_dism,
+            refs=[{"type": "ticker", "id": "TSLA", "label": "TSLA"}],
+        )
+
+        # Conversazione 4: Archiviata
+        c4_id = db.create_bridge_conversation(title="Analisi trimestrale AAPL", created_ts=_iso(now - timedelta(days=2)), archived=True)
+        db.append_bridge_message(
+            c4_id, "luca", "text", "Come sono andati i margini nel report di AAPL?",
+            ts=_iso(now - timedelta(days=2, hours=1)),
+            refs=[{"type": "ticker", "id": "AAPL", "label": "AAPL"}],
+        )
+        db.append_bridge_message(
+            c4_id, "bridge", "text",
+            "I margini lordi di AAPL sono cresciuti al 46.2%, battendo le stime grazie ai ricavi del comparto Servizi.",
+            ts=_iso(now - timedelta(days=2)),
+            refs=[{"type": "ticker", "id": "AAPL", "label": "AAPL"}],
+        )
+
+        # Briefing State & Cache
+        since_briefing = _iso(now - timedelta(hours=18))
+        db.set_briefing_seen(since_briefing)
+        db.connection.execute(
+            """
+            INSERT INTO briefing_state (key, value, updated_ts)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_ts = excluded.updated_ts
+            """,
+            (
+                f"summary:{since_briefing}",
+                "Nelle ultime 18 ore: 2 trade registrati su NVDA e MSFT, 1 ordine pendente di approvazione per AAPL, 1 proposta da valutare per TSLA. Portafoglio stabile con P&L positivo di seduta. Technical Analyst conferma supporto AMD a 118.50$.",
+                _iso(now - timedelta(minutes=5)),
+            ),
+        )
+

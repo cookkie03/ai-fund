@@ -16,6 +16,7 @@ ROLE_ALIASES: dict[str, str] = {
     "technical": "technical_analyst",
     "fundamental": "fundamental_analyst",
     "risk": "risk_analyst",
+    "bridge": "bridge",
 }
 
 

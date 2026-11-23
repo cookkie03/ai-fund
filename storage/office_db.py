@@ -443,6 +443,67 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         );
         """,
     ),
+    (
+        9,
+        "009_bridge_and_briefing",
+        """
+        CREATE TABLE IF NOT EXISTS bridge_conversations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            created_ts TEXT NOT NULL,
+            updated_ts TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'idle' CHECK(status IN ('idle', 'thinking')),
+            archived INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_bridge_conversations_updated ON bridge_conversations(updated_ts DESC);
+        CREATE INDEX IF NOT EXISTS idx_bridge_conversations_archived ON bridge_conversations(archived);
+
+        CREATE TABLE IF NOT EXISTS bridge_actions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id INTEGER NOT NULL REFERENCES bridge_conversations(id) ON DELETE CASCADE,
+            command TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            capital INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'confirmed', 'dismissed', 'executed', 'failed')),
+            preview_json TEXT,
+            result_reasons_json TEXT NOT NULL DEFAULT '[]',
+            decided_ts TEXT,
+            decided_by TEXT,
+            created_ts TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_bridge_actions_conv ON bridge_actions(conversation_id, status);
+        CREATE INDEX IF NOT EXISTS idx_bridge_actions_status ON bridge_actions(status);
+
+        CREATE TABLE IF NOT EXISTS bridge_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id INTEGER NOT NULL REFERENCES bridge_conversations(id) ON DELETE CASCADE,
+            author TEXT NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('text', 'agent_relay', 'action', 'error')),
+            text TEXT NOT NULL,
+            ts TEXT NOT NULL,
+            context_json TEXT,
+            refs_json TEXT,
+            action_id INTEGER REFERENCES bridge_actions(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_bridge_messages_conv ON bridge_messages(conversation_id, id ASC);
+
+        CREATE TABLE IF NOT EXISTS bridge_relay_subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent TEXT NOT NULL,
+            topic TEXT NOT NULL,
+            conversation_id INTEGER NOT NULL REFERENCES bridge_conversations(id) ON DELETE CASCADE,
+            created_ts TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_bridge_relay ON bridge_relay_subscriptions(agent, topic);
+
+        CREATE TABLE IF NOT EXISTS briefing_state (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_ts TEXT NOT NULL
+        );
+        """,
+    ),
 ]
 
 
@@ -457,6 +518,7 @@ class OfficeDB:
         self._on_commit_callbacks: list[Callable[[], None]] | None = None
         self._tx_depth = 0
         self.event_log: Any = None
+        self.on_bridge_relay: Callable[[int], None] | None = None
         self._connection = sqlite3.connect(
             str(self.path), isolation_level=None, check_same_thread=False
         )
@@ -699,15 +761,59 @@ class OfficeDB:
                 (chat_id, author, ts, text, kind, cycle_id),
             )
             message_id = int(cursor.lastrowid)
+            chat = self.get_chat(chat_id)
             if self.event_log:
-                chat = self.get_chat(chat_id)
                 self.event_log.append(
                     "chat.message", f"chat:{chat_id}",
                     {"chat_id": chat_id, "message_id": message_id,
-                     "agent": chat["agent"], "topic": chat["topic"], "author": author,
+                     "agent": chat["agent"] if chat else None,
+                     "topic": chat["topic"] if chat else None, "author": author,
                      "text": text, "kind": kind, "cycle_id": cycle_id, "ts": ts},
                     actor=author,
                 )
+
+            # Check for bridge relay subscriptions
+            if chat and author not in ("bridge", "system", "user", "luca"):
+                agent_name = str(chat["agent"])
+                topic_name = str(chat["topic"])
+                conv_ids = self.list_bridge_relay_subscriptions(agent_name, topic_name)
+                if conv_ids:
+                    ctx = {"page": "ufficio", "ticker": topic_name, "ref": {"type": "agent", "id": author}}
+                    for conv_id in conv_ids:
+                        b_msg_id = self.append_bridge_message(
+                            conversation_id=conv_id,
+                            author=author,
+                            kind="agent_relay",
+                            text=text,
+                            ts=ts,
+                            context=ctx,
+                        )
+                        if self.event_log:
+                            b_msg = self.get_bridge_message(b_msg_id)
+                            if b_msg:
+                                payload_msg = {
+                                    "id": b_msg["id"],
+                                    "conversation_id": conv_id,
+                                    "author": author,
+                                    "kind": "agent_relay",
+                                    "text": text,
+                                    "ts": ts,
+                                    "context": ctx,
+                                    "refs": [],
+                                    "action": None,
+                                }
+                                self.event_log.append(
+                                    "bridge.message",
+                                    f"bridge_conv:{conv_id}",
+                                    {"conversation_id": conv_id, "message": payload_msg},
+                                    actor=author,
+                                )
+                        if self.on_bridge_relay:
+                            self.add_on_commit(lambda cid=conv_id, callback=self.on_bridge_relay: callback(cid))
+                    self._connection.execute(
+                        "DELETE FROM bridge_relay_subscriptions WHERE agent = ? AND topic = ?",
+                        (agent_name, topic_name),
+                    )
             return message_id
 
     def list_messages(
@@ -1395,3 +1501,306 @@ class OfficeDB:
             (ts, command, args_json),
         )
         return int(cursor.lastrowid)
+
+    # --- Bridge & Briefing Persistence ---
+
+    def create_bridge_conversation(
+        self,
+        title: str,
+        created_ts: str | None = None,
+        status: str = "idle",
+        archived: bool = False,
+    ) -> int:
+        ts = created_ts or utc_now_iso()
+        with self.transaction():
+            cursor = self._connection.execute(
+                """
+                INSERT INTO bridge_conversations (title, created_ts, updated_ts, status, archived)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (title, ts, ts, status, int(archived)),
+            )
+            return int(cursor.lastrowid)
+
+    def get_bridge_conversation(self, conversation_id: int) -> dict | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM bridge_conversations WHERE id = ?", (conversation_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def list_bridge_conversations(
+        self,
+        limit: int = 50,
+        q: str | None = None,
+        archived: bool | None = False,
+    ) -> list[dict]:
+        query = "SELECT * FROM bridge_conversations WHERE 1=1"
+        params: list[Any] = []
+        if archived is not None:
+            query += " AND archived = ?"
+            params.append(int(archived))
+        if q and q.strip():
+            query += """ AND (
+                title LIKE ? OR id IN (
+                    SELECT conversation_id FROM bridge_messages WHERE text LIKE ?
+                )
+            )"""
+            pattern = f"%{q.strip()}%"
+            params.extend([pattern, pattern])
+        query += " ORDER BY updated_ts DESC, id DESC LIMIT ?"
+        params.append(limit)
+        with self._lock:
+            rows = self._connection.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+
+    def update_bridge_conversation(
+        self,
+        conversation_id: int,
+        title: str | None = None,
+        status: str | None = None,
+        archived: bool | None = None,
+        updated_ts: str | None = None,
+    ) -> None:
+        sets: list[str] = []
+        params: list[Any] = []
+        if title is not None:
+            sets.append("title = ?")
+            params.append(title)
+        if status is not None:
+            if status not in ("idle", "thinking"):
+                raise ValueError(f"Invalid bridge conversation status: {status}")
+            sets.append("status = ?")
+            params.append(status)
+        if archived is not None:
+            sets.append("archived = ?")
+            params.append(int(archived))
+        if updated_ts is not None:
+            sets.append("updated_ts = ?")
+            params.append(updated_ts)
+        else:
+            sets.append("updated_ts = ?")
+            params.append(utc_now_iso())
+
+        if not sets:
+            return
+
+        params.append(conversation_id)
+        with self.transaction():
+            self._connection.execute(
+                f"UPDATE bridge_conversations SET {', '.join(sets)} WHERE id = ?",
+                params,
+            )
+
+    def append_bridge_message(
+        self,
+        conversation_id: int,
+        author: str,
+        kind: str,
+        text: str,
+        ts: str | None = None,
+        context: dict | None = None,
+        refs: list | None = None,
+        action_id: int | None = None,
+    ) -> int:
+        if kind not in ("text", "agent_relay", "action", "error"):
+            raise ValueError(f"Invalid bridge message kind: {kind}")
+        ts = ts or utc_now_iso()
+        context_json = json.dumps(context) if context is not None else None
+        refs_json = json.dumps(refs) if refs is not None else None
+        with self.transaction():
+            cursor = self._connection.execute(
+                """
+                INSERT INTO bridge_messages (
+                    conversation_id, author, kind, text, ts, context_json, refs_json, action_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (conversation_id, author, kind, text, ts, context_json, refs_json, action_id),
+            )
+            msg_id = int(cursor.lastrowid)
+            self._connection.execute(
+                "UPDATE bridge_conversations SET updated_ts = ? WHERE id = ?",
+                (ts, conversation_id),
+            )
+            return msg_id
+
+    def list_bridge_messages(
+        self,
+        conversation_id: int,
+        limit: int = 100,
+        before: int | None = None,
+    ) -> list[dict]:
+        with self._lock:
+            if before is not None:
+                rows = self._connection.execute(
+                    """
+                    SELECT * FROM bridge_messages
+                    WHERE conversation_id = ? AND id < ?
+                    ORDER BY id DESC LIMIT ?
+                    """,
+                    (conversation_id, before, limit),
+                ).fetchall()
+                messages = [dict(r) for r in reversed(rows)]
+            else:
+                rows = self._connection.execute(
+                    """
+                    SELECT * FROM bridge_messages
+                    WHERE conversation_id = ?
+                    ORDER BY id DESC LIMIT ?
+                    """,
+                    (conversation_id, limit),
+                ).fetchall()
+                messages = [dict(r) for r in reversed(rows)]
+            return messages
+
+    def get_bridge_message(self, message_id: int) -> dict | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM bridge_messages WHERE id = ?", (message_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def create_bridge_action(
+        self,
+        conversation_id: int,
+        command: str,
+        payload: dict | str,
+        summary: str,
+        capital: bool = True,
+        status: str = "pending",
+        preview: dict | None = None,
+        result_reasons: list[str] | None = None,
+        created_ts: str | None = None,
+    ) -> int:
+        ts = created_ts or utc_now_iso()
+        payload_json = payload if isinstance(payload, str) else json.dumps(payload)
+        preview_json = json.dumps(preview) if preview is not None else None
+        result_reasons_json = json.dumps(result_reasons or [])
+        with self.transaction():
+            cursor = self._connection.execute(
+                """
+                INSERT INTO bridge_actions (
+                    conversation_id, command, payload_json, summary, capital, status,
+                    preview_json, result_reasons_json, created_ts
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    conversation_id,
+                    command,
+                    payload_json,
+                    summary,
+                    int(capital),
+                    status,
+                    preview_json,
+                    result_reasons_json,
+                    ts,
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def get_bridge_action(self, action_id: int) -> dict | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM bridge_actions WHERE id = ?", (action_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def list_bridge_actions(
+        self,
+        status: str | None = None,
+        conversation_id: int | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        query = "SELECT * FROM bridge_actions WHERE 1=1"
+        params: list[Any] = []
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        if conversation_id is not None:
+            query += " AND conversation_id = ?"
+            params.append(conversation_id)
+        query += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+        with self._lock:
+            rows = self._connection.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+
+    def update_bridge_action(
+        self,
+        action_id: int,
+        status: str,
+        result_reasons: list[str] | None = None,
+        decided_ts: str | None = None,
+        decided_by: str | None = None,
+        preview: dict | None = None,
+    ) -> None:
+        sets = ["status = ?"]
+        params: list[Any] = [status]
+        if result_reasons is not None:
+            sets.append("result_reasons_json = ?")
+            params.append(json.dumps(result_reasons))
+        if decided_ts is not None:
+            sets.append("decided_ts = ?")
+            params.append(decided_ts)
+        if decided_by is not None:
+            sets.append("decided_by = ?")
+            params.append(decided_by)
+        if preview is not None:
+            sets.append("preview_json = ?")
+            params.append(json.dumps(preview))
+        params.append(action_id)
+
+        with self.transaction():
+            self._connection.execute(
+                f"UPDATE bridge_actions SET {', '.join(sets)} WHERE id = ?",
+                params,
+            )
+
+    def subscribe_bridge_relay(
+        self,
+        agent: str,
+        topic: str,
+        conversation_id: int,
+        ts: str | None = None,
+    ) -> None:
+        ts = ts or utc_now_iso()
+        with self.transaction():
+            self._connection.execute(
+                """
+                INSERT INTO bridge_relay_subscriptions (agent, topic, conversation_id, created_ts)
+                VALUES (?, ?, ?, ?)
+                """,
+                (agent, topic, conversation_id, ts),
+            )
+
+    def list_bridge_relay_subscriptions(self, agent: str, topic: str) -> list[int]:
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT DISTINCT conversation_id FROM bridge_relay_subscriptions
+                WHERE agent = ? AND topic = ?
+                """,
+                (agent, topic),
+            ).fetchall()
+            return [int(r["conversation_id"]) for r in rows]
+
+    def set_briefing_seen(self, ts: str | None = None) -> str:
+        ts = ts or utc_now_iso()
+        with self.transaction():
+            self._connection.execute(
+                """
+                INSERT INTO briefing_state (key, value, updated_ts)
+                VALUES ('last_seen_ts', ?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_ts = excluded.updated_ts
+                """,
+                (ts, ts),
+            )
+        return ts
+
+    def get_briefing_seen(self) -> str | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT value FROM briefing_state WHERE key = 'last_seen_ts'"
+            ).fetchone()
+            return str(row["value"]) if row else None
+

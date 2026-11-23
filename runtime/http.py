@@ -27,11 +27,17 @@ from runtime.commands import (
     AddDossierNote,
     AddWatchlist,
     ApproveOrder,
+    BridgeActionDecide,
+    BridgeArchiveConversation,
+    BridgeRenameConversation,
+    BridgeSay,
+    BridgeStop,
     ClosePosition,
     DecideProposal,
     EnqueueTask,
     Halt,
     IngestAlert,
+    MarkBriefingSeen,
     MarkInboxRead,
     ModifyExit,
     ReconcileBroker,
@@ -71,6 +77,12 @@ _COMMAND_MAP = {
     "refresh_data": RefreshData,
     "mark_inbox_read": MarkInboxRead,
     "ingest_alert": IngestAlert,
+    "bridge_say": BridgeSay,
+    "bridge_rename_conversation": BridgeRenameConversation,
+    "bridge_archive_conversation": BridgeArchiveConversation,
+    "bridge_stop": BridgeStop,
+    "bridge_action_decide": BridgeActionDecide,
+    "mark_briefing_seen": MarkBriefingSeen,
 }
 
 
@@ -393,6 +405,32 @@ def create_app(
             return [
                 t.model_dump() for t in runtime.read.scheduled_tasks(status=status, limit=limit)
             ]
+        elif norm == "bridge_conversations":
+            limit = int(q.get("limit", 50))
+            query_text = q.get("q")
+            archived_param = q.get("archived")
+            archived = (
+                None
+                if archived_param is None or archived_param == ""
+                else (archived_param.lower() in ("true", "1"))
+            )
+            return runtime.read.bridge_conversations(limit=limit, q=query_text, archived=archived)
+        elif norm == "bridge_conversation":
+            conv_id_str = q.get("id") or q.get("conversation_id")
+            if not conv_id_str:
+                raise HTTPException(status_code=422, detail="id is required")
+            limit = int(q.get("limit", 100))
+            before = int(q.get("before")) if q.get("before") else None
+            conv = runtime.read.bridge_conversation(id=int(conv_id_str), limit=limit, before=before)
+            if conv is None:
+                raise HTTPException(status_code=404, detail="Bridge conversation not found")
+            return conv
+        elif norm == "bridge_actions":
+            status = q.get("status")
+            return runtime.read.bridge_actions(status=status)
+        elif norm == "briefing":
+            since = q.get("since")
+            return runtime.read.briefing(since=since)
         else:
             raise HTTPException(status_code=404, detail=f"Read endpoint '{name}' not found")
 
