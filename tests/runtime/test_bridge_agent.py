@@ -770,3 +770,42 @@ def test_scripted_bridge_backend_handles_user_followup_after_action_execution():
     assert res4.tool_calls[0].name == "add_watchlist"
 
 
+def test_bridge_actions_filter_by_multiple_comma_separated_statuses(tmp_path):
+    """TDD: verify GET /v1/read/bridge_actions supports comma-separated status filters."""
+    db = OfficeDB(tmp_path / "bridge.db")
+    office = build_test_office(db=db)
+    rt = Runtime(office=office)
+    client = TestClient(create_app(rt))
+
+    cid = db.create_bridge_conversation(title="Test Multiple Statuses")
+    act_pending = db.create_bridge_action(
+        conversation_id=cid,
+        command="close_position",
+        payload={"ticker": "AAPL", "qty": 1.0},
+        summary="Azione Pending",
+        status="pending",
+    )
+    act_executed = db.create_bridge_action(
+        conversation_id=cid,
+        command="close_position",
+        payload={"ticker": "MSFT", "qty": 2.0},
+        summary="Azione Executed",
+        status="executed",
+    )
+    act_dismissed = db.create_bridge_action(
+        conversation_id=cid,
+        command="close_position",
+        payload={"ticker": "GOOGL", "qty": 3.0},
+        summary="Azione Dismissed",
+        status="dismissed",
+    )
+
+    # Filtering with status="pending,executed" must return act_pending and act_executed, but not act_dismissed
+    resp = client.get("/v1/read/bridge_actions", params={"status": "pending,executed"}).json()
+    assert len(resp) == 2
+    assert {a["id"] for a in resp} == {act_pending, act_executed}
+    assert {a["status"] for a in resp} == {"pending", "executed"}
+    assert act_dismissed not in {a["id"] for a in resp}
+
+
+

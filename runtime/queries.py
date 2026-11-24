@@ -1064,8 +1064,14 @@ class ReadModel:
             query = "SELECT * FROM bridge_actions WHERE 1=1"
             params: list[Any] = []
             if status:
-                query += " AND status = ?"
-                params.append(status)
+                statuses = [s.strip() for s in status.split(",") if s.strip()]
+                if len(statuses) == 1:
+                    query += " AND status = ?"
+                    params.append(statuses[0])
+                elif len(statuses) > 1:
+                    placeholders = ", ".join("?" for _ in statuses)
+                    query += f" AND status IN ({placeholders})"
+                    params.extend(statuses)
             if conversation_id is not None:
                 query += " AND conversation_id = ?"
                 params.append(conversation_id)
