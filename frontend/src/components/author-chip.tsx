@@ -37,10 +37,10 @@ export function AuthorChip({ actor, author, label = false, size = "sm", classNam
         style={{
           ["--author" as string]: a.color,
           backgroundColor: a.color,
-          color: "oklch(0.16 0.01 260)",
+          color: "var(--desk)",
         }}
       >
-        <AvatarFallback style={{ backgroundColor: a.color, color: "oklch(0.16 0.01 260)" }}>
+        <AvatarFallback style={{ backgroundColor: a.color, color: "var(--desk)" }}>
           {a.ticker && size === "lg" ? <span className={a.ticker.length > 3 ? "text-[10px] tracking-[-0.03em]" : "text-[11px]"}>{a.ticker.slice(0, 4)}</span> : a.initials}
         </AvatarFallback>
       </Avatar>
