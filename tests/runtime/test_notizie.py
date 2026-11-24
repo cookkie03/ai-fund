@@ -1,5 +1,6 @@
 """Tests for Notizie environment, ingestion, agent tools, usage tracking, and read endpoints."""
 
+import sys
 from datetime import UTC, datetime
 
 import pytest
@@ -10,6 +11,7 @@ from data.providers.openbb import OpenBBProvider
 from data.providers.rss_news import RSSItem, RSSNewsProvider
 from runtime.core import Runtime
 from runtime.http import create_app
+from runtime.jobs import NewsIngestionJob
 from scripts.dev_cockpit_server import create_dev_app
 from storage.office_db import OfficeDB
 
@@ -32,24 +34,35 @@ def test_rss_provider_invalid_scheme():
         prov.fetch_news()
 
 
-def test_openbb_absent_unavailable_without_breaking_others(tmp_path):
-    db = OfficeDB(tmp_path / "openbb.db")
-    s_openbb = db.add_news_source("openbb", "OpenBB", None)
+def test_openbb_missing_extra_sets_unavailable(tmp_path):
+    db = OfficeDB(tmp_path / "openbb_missing.db")
+    sid = db.add_news_source("openbb", "OpenBB", None)
     s_rss = db.add_news_source("rss", "Valid RSS", "https://example.com/rss")
 
-    try:
-        prov = OpenBBProvider()
-        prov.get_news()
-    except Exception as exc:
-        db.update_news_source_status(s_openbb, "unavailable", str(exc))
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setitem(sys.modules, "openbb", None)
+        try:
+            prov = OpenBBProvider()
+            prov.get_news()
+        except Exception as exc:
+            db.update_news_source_status(sid, "unavailable", str(exc))
 
     sources = db.list_news_sources()
-    openbb_status = next(s for s in sources if s["id"] == s_openbb)
+    openbb_status = next(s for s in sources if s["id"] == sid)
     rss_status = next(s for s in sources if s["id"] == s_rss)
 
     assert openbb_status["status"] == "unavailable"
     assert openbb_status["last_error"] is not None
     assert rss_status["status"] == "ok"
+
+
+def test_news_ingestion_job_runs(tmp_path):
+    db = OfficeDB(tmp_path / "ingest.db")
+    office = build_test_office(db=db)
+    rt = Runtime(office=office)
+    db.add_news_source("rss", "Local RSS", "https://example.com/rss")
+    job = NewsIngestionJob(rt, interval_minutes=15)
+    assert job.next_run(datetime.now(UTC)) is not None
 
 
 def test_dev_server_http_and_sse_smoke(tmp_path):
