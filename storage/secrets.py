@@ -32,12 +32,28 @@ class SecretsManager:
 
     def _ensure_paths(self) -> None:
         try:
-            self.secrets_path.parent.mkdir(parents=True, exist_ok=True)
+            self.secrets_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             if not self.secrets_path.exists():
-                self.secrets_path.write_text("", encoding="utf-8")
+                self._atomic_write(self.secrets_path, "")
             os.chmod(self.secrets_path, stat.S_IRUSR | stat.S_IWUSR)  # 0600
         except Exception:
             pass
+
+    def _atomic_write(self, path: Path, text: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        tmp = path.with_suffix(".tmp")
+        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(text)
+        except Exception:
+            try:
+                os.close(fd)
+            except Exception:
+                pass
+            raise
+        os.chmod(tmp, stat.S_IRUSR | stat.S_IWUSR)
+        tmp.replace(path)
 
     def load_env_file(self) -> dict[str, str]:
         data: dict[str, str] = {}
@@ -64,20 +80,14 @@ class SecretsManager:
 
     def save_meta(self, meta: dict[str, Any]) -> None:
         try:
-            self.meta_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.meta_path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(meta, indent=2), encoding="utf-8")
-            os.chmod(tmp, stat.S_IRUSR | stat.S_IWUSR)
-            tmp.replace(self.meta_path)
+            self._atomic_write(self.meta_path, json.dumps(meta, indent=2))
         except Exception:
             pass
 
     def get(self, name: str) -> str | None:
-        # 1. secrets.env
         vals = self.load_env_file()
         if name in vals and vals[name]:
             return vals[name]
-        # 2. os.environ / .env
         return os.environ.get(name)
 
     def set(self, name: str, value: str, actor: str, reason: str) -> dict[str, Any]:
@@ -89,17 +99,11 @@ class SecretsManager:
         vals = self.load_env_file()
         vals[name] = value.strip()
 
-        # Atomic write to secrets.env with 0600
         lines = [f"{k}={v}" for k, v in vals.items()]
         content = "\n".join(lines) + "\n"
 
-        self.secrets_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.secrets_path.with_suffix(".tmp")
-        tmp.write_text(content, encoding="utf-8")
-        os.chmod(tmp, stat.S_IRUSR | stat.S_IWUSR)
-        tmp.replace(self.secrets_path)
+        self._atomic_write(self.secrets_path, content)
 
-        # Update metadata
         meta = self.load_meta()
         last4 = value.strip()[-4:] if len(value.strip()) >= 4 else "****"
         from storage.office_db import utc_now_iso
@@ -123,10 +127,7 @@ class SecretsManager:
             del vals[name]
             lines = [f"{k}={v}" for k, v in vals.items()]
             content = "\n".join(lines) + ("\n" if lines else "")
-            tmp = self.secrets_path.with_suffix(".tmp")
-            tmp.write_text(content, encoding="utf-8")
-            os.chmod(tmp, stat.S_IRUSR | stat.S_IWUSR)
-            tmp.replace(self.secrets_path)
+            self._atomic_write(self.secrets_path, content)
 
         meta = self.load_meta()
         if name in meta:

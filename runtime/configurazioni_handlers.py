@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -47,6 +48,10 @@ def handle_update_settings(ctx: Any, cmd: UpdateSettings, actor: str) -> Command
 
 def handle_restore_settings(ctx: Any, cmd: RestoreSettings, actor: str) -> CommandResult:
     store = SettingsStore(ctx.office.db, ctx.office.settings)
+    versions = ctx.office.db.list_settings_versions(limit=200)
+    target = next((v for v in versions if int(v["version"]) == cmd.version), None)
+    if target and "approval_mode" in json.loads(target["after_json"]) and not cmd.confirm:
+        return CommandResult(ok=False, reasons=["Il ripristino tocca approval_mode e richiede confirm: true (azione su capitale)"])
     try:
         with ctx.office.db.transaction():
             res = store.restore(cmd.version, cmd.reason, actor)

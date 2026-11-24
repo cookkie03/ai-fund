@@ -176,6 +176,7 @@ class UpdateSettings(BaseModel):
 class RestoreSettings(BaseModel):
     version: int = Field(ge=1)
     reason: str = Field(min_length=1, max_length=1000)
+    confirm: bool = False
 
 
 class UpdatePrompt(BaseModel):
@@ -201,7 +202,7 @@ class SetSecret(BaseModel):
 class ClearSecret(BaseModel):
     name: str = Field(min_length=1)
     reason: str = Field(min_length=1, max_length=1000)
-    confirm: bool = True
+    confirm: bool = False
 
 
 class TestConnection(BaseModel):

@@ -126,7 +126,7 @@ def create_app(
             body = await request.json() if await request.body() else {}
             cmd = cmd_cls.model_validate(body)
         except ValidationError as val_err:
-            raise HTTPException(status_code=422, detail=val_err.errors(include_context=False)) from val_err
+            raise HTTPException(status_code=422, detail=val_err.errors(include_input=False, include_context=False)) from val_err
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
