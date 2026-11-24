@@ -25,6 +25,7 @@ from analysis.indicators import (
 )
 from runtime.commands import (
     AddDossierNote,
+    AddNewsSource,
     AddWatchlist,
     ApproveOrder,
     BackupDB,
@@ -32,19 +33,23 @@ from runtime.commands import (
     ClosePosition,
     DecideProposal,
     EnqueueTask,
+    ForwardNews,
     Halt,
     IngestAlert,
     MarkInboxRead,
     ModifyExit,
     ReconcileBroker,
     RefreshData,
+    RefreshNews,
     RejectOrder,
+    RemoveNewsSource,
     RemoveWatchlist,
     RestorePrompt,
     RestoreSettings,
     Resume,
     Say,
     SetSecret,
+    SetNewsSourceEnabled,
     StrikeAnnotation,
     TestConnection,
     UpdatePrompt,
@@ -87,6 +92,11 @@ _COMMAND_MAP = {
     "clear_secret": ClearSecret,
     "test_connection": TestConnection,
     "backup_db": BackupDB,
+    "forward_news": ForwardNews,
+    "add_news_source": AddNewsSource,
+    "set_news_source_enabled": SetNewsSourceEnabled,
+    "remove_news_source": RemoveNewsSource,
+    "refresh_news": RefreshNews,
 }
 
 
@@ -441,6 +451,31 @@ def create_app(
             return [
                 t.model_dump() for t in runtime.read.scheduled_tasks(status=status, limit=limit)
             ]
+        elif norm == "news":
+            return runtime.read.news_items(
+                ticker=q.get("ticker"),
+                theme=q.get("theme"),
+                source_id=int(q.get("source_id")) if q.get("source_id") else None,
+                provider=q.get("provider"),
+                scope=q.get("scope", "all"),
+                q=q.get("q"),
+                before=q.get("before"),
+                limit=int(q.get("limit", 50)),
+            )
+        elif norm == "news_item":
+            nid = int(q.get("id") or 0)
+            item = runtime.read.news_item_detail(nid)
+            if not item:
+                raise HTTPException(status_code=404, detail="News item not found")
+            return item
+        elif norm == "news_sources":
+            return runtime.read.news_sources_list()
+        elif norm == "calendar":
+            return runtime.read.calendar_events(
+                from_ts=q.get("from"),
+                to_ts=q.get("to"),
+                kind=q.get("kind"),
+            )
         else:
             raise HTTPException(status_code=404, detail=f"Read endpoint '{name}' not found")
 

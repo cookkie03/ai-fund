@@ -237,33 +237,34 @@ class Office:
         extras: list[str] = []
 
         # Latest sector view
-        sec_row = self.db.connection.execute(
-            "SELECT sector FROM securities WHERE UPPER(symbol) = UPPER(?)",
-            (ticker,),
-        ).fetchone()
-        sector = sec_row["sector"] if sec_row and sec_row["sector"] else None
-
-        st_row = self.db.get_ticker_state(ticker)
-        st_data = json.loads(st_row["state_json"]) if st_row and st_row.get("state_json") else {}
-
-        sector_view = st_data.get("sector_view")
-        if not sector_view and sector:
-            perf_row = self.db.connection.execute(
-                "SELECT perf_json FROM sector_performance WHERE sector = ? "
-                "ORDER BY ts DESC LIMIT 1",
-                (sector,),
+        with self._lock:
+            sec_row = self.db.connection.execute(
+                "SELECT sector FROM securities WHERE UPPER(symbol) = UPPER(?)",
+                (ticker,),
             ).fetchone()
-            if perf_row:
-                sector_view = perf_row["perf_json"]
+            sector = sec_row["sector"] if sec_row and sec_row["sector"] else None
 
-        if sector_view:
-            extras.append(f"Visione di settore ({sector or 'macro'}): {sector_view}")
+            st_row = self.db.get_ticker_state(ticker)
+            st_data = json.loads(st_row["state_json"]) if st_row and st_row.get("state_json") else {}
 
-        # Deterministic outcome of previous decision
-        previous = self.db.connection.execute(
-            "SELECT status, reason, direction FROM proposals WHERE ticker = ? AND decided_ts IS NOT NULL "
-            "ORDER BY id DESC LIMIT 1", (ticker,),
-        ).fetchone()
+            sector_view = st_data.get("sector_view")
+            if not sector_view and sector:
+                perf_row = self.db.connection.execute(
+                    "SELECT perf_json FROM sector_performance WHERE sector = ? "
+                    "ORDER BY ts DESC LIMIT 1",
+                    (sector,),
+                ).fetchone()
+                if perf_row:
+                    sector_view = perf_row["perf_json"]
+
+            if sector_view:
+                extras.append(f"Visione di settore ({sector or 'macro'}): {sector_view}")
+
+            # Deterministic outcome of previous decision
+            previous = self.db.connection.execute(
+                "SELECT status, reason, direction FROM proposals WHERE ticker = ? AND decided_ts IS NOT NULL "
+                "ORDER BY id DESC LIMIT 1", (ticker,),
+            ).fetchone()
         prev_decision = ({"action": previous["direction"], "status": previous["status"],
                           "reason": previous["reason"]} if previous else st_data.get("decision"))
         if prev_decision and isinstance(prev_decision, dict):

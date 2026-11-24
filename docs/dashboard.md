@@ -37,6 +37,11 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
     - `mark_inbox_read`: Mark system alert inbox item as read.
     - `ingest_alert`: Ingest external alert into PM inbox.
     - `update_risk_limits`, `close_position`, `modify_exit`: see §2.5 (Portafoglio).
+    - `forward_news`: Forward a news item to an agent or ticker chat (`news_id`, `to`, `note`).
+    - `add_news_source`: Register a new news source (`provider`, `name`, `url`).
+    - `set_news_source_enabled`: Enable or disable a news source (`source_id`, `enabled`).
+    - `remove_news_source`: Remove a news source (`source_id`).
+    - `refresh_news`: Trigger immediate news ingestion (`source_id` optional).
   - Returns `CommandResult` as JSON: `{"ok": bool, "data": {...}, "reasons": [...]}`. A domain refusal (for example an order that is not pending) is `ok: false` with reasons, not an HTTP error. Validation errors are HTTP 422; unknown commands are 404. Repeating the same `Idempotency-Key` returns the saved result without executing again.
 
 ### 2.3 Read Model (Queries)
@@ -68,6 +73,10 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
     - `/v1/read/portfolio_summary`, `positions`, `allocation`, `performance`, `attribution`, `risk_limits`, `risk_limits_history`: Portafoglio page, see §2.5.
     - `/v1/read/inbox?unread_only=&limit=`: System alert notifications.
     - `/v1/read/scheduled_tasks?status=&limit=`: Scheduled tasks.
+    - `/v1/read/news?ticker=&theme=&source_id=&provider=&scope=all|portfolio|watchlist&q=&before=&limit=`: Paginated news items contract.
+    - `/v1/read/news_item?id=`: Detailed news item with full text and usage detail.
+    - `/v1/read/news_sources`: List of configured news sources.
+    - `/v1/read/calendar?from=&to=&kind=macro|earnings`: Economic and earnings calendar events.
 
 ### 2.4 Server-Sent Events (Live Stream)
 - `GET /v1/events`
@@ -87,6 +96,9 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
     - `dossier.updated`: Committed dossier version (`ticker`, `version`, `sections`).
     - `proposal.submitted`: Submitted proposal from ticker agent (`id`, `ticker`).
     - `proposal.decided`: Decided proposal by PM or user (`id`, `ticker`, `action`, `status`).
+    - `news.ingested`: News source batch ingestion (`source_id`, `count`).
+    - `news.used`: News item consumption or citation (`news_id`, `agent`, `kind`).
+    - `news.source`: News source update (`source`).
   - Terminal & chart event types: `annotation.created`, `annotation.updated`, `annotation.struck`.
   - Portafoglio events (published only after the transaction commits, never on rollback): `portfolio.updated` (`reason`, `ticker`), `position.changed` (`ticker`, `trade_id`, `change` in `opened` | `reduced` | `closed` | `exit_levels` | `trailing_stop`, `qty_remaining`, `stop_price`, `target_price`), `risk_limits.updated` (`version`, `updated_by`, `reason`, `before`, `after`, `limits`), plus the existing `order.created`, `order.status_changed`, `trade.opened`, `trade.closed` and the new `trade.reduced` (partial close: `trade_id`, `ticker`, `qty`, `price`, `ts`). `portfolio.updated` is emitted by trade opens/reduces/closes and by `reconcile_broker` (which also keeps emitting `portfolio.synced`).
 

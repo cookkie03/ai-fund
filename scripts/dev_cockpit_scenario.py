@@ -293,6 +293,71 @@ def seed_scenario(rt: Any, market: ScenarioMarketData) -> None:
     db = rt.office.db
     now = datetime.now(UTC)
 
+    # Seed 4-5 news sources
+    s1 = db.add_news_source("alpaca", "Alpaca News", "https://data.alpaca.markets/v1/news")
+    s2 = db.add_news_source("rss", "TechCrunch RSS", "https://techcrunch.com/feed/")
+    s3 = db.add_news_source("rss", "Macro RSS", "https://macro.example.com/rss")
+    db.update_news_source_status(s3, "error", "Connection timeout")
+    s4 = db.add_news_source("openbb", "OpenBB Terminal", None)
+    db.update_news_source_status(s4, "unavailable", "OpenBB not installed")
+
+    # Seed 75 news items across providers and tickers
+    tickers_pool = ["AAPL", "NVDA", "MSFT", "AMD", "LLY", "XOM", "JPM", "TSLA", "GOOGL", "META", "AMZN"]
+    themes_pool = ["technology", "macro", "earnings", "semiconductors", "energy"]
+    news_ids = []
+    for i in range(1, 76):
+        sym = tickers_pool[i % len(tickers_pool)]
+        theme = themes_pool[i % len(themes_pool)]
+        pub = now - timedelta(hours=i * 2)
+        nid = db.insert_news(
+            headline=f"Market briefing {i} for {sym}: sector outlook and catalysts",
+            summary=f"Summary for news item {i} regarding {sym}.",
+            full_text=f"Detailed full text analysis for news {i} covering {sym}.",
+            url=f"https://example.com/news/{i}",
+            source_id=s1 if i % 2 == 0 else s2,
+            source="Alpaca News" if i % 2 == 0 else "TechCrunch RSS",
+            provider="alpaca" if i % 2 == 0 else "rss",
+            published_ts=pub.isoformat().replace("+00:00", "Z"),
+            tickers=[sym],
+            themes=[theme],
+        )
+        news_ids.append(nid)
+
+    # Seed usage traces (read, cited, forwarded)
+    for idx, nid in enumerate(news_ids[:35]):
+        db.log_news_usage(news_id=nid, agent="sentiment_analyst", kind="read", cycle_id=1, chat_id=1)
+        if idx % 2 == 0:
+            db.log_news_usage(news_id=nid, agent="portfolio_manager", kind="cited", note=f"Cited in dossier {idx}")
+        if idx % 5 == 0:
+            db.log_news_usage(news_id=nid, agent="portfolio_manager", kind="forwarded", chat_id=1, note="Nota di Luca")
+
+    # Seed calendar week (macro & earnings)
+    for day_offset in range(-3, 5):
+        evt_dt = now + timedelta(days=day_offset)
+        db.insert_calendar_event(
+            kind="macro",
+            ts=evt_dt.replace(hour=14, minute=30, second=0, microsecond=0).isoformat().replace("+00:00", "Z"),
+            title=f"US Macro Economic Report (Day {day_offset})",
+            country="US",
+            importance="high" if day_offset == 0 else "medium",
+            actual=3.2 if day_offset < 0 else None,
+            forecast=3.1,
+            previous=3.0,
+            source="openbb",
+        )
+        sym = tickers_pool[day_offset % len(tickers_pool)]
+        db.insert_calendar_event(
+            kind="earnings",
+            ts=evt_dt.replace(hour=20, minute=0, second=0, microsecond=0).isoformat().replace("+00:00", "Z"),
+            title=f"Earnings Call: {sym}",
+            ticker=sym,
+            importance="high",
+            forecast=1.45,
+            actual=1.52 if day_offset < 0 else None,
+            source="openbb",
+        )
+
+
     def bars(sym: str, tf: str = "1h") -> list[dict[str, Any]]:
         return market.ohlcv(sym, interval=tf, limit=0)
 
@@ -548,6 +613,55 @@ def seed_scenario(rt: Any, market: ScenarioMarketData) -> None:
             chat_id=ma_macro_chat,
             ts=_iso(now - timedelta(hours=3, minutes=1)),
         )
+        # Notizie, fonti, traccia d'uso e calendario
+        _s1 = db.add_news_source("alpaca", "Alpaca News", "https://api.alpaca.markets/news")
+        s2 = db.add_news_source("rss", "Reuters Tech", "https://feeds.reuters.com/reuters/technologyNews")
+        s3 = db.add_news_source("rss", "Bloomberg Markets", "https://feeds.bloomberg.com/markets/news.rss")
+        s4 = db.add_news_source("rss", "Broken Feed", "https://example.com/broken-feed.xml")
+        db.update_news_source_status(s4, "error", "Timeout connecting to RSS feed")
+        s5 = db.add_news_source("openbb", "OpenBB Provider", None)
+        db.update_news_source_status(s5, "unavailable", "OpenBB API key not configured")
+
+        tickers_list = ["AAPL", "NVDA", "MSFT", "AMD", "LLY", "TSLA", "GOOGL", "META", "AMZN"]
+        themes_list = ["technology", "semiconductors", "macro", "earnings"]
+        news_ids = []
+        for i in range(75):
+            sym = tickers_list[i % len(tickers_list)]
+            theme = themes_list[i % len(themes_list)]
+            pub = now - timedelta(hours=i * 2)
+            nid = db.insert_news(
+                headline=f"News update {i+1}: {sym} shows strong momentum in {theme}",
+                summary=f"Market analysis and updates regarding {sym} and sector trends.",
+                full_text=f"Full article text for news item {i+1} covering {sym} in depth...",
+                url=f"https://example.com/news-{i+1}",
+                source_id=s2 if i % 2 == 0 else s3,
+                source="Reuters Tech" if i % 2 == 0 else "Bloomberg Markets",
+                provider="rss",
+                published_ts=_iso(pub),
+                tickers=[sym],
+                themes=[theme],
+                has_full_text=1,
+            )
+            news_ids.append(nid)
+
+        for idx, nid in enumerate(news_ids[:40]):
+            db.log_news_usage(news_id=nid, agent="sentiment_analyst", kind="read", cycle_id=1, topic=tickers_list[idx % len(tickers_list)], ts=_iso(now - timedelta(hours=idx)))
+        for idx, nid in enumerate(news_ids[:15]):
+            db.log_news_usage(news_id=nid, agent="portfolio_manager", kind="cited", cycle_id=1, topic=tickers_list[idx % len(tickers_list)], ts=_iso(now - timedelta(hours=idx)))
+        db.log_news_usage(news_id=news_ids[0], agent="portfolio_manager", kind="forwarded", note="Da guardare con attenzione", ts=_iso(now - timedelta(hours=1)))
+
+        cal_items = [
+            ("macro", now - timedelta(days=2), "US Non-Farm Payrolls", "US", None, "high", 225.0, 200.0, 180.0, "openbb"),
+            ("macro", now - timedelta(days=1), "ECB Rate Decision", "EU", None, "high", 3.25, 3.25, 3.5, "openbb"),
+            ("macro", now + timedelta(days=1), "US CPI Inflation MoM", "US", None, "high", None, 0.3, 0.2, "openbb"),
+            ("macro", now + timedelta(days=3), "Retail Sales", "US", None, "medium", None, 0.4, 0.1, "openbb"),
+            ("earnings", now + timedelta(days=2), "Earnings: AAPL Q4", "US", "AAPL", "high", None, 1.65, 1.50, "openbb"),
+            ("earnings", now + timedelta(days=4), "Earnings: NVDA Q3", "US", "NVDA", "high", None, 0.75, 0.68, "openbb"),
+            ("earnings", now + timedelta(days=5), "Earnings: MSFT Q2", "US", "MSFT", "high", None, 2.95, 2.80, "openbb"),
+        ]
+        for kind, ts_dt, title, country, ticker, importance, actual, forecast, previous, src in cal_items:
+            db.insert_calendar_event(kind, _iso(ts_dt), title, country, ticker, importance, actual, forecast, previous, src)
+
         db.log_tool_call(
             agent="sentiment_analyst",
             tool="fetch_news",

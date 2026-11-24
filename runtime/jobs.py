@@ -90,6 +90,97 @@ class DataRefreshJob(Job):
         except Exception:
             logger.exception("Error executing DataRefreshJob")
 
+class NewsIngestionJob(Job):
+    name = "news_ingestion"
+
+    def __init__(self, runtime: Runtime, interval_minutes: float = 15.0) -> None:
+        self.runtime = runtime
+        self.interval = timedelta(minutes=interval_minutes)
+
+    def next_run(self, now: datetime) -> datetime | None:
+        now_dt = now if now.tzinfo else now.replace(tzinfo=UTC)
+        last = _get_last_run(self.runtime, self.name)
+        if last is None:
+            return now_dt
+        target = last + self.interval
+        return target if target > now_dt else now_dt
+
+    def run(self, now: datetime) -> None:
+        _record_job_run(self.runtime, self.name, now)
+        db = self.runtime.office.db
+        sources = db.list_news_sources()
+        for src in sources:
+            if not src["enabled"]:
+                continue
+            src_id = src["id"]
+            provider = src["provider"]
+            name = src["name"]
+            url = src["url"]
+            count = 0
+            try:
+                if provider == "rss":
+                    from data.providers.rss_news import RSSNewsProvider
+                    rss_prov = RSSNewsProvider(url=url, name=name)
+                    items = rss_prov.fetch_news()
+                    for item in items:
+                        # Deterministic ticker extraction from headline/summary
+                        tickers = []
+                        for word in item.headline.split() + (item.summary.split() if item.summary else []):
+                            clean = word.strip(".,!?()[]{}\"':;").upper()
+                            if len(clean) >= 2 and clean.isupper() and clean.isalpha():
+                                tickers.append(clean)
+                        # Check watchlist / portfolio / securities
+                        db.insert_news(
+                            headline=item.headline,
+                            summary=item.summary,
+                            full_text=item.full_text,
+                            url=item.url,
+                            source_id=src_id,
+                            source=name,
+                            provider="rss",
+                            published_ts=item.published_at.isoformat(),
+                            tickers=list(set(tickers))[:5],
+                        )
+                        count += 1
+                elif provider == "alpaca":
+                    # Use alpaca provider if available
+                    env = self.runtime.office.get_env()
+                    if hasattr(env, "market_data") and hasattr(env.market_data, "news"):
+                        # or direct client
+                        pass
+                elif provider == "openbb":
+                    from data.providers.openbb import OpenBBProvider
+                    try:
+                        obb_prov = OpenBBProvider()
+                        items = obb_prov.get_news()
+                        for item in items:
+                            db.insert_news(
+                                headline=item["headline"],
+                                summary=item.summary,
+                                full_text=None,
+                                url=item["url"],
+                                source_id=src_id,
+                                source=name,
+                                provider="openbb",
+                                published_ts=item["published_at"].isoformat(),
+                            )
+                            count += 1
+                    except Exception as e:
+                        db.update_news_source_status(src_id, "unavailable", str(e))
+                        continue
+
+                db.update_news_source_status(src_id, "ok", None, now.isoformat())
+                if count > 0 and self.runtime.event_log:
+                    with db.transaction():
+                        self.runtime.event_log.append(
+                            "news.ingested", f"source:{src_id}",
+                            {"source_id": src_id, "count": count},
+                            actor="scheduler",
+                        )
+            except Exception as exc:
+                logger.exception("Error ingesting from source %s: %s", name, exc)
+                db.update_news_source_status(src_id, "error", str(exc))
+
 
 class RetentionJob(Job):
     """Weekly DB retention cleanup and vacuum followed by size check."""

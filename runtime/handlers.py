@@ -5,26 +5,32 @@ from __future__ import annotations
 import json
 import logging
 import threading
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from runtime.commands import (
     AddDossierNote,
+    AddNewsSource,
     AddWatchlist,
     ApproveOrder,
     ClosePosition,
     CommandResult,
     DecideProposal,
     EnqueueTask,
+    ForwardNews,
     Halt,
     IngestAlert,
     MarkInboxRead,
     ModifyExit,
     ReconcileBroker,
     RefreshData,
+    RefreshNews,
     RejectOrder,
+    RemoveNewsSource,
     RemoveWatchlist,
     Resume,
     Say,
+    SetNewsSourceEnabled,
     StrikeAnnotation,
     UpdateRiskLimits,
     UpsertAnnotation,
@@ -480,3 +486,55 @@ def handle_modify_exit(ctx: RuntimeContext, cmd: ModifyExit, actor: str) -> Comm
         return CommandResult(ok=True, data={"dry_run": True, **preview})
     ok, data, reasons = exits.modify(trade, stop, target, price, gate_ctx, actor)
     return CommandResult(ok=ok, data=data, reasons=reasons)
+
+def handle_forward_news(ctx: RuntimeContext, cmd: ForwardNews, actor: str) -> CommandResult:
+    db = ctx.office.db
+    item = db.connection.execute("SELECT * FROM news WHERE id = ?", (cmd.news_id,)).fetchone()
+    if not item:
+        return CommandResult(ok=False, reasons=["News item not found"])
+    
+    to_spec = cmd.to
+    target_agent = to_spec.get("agent")
+    ticker_target = to_spec.get("ticker")
+    
+    if target_agent:
+        chat_id = db.get_or_create_chat(target_agent, "direct")
+    elif ticker_target:
+        sym = ticker_target.upper().strip()
+        target_agent = f"ticker:{sym}"
+        agent_exists = db.get_agent(target_agent)
+        if not agent_exists:
+            target_agent = "portfolio_manager"
+        chat_id = db.get_or_create_chat(target_agent, sym)
+    else:
+        return CommandResult(ok=False, reasons=["Invalid 'to' destination spec"])
+
+    text = f"[Inoltrata da Luca] **{item['headline']}**\nFonte: {item['source']} | {item['url'] or 'N/A'}"
+    if cmd.note:
+        text += f"\nNota: {cmd.note}"
+    
+    msg_id = db.append_message(chat_id=chat_id, author=actor, text=text, kind="original")
+    db.log_news_usage(news_id=cmd.news_id, agent=target_agent, kind="forwarded", chat_id=chat_id, note=cmd.note)
+    return CommandResult(ok=True, data={"message_id": msg_id, "chat_id": chat_id})
+
+
+def handle_add_news_source(ctx: RuntimeContext, cmd: AddNewsSource, actor: str) -> CommandResult:
+    source_id = ctx.office.db.add_news_source(cmd.provider, cmd.name, cmd.url)
+    return CommandResult(ok=True, data={"source_id": source_id})
+
+
+def handle_set_news_source_enabled(ctx: RuntimeContext, cmd: SetNewsSourceEnabled, actor: str) -> CommandResult:
+    success = ctx.office.db.set_news_source_enabled(cmd.source_id, cmd.enabled)
+    return CommandResult(ok=success, reasons=[] if success else ["Source not found"])
+
+
+def handle_remove_news_source(ctx: RuntimeContext, cmd: RemoveNewsSource, actor: str) -> CommandResult:
+    success = ctx.office.db.remove_news_source(cmd.source_id)
+    return CommandResult(ok=success, reasons=[] if success else ["Source not found"])
+
+
+def handle_refresh_news(ctx: RuntimeContext, cmd: RefreshNews, actor: str) -> CommandResult:
+    from runtime.jobs import NewsIngestionJob
+    job = NewsIngestionJob(ctx.runtime)
+    job.run(datetime.now(UTC))
+    return CommandResult(ok=True, data={"refreshed": True})

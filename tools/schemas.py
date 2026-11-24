@@ -299,3 +299,20 @@ class ScheduleNextCheckInput(BaseModel):
     ticker: str = Field(description="Ticker symbol")
     when: str = Field(description="Target UTC datetime in ISO 8601 format")
     note: str = Field(default="", description="Reason or note for next check")
+
+class NewsSearchInput(BaseModel):
+    q: str | None = Field(default=None, description="Search query string")
+    ticker: str | None = Field(default=None, description="Filter by ticker")
+    since: str | None = Field(default=None, description="ISO timestamp lower bound")
+    limit: int = Field(default=50, ge=1, le=100, description="Maximum number of items")
+
+
+class EconomicCalendarInput(BaseModel):
+    from_ts: str | None = Field(default=None, alias="from", description="Start timestamp ISO")
+    to_ts: str | None = Field(default=None, alias="to", description="End timestamp ISO")
+
+
+class EarningsCalendarInput(BaseModel):
+    from_ts: str | None = Field(default=None, alias="from", description="Start timestamp ISO")
+    to_ts: str | None = Field(default=None, alias="to", description="End timestamp ISO")
+    tickers: list[str] | None = Field(default=None, description="Optional list of tickers")

@@ -211,3 +211,28 @@ class TestConnection(BaseModel):
 
 class BackupDB(BaseModel):
     pass
+
+
+class ForwardNews(BaseModel):
+    news_id: int = Field(gt=0)
+    to: dict[str, str]
+    note: str = ""
+
+
+class AddNewsSource(BaseModel):
+    provider: str = "rss"
+    name: str
+    url: str
+
+
+class SetNewsSourceEnabled(BaseModel):
+    source_id: int = Field(gt=0)
+    enabled: int = Field(ge=0, le=1)
+
+
+class RemoveNewsSource(BaseModel):
+    source_id: int = Field(gt=0)
+
+
+class RefreshNews(BaseModel):
+    source_id: int | None = None

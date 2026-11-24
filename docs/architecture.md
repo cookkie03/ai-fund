@@ -126,6 +126,14 @@ Controlli mercato aperto e disponibilità dello strumento si aggiungono quando s
 
 Il paper trading Alpaca richiede `TradingClient(..., paper=True)` e chiavi paper; la documentazione distingue TradingClient dal prodotto Broker API. [TradingClient ufficiale](https://alpaca.markets/sdks/python/api_reference/trading/trading-client.html), [guida Trading](https://alpaca.markets/sdks/python/trading.html). Per vincoli e lifecycle vedere [ricerca Alpaca](research/alpaca-broker.md).
 
+## Ambiente Notizie e Calendario (Runtime & Dashboard)
+
+L'ambiente Notizie estende il Runtime unico per centralizzare l'ingestione e la consultazione delle notizie finanziarie e dei calendari macro ed earnings:
+- **Fonti supportate**: Alpaca (con paginazione), RSS/Atom (tramite `RSSNewsProvider` con timeout e validazione URL `http(s)`), OpenBB (`company`, `world`, `economy.calendar`, `equity.calendar.earnings` con gestione graziosa di indisponibilità `unavailable`).
+- **Ingestion Job**: Eseguito periodicamente dallo scheduler del Runtime (`NewsIngestionJob`), deduplica per URL o titolo/fonte, assegna i ticker in modo deterministico e registra `news.ingested` sugli eventi committati.
+- **Traccia d'uso (`news_usage`)**: Registra interazioni di tipo `read` (quando un agente consulta notizie tramite tool), `cited` (citazioni nei messaggi o dossier) e `forwarded` (inoltri operativi da parte di Luca).
+- **Comandi e Contratto API**: Comandi di gestione fonti (`add_news_source`, `set_news_source_enabled`, `remove_news_source`, `refresh_news`, `forward_news`) con `Idempotency-Key` e `X-Actor`, ed endpoint di lettura `/v1/read/news`, `/v1/read/news_item`, `/v1/read/news_sources`, `/v1/read/calendar`.
+
 ## Tracciabilità alla wiki
 
 - [Confini e sequenza](../../trading-agent-wiki/wiki/system/foundation/codebase-architecture.md), sezioni «Principio operativo», «Boundary dei package», «Slice 1».
