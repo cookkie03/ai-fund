@@ -1,12 +1,17 @@
 import { ArrowUp, Hash, MessageCircle } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import { AuthorChip } from "@/components/author-chip";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { COCKPIT_TOPIC, topicTitle } from "@/features/office/api";
+import { COMMAND_ENDPOINT, isCommandMissing } from "@/features/news/api";
+import { NewsAttachment, targetFromUrl } from "@/features/news/forward";
 import { useChat } from "@/features/office/hooks";
-import { author } from "@/lib/authors";
+import { author, tickerOf } from "@/lib/authors";
 import { parseTs } from "@/lib/format";
 import { CommandRefused, useCommand } from "@/lib/runtime/hooks";
 import { useNow } from "@/lib/runtime/provider";
@@ -77,16 +82,39 @@ function MessageGroup({ g, agent }: { g: Group; agent: string }) {
 
 function Composer({ agent, topic }: { agent: string; topic: string }) {
   const { writable } = useShell();
+  const qc = useQueryClient();
+  const [params, setParams] = useSearchParams();
   const [text, setText] = useState("");
-  const [refusal, setRefusal] = useState<string[] | null>(null);
+  const [refusal, setRefusal] = useState<{ title: string; reasons: string[] } | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
-  const say = useCommand("say", { invalidate: [["office", "chat"], ["office", "topics"]], toastRefusal: false });
+  const invalidate = [["office", "chat"], ["office", "topics"]];
+  const say = useCommand("say", { invalidate, toastRefusal: false });
+  const forward = useCommand("forward_news", { invalidate: [...invalidate, ["news_item"], ["news_feed"]], toastRefusal: false });
   const name = author(agent).short;
   const where = topic === COCKPIT_TOPIC ? "nella vostra chat" : `in ${topicTitle(topic)}`;
+  // A forward from /notizie lands here: the item rides on the composer and Luca's message is the note.
+  const newsId = Number(params.get("news")) || null;
+  const fwd = params.get("fwd");
+  const pending = say.isPending || forward.isPending;
+
+  const dropNews = () =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("news");
+        next.delete("fwd");
+        return next;
+      },
+      { replace: true },
+    );
 
   useEffect(() => {
     setRefusal(null);
-  }, [agent, topic]);
+  }, [agent, topic, newsId]);
+
+  useEffect(() => {
+    if (newsId) ref.current?.focus();
+  }, [newsId]);
 
   // The field grows with the text up to ~8 lines.
   useLayoutEffect(() => {
@@ -97,16 +125,36 @@ function Composer({ agent, topic }: { agent: string; topic: string }) {
   }, [text]);
 
   const body = text.trim();
-  const canSend = writable && body.length > 0 && !say.isPending;
+  const canSend = writable && body.length > 0 && !pending;
   const send = () => {
     if (!canSend) return;
     setRefusal(null);
+    if (newsId) {
+      const target = targetFromUrl(agent, fwd);
+      forward.mutate(
+        { news_id: newsId, to: target, note: body },
+        {
+          onSuccess: () => {
+            setText("");
+            dropNews();
+            qc.invalidateQueries({ queryKey: ["news_item"] });
+            toast.success(`Notizia inoltrata a ${"ticker" in target ? `${target.ticker}` : name}`, { description: "La pesa come il parere di un collega, non come un ordine." });
+          },
+          onError: (err) => {
+            if (err instanceof CommandRefused) setRefusal({ title: "Il Runtime non ha accettato l'inoltro", reasons: err.reasons.length ? err.reasons : ["Nessuna ragione indicata"] });
+            else if (isCommandMissing(err))
+              setRefusal({ title: "Inoltro non ancora disponibile", reasons: [`Il Runtime non espone ancora ${COMMAND_ENDPOINT("forward_news")}. Il testo resta qui.`] });
+          },
+        },
+      );
+      return;
+    }
     say.mutate(
       { agent, chat: topic, text: body },
       {
         onSuccess: () => setText(""),
         onError: (err) => {
-          if (err instanceof CommandRefused) setRefusal(err.reasons.length ? err.reasons : ["Nessuna ragione indicata"]);
+          if (err instanceof CommandRefused) setRefusal({ title: "Il Runtime non ha accettato il messaggio", reasons: err.reasons.length ? err.reasons : ["Nessuna ragione indicata"] });
         },
       },
     );
@@ -122,10 +170,10 @@ function Composer({ agent, topic }: { agent: string; topic: string }) {
     <div className="shrink-0 px-3 pb-3 pt-1">
       {refusal && (
         <Alert variant="warning" className="mb-2">
-          <AlertTitle>Il Runtime non ha accettato il messaggio</AlertTitle>
+          <AlertTitle>{refusal.title}</AlertTitle>
           <AlertDescription>
             <ul className="mt-0.5">
-              {refusal.map((r) => (
+              {refusal.reasons.map((r) => (
                 <li key={r}>{r}</li>
               ))}
             </ul>
@@ -133,6 +181,7 @@ function Composer({ agent, topic }: { agent: string; topic: string }) {
         </Alert>
       )}
       <div className="rounded-control border border-line-strong bg-raised transition-colors focus-within:border-accent-c/70">
+        {newsId && <NewsAttachment newsId={newsId} onRemove={dropNews} />}
         <Textarea
           ref={ref}
           value={text}
@@ -140,16 +189,19 @@ function Composer({ agent, topic }: { agent: string; topic: string }) {
           onKeyDown={onKeyDown}
           rows={1}
           disabled={!writable}
-          placeholder={writable ? `Scrivi a ${name} ${where}` : "Runtime irraggiungibile: invio sospeso"}
-          aria-label={`Messaggio a ${author(agent).name}`}
+          placeholder={!writable ? "Runtime irraggiungibile: invio sospeso" : newsId ? `Perché ${name} dovrebbe pesarla? La nota è obbligatoria` : `Scrivi a ${name} ${where}`}
+          aria-label={newsId ? `Nota per ${author(agent).name} sulla notizia allegata` : `Messaggio a ${author(agent).name}`}
           className="block min-h-[44px] w-full resize-none border-none bg-transparent px-3 pt-3 text-sm leading-5 text-fg shadow-none outline-none focus-visible:ring-0 placeholder:text-fg-subtle disabled:cursor-not-allowed"
         />
         <div className="flex items-center gap-2 pb-2 pl-3 pr-2">
-          <span className="min-w-0 truncate text-2xs text-fg-subtle">{name} lo pesa come il parere di un collega: può non essere d'accordo e dirti perché.</span>
-          <span className="ml-auto hidden shrink-0 text-2xs text-fg-subtle lg:inline">
-            <kbd className="rounded-tag bg-hover px-1 font-sans">Invio</kbd> invia · <kbd className="rounded-tag bg-hover px-1 font-sans">Maiusc Invio</kbd> a capo
+          <span className="min-w-0 truncate text-2xs text-fg-subtle">
+            {newsId && fwd && !tickerOf(agent) ? `Nessun agente ${fwd.toUpperCase()}: la riceve il PM nel topic ${fwd.toUpperCase()}. ` : ""}
+            {name} lo pesa come il parere di un collega: può non essere d'accordo e dirti perché.
           </span>
-          <Button size="icon-sm" className="ml-auto shrink-0 lg:ml-1" disabled={!canSend} onClick={send} aria-label="Invia" data-action="send">
+          <span className="ml-auto hidden shrink-0 text-2xs text-fg-subtle lg:inline">
+            <kbd className="rounded-tag bg-hover px-1 font-sans">Invio</kbd> {newsId ? "inoltra" : "invia"} · <kbd className="rounded-tag bg-hover px-1 font-sans">Maiusc Invio</kbd> a capo
+          </span>
+          <Button size="icon-sm" className="ml-auto shrink-0 lg:ml-1" disabled={!canSend} onClick={send} aria-label={newsId ? "Inoltra con la nota" : "Invia"} data-action="send">
             <ArrowUp />
           </Button>
         </div>

@@ -1,4 +1,4 @@
-import { CandlestickChart, MessagesSquare, OctagonPause, RotateCw, WalletCards } from "lucide-react";
+import { CandlestickChart, MessagesSquare, Newspaper, OctagonPause, RotateCw, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { AuthorChip } from "@/components/author-chip";
@@ -123,6 +123,7 @@ function Header({ symbol, d, agent, agentKnown, mobile }: { symbol: string; d: D
     <nav aria-label={`Collegamenti per ${symbol}`} className="flex flex-wrap gap-1">
       <HeaderLink to={`/terminale?t=${symbol}`} icon={<CandlestickChart />} label="Grafico" />
       {(agent || !agentKnown) && <HeaderLink to={`/ufficio/${agentId}`} icon={<MessagesSquare />} label="Chat dell'agente" />}
+      <HeaderLink to={`/notizie?ticker=${symbol}`} icon={<Newspaper />} label={`Notizie su ${symbol}`} />
       <HeaderLink to="/portafoglio" icon={<WalletCards />} label="Portafoglio" />
     </nav>
   );
