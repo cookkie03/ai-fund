@@ -1,8 +1,9 @@
-"""Smoke test script for Cockpit Configurazioni backend on port 8778 (reads, writes, idempotency, live vs restart, SSE)."""
+"""Smoke test script for Cockpit Configurazioni backend on port 8778 (reads, writes, idempotency, restart flags, live SSE delivery)."""
 
 from __future__ import annotations
 
 import json
+import threading
 import time
 import urllib.request
 from multiprocessing import Process
@@ -42,7 +43,7 @@ def main():
                 data = json.loads(resp.read().decode("utf-8"))
                 print(f"OK: {ep} -> received {type(data)}")
 
-        # 1. Test update_settings (live setting: max_parallel from current to 2)
+        # 1. Test update_settings (live setting: max_parallel to 2)
         req_data = json.dumps({
             "changes": {"max_parallel": 2},
             "reason": "smoke test update live setting",
@@ -91,16 +92,44 @@ def main():
             print(f"OK: settings pending_restart -> {set_data.get('pending_restart')}")
             assert "market.bar_timeframe" in set_data.get("pending_restart", [])
 
-        # 3. Test SSE events stream
-        req_sse = urllib.request.Request(f"{base}/v1/events")
-        try:
-            with urllib.request.urlopen(req_sse, timeout=1.5) as resp:
-                chunk = resp.readline()
-                print(f"OK: SSE stream sample -> {chunk}")
-        except Exception as exc:
-            print(f"SSE stream read completed/timeout as expected: {exc}")
+        # 3. Test Live SSE events delivery during command execution
+        received_events = []
 
-        print("Smoke test on port 8778 (reads, live writes, idempotency, restart flags, SSE) completed successfully!")
+        def listen_sse():
+            req_sse = urllib.request.Request(f"{base}/v1/events")
+            try:
+                with urllib.request.urlopen(req_sse, timeout=3.0) as resp:
+                    for _ in range(10):
+                        line = resp.readline()
+                        if line:
+                            received_events.append(line.decode("utf-8"))
+            except Exception as exc:
+                print(f"SSE listen finished: {exc}")
+
+        t = threading.Thread(target=listen_sse, daemon=True)
+        t.start()
+        time.sleep(0.5)
+
+        # Trigger settings update to generate live SSE event
+        req_data_sse = json.dumps({
+            "changes": {"max_parallel": 3},
+            "reason": "generate live sse event",
+            "confirm": True
+        }).encode("utf-8")
+        req_trig = urllib.request.Request(
+            f"{base}/v1/commands/update_settings",
+            data=req_data_sse,
+            headers={"Content-Type": "application/json", "Idempotency-Key": "smoke-sse-1", "X-Actor": "luca"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req_trig) as resp:
+            print(f"OK: Triggered setting update for SSE -> {resp.read().decode('utf-8')}")
+
+        time.sleep(1.0)
+        print(f"OK: Received live SSE events -> {received_events}")
+        assert any("settings.updated" in ev or "data:" in ev for ev in received_events)
+
+        print("Smoke test on port 8778 (reads, live writes, idempotency, restart flags, live SSE delivery) completed successfully!")
     finally:
         p.terminate()
         p.join()
