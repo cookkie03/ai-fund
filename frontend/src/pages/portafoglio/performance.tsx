@@ -1,5 +1,7 @@
+import { motion } from "motion/react";
 import type { ReactNode } from "react";
 import { AuthorChip } from "@/components/author-chip";
+import { barTransition } from "@/lib/motion";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAttribution, usePerformance } from "@/features/portfolio/hooks";
@@ -75,9 +77,12 @@ function Contribution({ rows, empty }: { rows: { key: string; label: ReactNode; 
                   <span className="min-w-0 truncate text-xs text-fg">{r.label}</span>
                   <span className="relative h-2" role="img" aria-label={tip}>
                     <span aria-hidden className="absolute inset-y-[-3px] left-1/2 w-px bg-line-strong" />
-                    <span
-                      className={cn("bar-grow absolute inset-y-0 rounded-tag", r.pnl >= 0 ? "bg-up" : "bg-down")}
-                      style={r.pnl >= 0 ? { left: "50%", width: `${w}%` } : { right: "50%", width: `${w}%`, transformOrigin: "right" }}
+                    <motion.span
+                      initial={{ scaleX: 0 }}
+                      animate={{ scaleX: 1 }}
+                      transition={barTransition}
+                      className={cn("absolute inset-y-0 rounded-tag", r.pnl >= 0 ? "bg-up" : "bg-down")}
+                      style={r.pnl >= 0 ? { left: "50%", width: `${w}%`, transformOrigin: "left" } : { right: "50%", width: `${w}%`, transformOrigin: "right" }}
                     />
                   </span>
                   <span className={cn("num text-right text-xs", tone(r.pnl))}>{fmtMoney(r.pnl, { sign: true, decimals: 0 })}</span>

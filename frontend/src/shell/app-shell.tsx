@@ -1,4 +1,6 @@
 import { CloudOff, OctagonPause, RotateCw } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { tileTransition } from "@/lib/motion";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -93,13 +95,23 @@ export function AppShell({ children }: { children: ReactNode }) {
           <BottomNav />
         </SidebarInset>
         {wide ? (
-          bridgeOpen && (
-            <div data-region="bridge" className="tile-enter-right w-[340px] shrink-0 py-2.5 pr-2.5">
-              <div className="h-full overflow-hidden rounded-tile border border-line-strong/60 bg-ground shadow-sm">
-                <BridgePanel onClose={() => setBridgeOpen(false)} />
-              </div>
-            </div>
-          )
+          <AnimatePresence>
+            {bridgeOpen && (
+              <motion.div
+                key="bridge"
+                data-region="bridge"
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 10 }}
+                transition={tileTransition}
+                className="w-[340px] shrink-0 py-2.5 pr-2.5"
+              >
+                <div className="h-full overflow-hidden rounded-tile border border-line-strong/60 bg-ground shadow-sm">
+                  <BridgePanel onClose={() => setBridgeOpen(false)} />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         ) : (
           <Sheet open={bridgeOpen} onOpenChange={setBridgeOpen}>
             <SheetContent side="right" className="w-full max-w-[400px] gap-0 rounded-l-tile border-0 bg-ground p-0 [&>button]:hidden">

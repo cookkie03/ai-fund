@@ -1,4 +1,6 @@
 import { CircleAlert, CircleCheck, CircleX, Info, Plug } from "lucide-react";
+import { motion } from "motion/react";
+import { barTransition } from "@/lib/motion";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -121,9 +123,12 @@ export function LimitBar({
   return (
     <span className={cn("relative block w-full", className)} role="img" aria-label={label}>
       <span className="block overflow-hidden rounded-tag bg-muted/60" style={{ height }}>
-        <span
+        <motion.span
+          initial={{ scaleX: 0, originX: 0 }}
+          animate={{ scaleX: 1, originX: 0 }}
+          transition={barTransition}
           className={cn(
-            "bar-grow block h-full rounded-tag",
+            "block h-full rounded-tag",
             status === "breach" ? "bg-down" : status === "near" ? "bg-warn" : min ? "bg-fg-subtle" : "bg-fg-muted",
           )}
           style={{ width: `${w}%` }}
