@@ -592,6 +592,38 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         );
         """,
     ),
+    (
+        # Le tre 009 (Configurazioni, Notizie, Bridge) furono rinumerate all'unificazione. I DB di sviluppo che avevano
+        # gia la vecchia 009_bridge_and_briefing saltano la 009 di Configurazioni: qui si ricreano le sue tabelle.
+        12,
+        "012_configurazioni_repair",
+        """
+        CREATE TABLE IF NOT EXISTS settings_versions (
+            version INTEGER PRIMARY KEY,
+            ts TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            before_json TEXT NOT NULL,
+            after_json TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS prompt_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            ts TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            text TEXT NOT NULL,
+            chars INTEGER NOT NULL,
+            UNIQUE(agent, version)
+        );
+        CREATE TABLE IF NOT EXISTS backup_records (
+            name TEXT PRIMARY KEY,
+            ts TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL
+        );
+        """,
+    ),
 ]
 
 
