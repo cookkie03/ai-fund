@@ -175,35 +175,41 @@ def test_live_settings_immediate_application(test_env):
 def test_cycle_runner_prompt_boundary_and_live_settings(test_env):
     db = test_env["db"]
     client = test_env["client"]
+    office = build_test_office(db=db)
+    rt = Runtime(office=office)
+    assert rt is not None
+
     from prompts.loader import load_prompt
 
     # Seed initial version 1
     db.insert_prompt_version("market_analyst", "luca", "v1", "Prompt Cycle 1")
 
-    # Cycle 1 execution simulation
+    # Cycle 1 execution simulation: engine loads prompt at cycle start
     prompt_c1, _ = load_prompt("market_analyst", db=db)
     assert "Cycle 1" in prompt_c1
 
-    # Mid-cycle update via API (or DB)
+    # Mid-cycle update in DB
     db.insert_prompt_version("market_analyst", "luca", "v2", "Prompt Cycle 2 (Next Cycle)")
 
-    # Live setting update via API
+    # Live setting update via command endpoint
     r = client.post(
         "/v1/commands/update_settings",
-        json={"changes": {"max_parallel": 6}, "reason": "test live settings engine read", "confirm": True},
+        json={"changes": {"max_parallel": 4}, "reason": "test engine immediate live read", "confirm": True},
         headers={"X-Actor": "luca"}
     )
     assert r.status_code == 200
     assert r.json()["ok"] is True
 
-    # Verify live settings are immediately read by active settings store
-    settings_store = SettingsStore(db)
-    assert settings_store.active_dict()["max_parallel"] == 6
+    # Verify engine immediately reads live settings via SettingsStore active settings
+    store = SettingsStore(db, office.settings)
+    assert store.active_dict()["max_parallel"] == 4
 
-    # Cycle 2 execution simulation: next cycle loads the newly updated prompt version
+    # Cycle 2 execution simulation: next cycle loads the newly updated prompt version from DB
     prompt_c2, _ = load_prompt("market_analyst", db=db)
     assert "Cycle 2" in prompt_c2
     assert prompt_c2 != prompt_c1
+
+
 
 
 
