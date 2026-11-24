@@ -356,3 +356,7 @@
 .bar-grow { transform-origin: left; animation: bar-grow 520ms var(--ease-settle-curve) both; }
 @keyframes tab-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .tab-in[data-state="active"] { animation: tab-in 220ms var(--ease-settle-curve) both; }
+/* Configurazioni: a section fades up 4 px when it changes; the draft bar rises 8 px when the first change lands. */
+.section-in { animation: tab-in 220ms var(--ease-settle-curve) both; }
+@keyframes draft-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.draft-in { animation: draft-in 240ms var(--ease-settle-curve) both; }

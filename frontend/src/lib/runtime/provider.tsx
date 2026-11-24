@@ -77,6 +77,10 @@ function keysFor(type: string): string[][] {
   if (type === "dossier.updated") return [["dossier"], ["dossier_history"], ["dossiers"]];
   if (type.startsWith("proposal.")) return [["proposals"], ["dossier"], ["dossiers"], ["dossier_history"], ["office", "agents"]];
   if (type === "data.refreshed") return [["bars"], ["indicators"]];
+  if (type === "settings.updated") return [["cfg", "settings"], ["cfg", "agents"], ["cfg", "health"]];
+  if (type === "prompt.updated") return [["cfg", "prompt"], ["cfg", "agents"]];
+  if (type === "secret.updated") return [["cfg", "secrets"], ["cfg", "health"]];
+  if (type === "health.changed") return [["cfg", "health"], ["cfg", "backups"]];
   return [];
 }
 
