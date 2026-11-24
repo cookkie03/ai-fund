@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { IconButton } from "@/components/tile";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -135,7 +136,7 @@ function HaltControl() {
           </AlertDialogHeader>
           {!halted && (
             <label className="flex cursor-pointer items-start gap-2.5 rounded-control border border-line px-3 py-2.5 text-sm">
-              <input type="checkbox" checked={cancelOpen} onChange={(e) => setCancelOpen(e.target.checked)} className="mt-0.5 accent-[var(--down)]" />
+              <Checkbox checked={cancelOpen} onCheckedChange={(c) => setCancelOpen(!!c)} className="mt-0.5" />
               <span>
                 Annulla anche gli ordini aperti
                 <span className="block text-xs text-fg-subtle">Inviati, in coda o aperti presso il broker.</span>

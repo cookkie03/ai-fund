@@ -3,6 +3,7 @@ import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { AuthorChip } from "@/components/author-chip";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { DecideProposal } from "@/features/dossier/decide-proposal";
 import { ACTION_LABEL, daysUntil, fmtDate, fmtFraction, fmtRR, fmtScore, sectionLabel, verdictTone } from "@/features/dossier/labels";
 import { DirectionTag, ProposalTag, Score } from "@/features/dossier/parts";
@@ -493,7 +494,7 @@ export function NotesTile({ d, className }: { d: Dossier; className?: string }) 
         <label className="sr-only" htmlFor="dossier-note">
           Nota per la scheda di {d.ticker}
         </label>
-        <textarea
+        <Textarea
           id="dossier-note"
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -501,7 +502,7 @@ export function NotesTile({ d, className }: { d: Dossier; className?: string }) 
           rows={2}
           disabled={!writable}
           placeholder={writable ? `Il tuo parere su ${d.ticker}…` : "Runtime irraggiungibile: le note sono sospese"}
-          className="block max-h-40 min-h-12 w-full resize-none bg-transparent px-2 py-1.5 text-[13px] leading-5 text-fg outline-none [field-sizing:content] placeholder:text-fg-subtle disabled:opacity-60"
+          className="block max-h-40 min-h-12 w-full resize-none border-none bg-transparent px-2 py-1.5 text-[13px] leading-5 text-fg shadow-none outline-none focus-visible:ring-0 placeholder:text-fg-subtle disabled:opacity-60"
         />
         <div className="flex items-center gap-2 px-1 pt-1">
           <AuthorChip author={LUCA} size="xs" />

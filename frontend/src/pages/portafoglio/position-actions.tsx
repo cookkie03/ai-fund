@@ -5,6 +5,7 @@ import { AuthorChip } from "@/components/author-chip";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { isCommandMissing } from "@/features/portfolio/api";
 import { commandErrorText, useClosePosition, useModifyExit } from "@/features/portfolio/hooks";
 import type { ClosePreview, ExitPreview, GateOutcome, PortfolioPosition } from "@/features/portfolio/types";
@@ -74,7 +75,7 @@ function Field({ label, children, hint }: { label: string; children: ReactNode; 
 }
 
 const inputCls =
-  "num h-8 w-full rounded-control border border-line-strong bg-ground px-2.5 text-sm text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-accent-c disabled:opacity-50";
+  "num h-8 w-full rounded-control border-line-strong bg-ground px-2.5 text-sm text-fg outline-none transition-colors placeholder:text-fg-subtle focus-visible:border-accent-c focus-visible:ring-1 focus-visible:ring-accent-c/40 disabled:opacity-50";
 
 function GateBox({ gate, refusal }: { gate: GateOutcome | null; refusal: string[] | null }) {
   if (refusal) {
@@ -241,14 +242,14 @@ export function CloseDialog({ p, onClose }: { p: PortfolioPosition; onClose: () 
                     </span>
                   }
                 >
-                  <input inputMode="numeric" value={qtyText} onChange={(e) => setQtyText(e.target.value)} aria-invalid={!qtyValid} className={cn(inputCls, !qtyValid && "border-down")} />
+                  <Input inputMode="numeric" value={qtyText} onChange={(e) => setQtyText(e.target.value)} aria-invalid={!qtyValid} className={cn(inputCls, !qtyValid && "border-down")} />
                 </Field>
               ) : (
                 <span />
               )}
               {type === "limit" && (
                 <Field label="Prezzo limite">
-                  <input inputMode="decimal" value={limitText} onChange={(e) => setLimitText(e.target.value)} aria-invalid={!limitValid} className={cn(inputCls, !limitValid && "border-down")} />
+                  <Input inputMode="decimal" value={limitText} onChange={(e) => setLimitText(e.target.value)} aria-invalid={!limitValid} className={cn(inputCls, !limitValid && "border-down")} />
                 </Field>
               )}
             </div>
@@ -351,10 +352,10 @@ export function ExitDialog({ p, equity, onClose }: { p: PortfolioPosition; equit
               label={`Stop (ora ${fmtPrice(p.stop_price)})`}
               hint={stopChanged ? <span className={loosens ? "text-warn" : "text-fg-muted"}>{loosens ? "Allarga lo stop: più rischio" : "Stringe lo stop"}</span> : undefined}
             >
-              <input inputMode="decimal" value={stopText} onChange={(e) => setStopText(e.target.value)} className={cn(inputCls, "text-down", px !== null && stop !== null && stop >= px && "border-down")} />
+              <Input inputMode="decimal" value={stopText} onChange={(e) => setStopText(e.target.value)} className={cn(inputCls, "text-down", px !== null && stop !== null && stop >= px && "border-down")} />
             </Field>
             <Field label={`Target (ora ${fmtPrice(p.target_price)})`}>
-              <input inputMode="decimal" value={targetText} onChange={(e) => setTargetText(e.target.value)} className={cn(inputCls, "text-up", px !== null && target !== null && target <= px && "border-down")} />
+              <Input inputMode="decimal" value={targetText} onChange={(e) => setTargetText(e.target.value)} className={cn(inputCls, "text-up", px !== null && target !== null && target <= px && "border-down")} />
             </Field>
           </div>
           {!valid && <p className="text-xs text-down">Lo stop va sotto il prezzo corrente e il target sopra.</p>}

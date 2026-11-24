@@ -2,6 +2,7 @@ import { ChevronRight, FileText, History, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AuthorChip } from "@/components/author-chip";
+import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDossiers } from "@/features/dossier/hooks";
 import { DOSSIER_STATUS, fmtScore } from "@/features/dossier/labels";
@@ -270,13 +271,13 @@ export function TickerDesk({
       {rows.length > 10 && (
         <label className="relative ml-auto flex items-center">
           <Search className="pointer-events-none absolute left-2 size-3.5 text-fg-subtle" aria-hidden />
-          <input
+          <Input
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Filtra ticker"
             aria-label="Filtra ticker"
             spellCheck={false}
-            className="num h-7 w-32 rounded-control border border-line-strong bg-ground pl-7 pr-2 text-xs uppercase text-fg outline-none placeholder:normal-case placeholder:text-fg-subtle focus:border-accent-c/70"
+            className="num h-7 w-32 rounded-control border-line-strong bg-ground pl-7 pr-2 text-xs uppercase text-fg outline-none placeholder:normal-case placeholder:text-fg-subtle focus-visible:border-accent-c/70"
           />
         </label>
       )}

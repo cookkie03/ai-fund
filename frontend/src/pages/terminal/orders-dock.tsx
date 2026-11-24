@@ -6,6 +6,7 @@ import { IconButton } from "@/components/tile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { fmtMoney, fmtPrice, fmtQty, fmtWhen, toNum } from "@/lib/format";
 import { EXIT_LABEL, RISK_LIMITS, STATUS_LABEL, orderBucket, orderFigures } from "@/lib/orders";
 import { CommandRefused, useCommand, useOrders, usePortfolio, useTrades } from "@/lib/runtime/hooks";
@@ -226,14 +227,14 @@ export function RejectDialog({ order, onClose }: { order: Order; onClose: () => 
         <label htmlFor="reject-reason" className="sr-only">
           Ragione del rifiuto
         </label>
-        <textarea
+        <Textarea
           id="reject-reason"
           autoFocus
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           rows={3}
           placeholder="Ragione (obbligatoria)"
-          className="w-full resize-none rounded-control border border-line-strong bg-ground px-2.5 py-2 text-sm text-fg outline-none placeholder:text-fg-subtle focus:border-accent-c"
+          className="w-full resize-none rounded-control border-line-strong bg-ground px-2.5 py-2 text-sm text-fg outline-none placeholder:text-fg-subtle focus-visible:border-accent-c"
         />
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
