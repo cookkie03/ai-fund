@@ -5,7 +5,7 @@ import { AuthorChip } from "@/components/author-chip";
 import { Gutter } from "@/components/gutter";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { COCKPIT_TOPIC, topicTitle } from "@/features/office/api";
 import { useChatTopics, useOfficeAgents, useToolCalls } from "@/features/office/hooks";
 import type { ChatTopic } from "@/features/office/types";
@@ -255,21 +255,23 @@ function MobileAgentView({ agent }: { agent: string }) {
             <ChevronDown className="size-4 shrink-0 text-fg-subtle" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-[min(340px,calc(100vw-16px))]">
-            <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">Chat di {author(agent).short}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {options.map((t) => (
-              <DropdownMenuItem key={t.topic} onSelect={() => navigate(`/ufficio/${agent}?chat=${encodeURIComponent(t.topic)}`, { replace: true })} className="items-start gap-2 py-2">
-                <TopicIcon topic={t.topic} className="mt-0.5 text-fg-subtle" />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className="truncate text-[13px] font-medium text-fg">{t.title}</span>
-                    <span className="num ml-auto text-2xs text-fg-subtle">{t.last_message ? fmtWhen(t.last_message.ts) : ""}</span>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">Chat di {author(agent).short}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {options.map((t) => (
+                <DropdownMenuItem key={t.topic} onClick={() => navigate(`/ufficio/${agent}?chat=${encodeURIComponent(t.topic)}`, { replace: true })} className="items-start gap-2 py-2">
+                  <TopicIcon topic={t.topic} className="mt-0.5 text-fg-subtle" />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="truncate text-[13px] font-medium text-fg">{t.title}</span>
+                      <span className="num ml-auto text-2xs text-fg-subtle">{t.last_message ? fmtWhen(t.last_message.ts) : ""}</span>
+                    </span>
+                    <span className="block truncate text-xs text-fg-subtle">{t.last_message?.text ?? "Nessun messaggio"}</span>
                   </span>
-                  <span className="block truncate text-xs text-fg-subtle">{t.last_message?.text ?? "Nessun messaggio"}</span>
-                </span>
-                <Check className={cn("mt-0.5 size-4", t.topic === topic ? "opacity-100" : "opacity-0")} />
-              </DropdownMenuItem>
-            ))}
+                  <Check className={cn("mt-0.5 size-4", t.topic === topic ? "opacity-100" : "opacity-0")} />
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

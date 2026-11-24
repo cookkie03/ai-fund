@@ -7,8 +7,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuGroup, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChartView, type PriceMark } from "@/features/chart/chart-view";
 import {
@@ -268,29 +269,31 @@ export function ChartPanel({
           </span>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <div role="radiogroup" aria-label="Timeframe" className="seg">
+          <ToggleGroup type="single" value={timeframe} onValueChange={(value: string) => { if (value) setPrefs((p) => ({ ...p, timeframe: value })); }} aria-label="Timeframe" className="seg">
             {TIMEFRAMES.map((tf) => (
-              <button key={tf.id} role="radio" aria-checked={timeframe === tf.id} onClick={() => setPrefs((p) => ({ ...p, timeframe: tf.id }))} className="seg-item num px-2.5">
+              <ToggleGroupItem key={tf.id} value={tf.id} className="seg-item num px-2.5 data-pressed:bg-raised data-pressed:text-fg">
                 {tf.label}
-              </button>
+              </ToggleGroupItem>
             ))}
-          </div>
+          </ToggleGroup>
           <DropdownMenu>
             <DropdownMenuTrigger className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-xs font-medium text-fg-muted transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover data-[state=open]:text-fg">
               <ChartNoAxesCombined className="size-3.5" strokeWidth={1.75} /> <span className="sr-only @[52rem]:not-sr-only">Indicatori</span>
               <span className="num rounded-tag bg-hover px-1 text-[10px] leading-4 text-fg-subtle">{prefs.indicators.length}</span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">Calcolati dal Runtime, gli stessi valori che leggono gli agenti</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {INDICATORS.map((s) => (
-                <DropdownMenuCheckboxItem key={s.id} checked={prefs.indicators.includes(s.id)} onCheckedChange={() => toggleIndicator(s.id)} onSelect={(e) => e.preventDefault()} className="text-xs">
-                  <span className="flex flex-col">
-                    <span className="text-fg">{s.label}</span>
-                    <span className="text-2xs text-fg-subtle">{s.description}</span>
-                  </span>
-                </DropdownMenuCheckboxItem>
-              ))}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">Calcolati dal Runtime, gli stessi valori che leggono gli agenti</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {INDICATORS.map((s) => (
+                  <DropdownMenuCheckboxItem key={s.id} checked={prefs.indicators.includes(s.id)} onCheckedChange={() => toggleIndicator(s.id)} className="text-xs">
+                    <span className="flex flex-col">
+                      <span className="text-fg">{s.label}</span>
+                      <span className="text-2xs text-fg-subtle">{s.description}</span>
+                    </span>
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
           <div className={cn("seg", compact && "hidden")} role="toolbar" aria-label="Strumenti di disegno">

@@ -6,7 +6,7 @@ import { IconButton } from "@/components/tile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AGENTS, AGENT_IDS, author } from "@/lib/authors";
 import { fmtPrice, fmtWhen } from "@/lib/format";
@@ -111,13 +111,15 @@ function AgentsTab({ ticker }: { ticker: string }) {
               }
             />
             <DropdownMenuContent align="end" className="w-56 border-line-strong bg-raised">
-              <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">Accoda un task su {ticker} (enqueue_task)</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {AGENT_IDS.map((id) => (
-                <DropdownMenuItem key={id} onSelect={() => requestAnalysis(id)} className="gap-2 text-xs">
-                  <AuthorChip actor={id} size="xs" tooltip={AGENTS[id].name} /> {AGENTS[id].name}
-                </DropdownMenuItem>
-              ))}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">Accoda un task su {ticker} (enqueue_task)</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {AGENT_IDS.map((id) => (
+                  <DropdownMenuItem key={id} onClick={() => requestAnalysis(id)} className="gap-2 text-xs">
+                    <AuthorChip actor={id} size="xs" tooltip={AGENTS[id].name} /> {AGENTS[id].name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
         }

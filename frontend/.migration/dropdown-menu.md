@@ -5,6 +5,8 @@
 ## Changed
 
 - `src/components/ui/dropdown-menu.tsx`: Migrated from `radix-ui` `DropdownMenu` to `@base-ui/react/menu`. Restructured Content into `Portal > Positioner > Popup`. Replaced `Item`, `GroupLabel`, `CheckboxItem`, `RadioItem`, `SubmenuRoot`, and `SubmenuTrigger`.
+- Wrapped `DropdownMenuLabel` inside `DropdownMenuGroup` across consumers (`chart-panel`, `activity-panel`, `position-actions`, `agent-view`, `top-bar`) to comply with Base UI `MenuGroupContext`.
+- Standardized action handlers from legacy `onSelect` to `onClick`.
 - leftover scan: clean (0 matches).
 
 ## Left alone

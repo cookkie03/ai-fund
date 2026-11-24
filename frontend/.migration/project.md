@@ -5,9 +5,10 @@
 ## Dependency swap
 
 - Removed `radix-ui` from `package.json` and `node_modules` (uninstalled 45 transitive radix packages).
-- Added `@base-ui/react` (v1.6.0+).
-- Updated `components.json` to `"base": "base"`.
-- 0 references to `radix-ui` remain across `src/`.
+- Removed `cmdk` and unused Command component, completely eliminating transitive `@radix-ui/react-dialog` and `@radix-ui/primitive` from `package-lock.json`.
+- Added `@base-ui/react` (v1.9.0+).
+- Updated `components.json` to `"base": "base"` and `"style": "base-nova"`.
+- 0 references to `radix-ui` or `@radix-ui/*` remain in code or lockfile.
 
 ## Components migrated
 

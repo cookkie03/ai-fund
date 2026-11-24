@@ -5,7 +5,7 @@ import { AuthorChip } from "@/components/author-chip";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { isCommandMissing } from "@/features/portfolio/api";
 import { commandErrorText, useClosePosition, useModifyExit } from "@/features/portfolio/hooks";
@@ -42,24 +42,26 @@ export function RowActions({ p, onAction }: { p: PortfolioPosition; onAction: (k
         }
       />
       <DropdownMenuContent align="end" className="w-60">
-        <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">{p.ticker}{block ? ` · ${block}: azioni di capitale sospese` : ""}</DropdownMenuLabel>
-        <DropdownMenuItem disabled={!!block} onSelect={() => onAction("close", p)}>
-          <SquareMinus /> Chiudi o riduci…
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={!!block} onSelect={() => onAction("exit", p)}>
-          <SlidersHorizontal /> Modifica stop e target…
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        {ASK_AGENTS.map((a) => (
-          <DropdownMenuItem
-            key={a}
-            render={
-              <Link to={askHref(a, p.ticker)}>
-                <AuthorChip actor={a} size="xs" /> Chiedi a {a === "portfolio_manager" ? "Portfolio Manager" : "Risk Analyst"}
-              </Link>
-            }
-          />
-        ))}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">{p.ticker}{block ? ` · ${block}: azioni di capitale sospese` : ""}</DropdownMenuLabel>
+          <DropdownMenuItem disabled={!!block} onClick={() => onAction("close", p)}>
+            <SquareMinus /> Chiudi o riduci…
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!!block} onClick={() => onAction("exit", p)}>
+            <SlidersHorizontal /> Modifica stop e target…
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          {ASK_AGENTS.map((a) => (
+            <DropdownMenuItem
+              key={a}
+              render={
+                <Link to={askHref(a, p.ticker)}>
+                  <AuthorChip actor={a} size="xs" /> Chiedi a {a === "portfolio_manager" ? "Portfolio Manager" : "Risk Analyst"}
+                </Link>
+              }
+            />
+          ))}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

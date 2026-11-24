@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { fmtMoney, fmtPct, parseTs } from "@/lib/format";
 import { marketSession } from "@/lib/market";
@@ -37,18 +37,20 @@ function AccountSwitcher() {
         <ChevronsUpDown className="size-3.5 shrink-0 text-fg-subtle" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
-        <DropdownMenuLabel className="text-xs font-normal text-fg-subtle">Un Runtime per account broker</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {targets.map((t) => (
-          <DropdownMenuItem key={t.id} onSelect={() => selectTarget(t.id)} className="gap-2">
-            <Check className={cn("size-4", t.id === target.id ? "opacity-100" : "opacity-0")} />
-            <span className="truncate">{t.id === target.id ? label : (t.label ?? t.id)}</span>
-            <span className="ml-auto truncate text-xs text-fg-subtle">{t.url || "locale"}</span>
-          </DropdownMenuItem>
-        ))}
-        {targets.length === 1 && (
-          <p className="px-2 pb-1.5 pt-1 text-xs leading-relaxed text-fg-subtle">Altri account: aggiungili in VITE_COCKPIT_RUNTIMES.</p>
-        )}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="text-xs font-normal text-fg-subtle">Un Runtime per account broker</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {targets.map((t) => (
+            <DropdownMenuItem key={t.id} onClick={() => selectTarget(t.id)} className="gap-2">
+              <Check className={cn("size-4", t.id === target.id ? "opacity-100" : "opacity-0")} />
+              <span className="truncate">{t.id === target.id ? label : (t.label ?? t.id)}</span>
+              <span className="ml-auto truncate text-xs text-fg-subtle">{t.url || "locale"}</span>
+            </DropdownMenuItem>
+          ))}
+          {targets.length === 1 && (
+            <p className="px-2 pb-1.5 pt-1 text-xs leading-relaxed text-fg-subtle">Altri account: aggiungili in VITE_COCKPIT_RUNTIMES.</p>
+          )}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

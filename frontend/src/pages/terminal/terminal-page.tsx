@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { useSearchParams } from "react-router-dom";
 import { Gutter } from "@/components/gutter";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ChartDrawing } from "@/features/chart/chart-state";
 import { orderBucket } from "@/lib/orders";
 import { useOrders, useWatchlist } from "@/lib/runtime/hooks";
@@ -93,20 +93,24 @@ export function TerminalPage() {
             <span className="ml-auto font-medium text-accent-c">Rivedi</span>
           </button>
         )}
-        <Tabs value={mobileTab} onValueChange={(v) => setMobileTab(v as MobileTab)} className="sticky top-0 z-10 mx-2 mt-2">
-          <TabsList className="w-full h-9 bg-ground">
+        <Tabs value={mobileTab} onValueChange={(v) => setMobileTab(v as MobileTab)} className="contents">
+          <TabsList aria-label="Pannelli del Terminale" className="sticky top-0 z-10 mx-2 mt-2 h-9 w-auto shrink-0 bg-ground">
             {MOBILE_TABS.map((t) => (
               <TabsTrigger key={t.id} value={t.id} className="flex-1 text-xs">
                 {t.label}
               </TabsTrigger>
             ))}
           </TabsList>
+          <TabsContent value="watchlist" className="m-2 flex min-h-[50vh] flex-1 flex-col overflow-hidden rounded-tile bg-ground">
+            <Watchlist selected={selected} onSelect={select} className="flex-1" />
+          </TabsContent>
+          <TabsContent value="activity" className="m-2 flex min-h-[50vh] flex-1 flex-col overflow-hidden rounded-tile bg-ground">
+            {activity({ className: "flex-1" })}
+          </TabsContent>
+          <TabsContent value="orders" className="m-2 flex min-h-[50vh] flex-1 flex-col overflow-hidden rounded-tile bg-ground">
+            <OrdersDock selected={selected} onSelect={select} className="flex-1" />
+          </TabsContent>
         </Tabs>
-        <div className="m-2 flex min-h-[50vh] flex-1 flex-col overflow-hidden rounded-tile bg-ground">
-          {mobileTab === "watchlist" && <Watchlist selected={selected} onSelect={select} className="flex-1" />}
-          {mobileTab === "activity" && activity({ className: "flex-1" })}
-          {mobileTab === "orders" && <OrdersDock selected={selected} onSelect={select} className="flex-1" />}
-        </div>
       </div>
     );
   }

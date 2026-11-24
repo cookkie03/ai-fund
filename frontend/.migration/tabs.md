@@ -5,6 +5,7 @@
 ## Changed
 
 - `src/components/ui/tabs.tsx` and `src/components/panel-tabs.tsx`: Migrated from `radix-ui` `Tabs` to `@base-ui/react/tabs`. Trigger -> Tab, Content -> Panel. Added `data-active` styling hooks to CSS and component classes.
+- Migrated mobile panels in `terminal-page.tsx` to `TabsContent` (`TabsPanel`) with keyboard navigation verified in Chrome.
 - leftover scan: clean (0 matches).
 
 ## Left alone
