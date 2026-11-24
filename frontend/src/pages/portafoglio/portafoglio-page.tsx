@@ -109,7 +109,7 @@ export function PortafoglioPage() {
         <PerformancePanel period={period} onPeriod={setPeriod} mobile={!wide} />
       </PanelTabContent>
       <PanelTabContent value="risk" className="tab-in">
-        <RiskPanel q={risk} mobile={!wide} before={!wide ? <AllocationTile className="mx-1.5 mb-2 bg-[oklch(0_0_0/0.14)]" /> : undefined} />
+        <RiskPanel q={risk} mobile={!wide} before={!wide ? <AllocationTile className="mx-1.5 mb-2 border border-border/50 bg-card" /> : undefined} />
       </PanelTabContent>
     </PanelTabs>
   );

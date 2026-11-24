@@ -83,7 +83,7 @@ export function TerminalPage() {
             type="button"
             data-action="approve"
             onClick={() => setMobileTab("orders")}
-            className="mx-2 mt-2 flex h-10 shrink-0 items-center gap-2 rounded-control bg-warn-soft px-3 text-left text-xs transition-colors hover:bg-[oklch(0.82_0.14_78/0.2)]"
+            className="mx-2 mt-2 flex h-10 shrink-0 items-center gap-2 rounded-control bg-warn-soft px-3 text-left text-xs transition-colors hover:bg-warn-soft/80"
           >
             <span className="size-1.5 rounded-full bg-warn" aria-hidden />
             <span className="font-medium text-fg">

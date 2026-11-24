@@ -194,7 +194,7 @@ function EditDialog({ data, onClose }: { data: RiskLimitsRead; onClose: () => vo
                 const before = u?.status ?? "ok";
                 const after = u && u.current !== null ? statusFor(u.current, value!, !!LIMIT_META[name].min) : "ok";
                 return (
-                  <li key={name} className="rounded-control bg-[oklch(0_0_0/0.18)] px-3 py-2.5">
+                  <li key={name} className="rounded-control border border-border/50 bg-muted/40 px-3 py-2.5">
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       <span className="font-medium text-fg">{LIMIT_META[name].label}</span>
                       <span className="num ml-auto inline-flex items-center gap-1.5 text-fg-muted">
@@ -221,7 +221,7 @@ function EditDialog({ data, onClose }: { data: RiskLimitsRead; onClose: () => vo
                 );
               })}
             </ul>
-            <p className="rounded-control bg-[oklch(0_0_0/0.18)] px-3 py-2 text-xs text-fg-muted">
+            <p className="rounded-control border border-border/50 bg-muted/40 px-3 py-2 text-xs text-fg-muted">
               <span className="text-fg-subtle">Motivo · </span>
               {reason.trim()}
             </p>

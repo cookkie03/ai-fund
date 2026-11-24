@@ -121,7 +121,7 @@ export function ThesisTile({ d, className }: { d: Dossier; className?: string })
                   .map((c) => {
                     const left = daysUntil(c.date, now);
                     return (
-                      <li key={`${c.text}-${c.date}`} className={cn("inline-flex h-7 items-center gap-2 rounded-item bg-[oklch(0_0_0/0.25)] px-2.5 text-xs", left !== null && left < 0 && "opacity-50")}>
+                      <li key={`${c.text}-${c.date}`} className={cn("inline-flex h-7 items-center gap-2 rounded-item border border-border/50 bg-muted/40 px-2.5 text-xs", left !== null && left < 0 && "opacity-50")}>
                         <span className="num font-medium text-fg">{fmtDate(c.date, now)}</span>
                         <span className="text-fg-muted">{c.text}</span>
                         {left !== null && left >= 0 && <span className="num text-2xs text-fg-subtle">{left === 0 ? "oggi" : `tra ${left} g`}</span>}
@@ -147,7 +147,7 @@ function Ladder({ stop, entry, target, price }: { stop: number; entry: number; t
   const long = target >= entry;
   return (
     <div className="pb-5 pt-1" aria-hidden>
-      <div className="relative h-1.5 rounded-tag bg-[oklch(0_0_0/0.35)]">
+      <div className="relative h-1.5 rounded-tag bg-muted">
         <span className="absolute inset-y-0 rounded-l-tag bg-down/70" style={{ left: pos(long ? stop : entry), width: `calc(${pos(long ? entry : stop)} - ${pos(long ? stop : entry)})` }} />
         <span className="absolute inset-y-0 rounded-r-tag bg-up/70" style={{ left: pos(long ? entry : target), width: `calc(${pos(long ? target : entry)} - ${pos(long ? entry : target)})` }} />
         <span className="absolute -top-1 h-3.5 w-0.5 -translate-x-1/2 rounded-tag bg-fg" style={{ left: pos(entry) }} />
@@ -235,7 +235,7 @@ export function ProposalTile({ d, className }: { d: Dossier; className?: string 
             </p>
           )}
 
-          <div className="rounded-control bg-[oklch(0_0_0/0.22)] p-1.5">
+          <div className="rounded-control border border-border/50 bg-muted/40 p-1.5">
             {!r ? (
               <p className="px-2 py-1.5 text-xs text-fg-subtle">Il Risk Gate non ha ancora valutato questa proposta.</p>
             ) : (
@@ -475,7 +475,7 @@ export function NotesTile({ d, className }: { d: Dossier; className?: string }) 
           {notes.map((n) => {
             const a = author(n.author);
             return (
-              <Signed key={n.id} by={n.author} as="li" className="row-arrive rounded-control bg-[oklch(0.82_0.135_72/0.07)] px-3 py-2.5">
+              <Signed key={n.id} by={n.author} as="li" className="row-arrive rounded-control border border-border/50 bg-muted/30 px-3 py-2.5">
                 <p className="flex items-center gap-2 text-2xs text-fg-subtle">
                   <SignatureChip by={n.author} size="xs" />
                   <span className="font-medium text-fg">{a.name}</span>
@@ -491,7 +491,7 @@ export function NotesTile({ d, className }: { d: Dossier; className?: string }) 
         </ol>
       )}
 
-      <div className="mt-3 rounded-control bg-raised p-1.5 shadow-[inset_0_0.5px_0_oklch(1_0_0/0.06)] focus-within:shadow-[inset_0_0_0_1px_var(--accent-c)]">
+      <div className="mt-3 rounded-control bg-raised p-1.5 shadow-xs focus-within:ring-1 focus-within:ring-ring">
         <label className="sr-only" htmlFor="dossier-note">
           Nota per la scheda di {d.ticker}
         </label>

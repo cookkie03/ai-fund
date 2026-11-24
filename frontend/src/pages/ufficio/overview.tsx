@@ -243,7 +243,7 @@ function UsageLine({ name, label, r, share, max, total, pending, nested = false,
           <span className="block h-1.5 w-full animate-pulse rounded-tag bg-hover" />
         ) : (
           <span className="flex items-center gap-2">
-            <span className="relative h-1.5 flex-1 overflow-hidden rounded-tag bg-[oklch(0_0_0/0.3)]">
+            <span className="relative h-1.5 flex-1 overflow-hidden rounded-tag bg-muted">
               <span className="absolute inset-y-0 left-0 rounded-tag" style={{ width: `${max > 0 && r ? (r.cost / max) * 100 : 0}%`, backgroundColor: color ?? who.color }} />
             </span>
             <span className="num w-9 text-right text-2xs text-fg-subtle">{total > 0 ? Math.round(share * 100) : 0}%</span>

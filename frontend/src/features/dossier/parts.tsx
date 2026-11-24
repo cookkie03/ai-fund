@@ -49,7 +49,7 @@ export function Score({ value, color, label, className, track = true }: { value:
     <span className={cn("inline-flex items-center gap-1.5", className)} aria-label={label ? `${label} ${fmtScore(value)}` : undefined}>
       <span className="num text-xs text-fg">{fmtScore(value)}</span>
       {track && (
-        <span aria-hidden className="relative h-1 w-10 overflow-hidden rounded-tag bg-[oklch(0_0_0/0.35)]">
+        <span aria-hidden className="relative h-1 w-10 overflow-hidden rounded-tag bg-muted">
           <span className="absolute inset-y-0 left-0 rounded-tag" style={{ width: `${pct}%`, backgroundColor: color ?? "var(--fg-muted)" } as CSSProperties} />
         </span>
       )}

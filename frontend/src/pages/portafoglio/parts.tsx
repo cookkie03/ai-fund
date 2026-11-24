@@ -120,11 +120,11 @@ export function LimitBar({
   const t = limit !== null && scale > 0 ? Math.min(100, (limit / scale) * 100) : null;
   return (
     <span className={cn("relative block w-full", className)} role="img" aria-label={label}>
-      <span className="block overflow-hidden rounded-tag bg-[oklch(0_0_0/0.32)]" style={{ height }}>
+      <span className="block overflow-hidden rounded-tag bg-muted/60" style={{ height }}>
         <span
           className={cn(
             "bar-grow block h-full rounded-tag",
-            status === "breach" ? "bg-down" : status === "near" ? "bg-warn" : min ? "bg-fg-subtle" : "bg-[oklch(0.62_0.012_255)]",
+            status === "breach" ? "bg-down" : status === "near" ? "bg-warn" : min ? "bg-fg-subtle" : "bg-fg-muted",
           )}
           style={{ width: `${w}%` }}
         />
@@ -150,8 +150,8 @@ export function SourceNote({ sourced, className }: { sourced: Sourced<unknown> |
 /** A region with nothing honest to show yet: names the endpoint it waits for. */
 export function Unavailable({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn("flex items-start gap-2.5 rounded-control bg-[oklch(0_0_0/0.18)] px-3.5 py-3 text-xs leading-relaxed text-fg-muted", className)}>
-      <Plug className="mt-0.5 size-3.5 shrink-0 text-fg-subtle" aria-hidden />
+    <div className={cn("flex items-start gap-2.5 rounded-control border border-border/50 bg-muted/40 px-3.5 py-3 text-xs leading-relaxed text-muted-foreground", className)}>
+      <Plug className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
       <div>{children}</div>
     </div>
   );
