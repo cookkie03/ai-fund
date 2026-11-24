@@ -1053,15 +1053,24 @@ class ReadModel:
             if self.db_path != ":memory:":
                 conn.close()
 
-    def bridge_actions(self, status: str | None = None) -> list[dict[str, Any]]:
+    def bridge_actions(
+        self,
+        status: str | None = None,
+        conversation_id: int | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
         conn = self._get_connection()
         try:
-            query = "SELECT * FROM bridge_actions"
+            query = "SELECT * FROM bridge_actions WHERE 1=1"
             params: list[Any] = []
             if status:
-                query += " WHERE status = ?"
+                query += " AND status = ?"
                 params.append(status)
-            query += " ORDER BY id DESC"
+            if conversation_id is not None:
+                query += " AND conversation_id = ?"
+                params.append(conversation_id)
+            query += " ORDER BY id DESC LIMIT ?"
+            params.append(limit)
             rows = conn.execute(query, params).fetchall()
             actions: list[dict[str, Any]] = []
             for r in rows:

@@ -36,3 +36,19 @@ Annotazioni per la sessione principale da registrare nella wiki (`/home/luca/tra
   - `bridge_actions`: azioni su capitale proposte (`pending`), confermate, respinte, eseguite o fallite, con anteprima validata (`preview_json`).
   - `bridge_relay_subscriptions`: associazione temporanea per recapitare le risposte degli agenti al thread Bridge corretto.
   - `briefing_state`: memorizzazione persistente di `last_seen_ts` e cache delle sintesi generate dal modello.
+
+## 5. Checklist di Verifica del Handoff (`tests/runtime/test_bridge_agent.py`)
+Tutti i punti della sezione Verifica del handoff sono coperti da test automatizzati:
+1. `bridge_say` crea conversazione e turno; il turno legge con i tool e risponde; `bridge.status` passa da `thinking` a `idle` (`test_bridge_say_creates_conversation_and_turn_with_status_transitions`).
+2. Due conversazioni in parallelo non mescolano messaggi né contesto; un secondo messaggio durante un turno entra nel turno successivo (`test_parallel_conversations_isolated_and_queued_messages`).
+3. `message_agent` scrive nella chat dell'agente con nota «per conto di Luca»; risposta torna come `agent_relay` con turno di sintesi automatica; messaggio al PM crea Scheduled task (`test_message_agent_and_agent_relay_and_pm_task`).
+4. Azione senza capitale eseguita subito con attore `bridge`; azione con capitale resta `pending` con preview; `bridge_action_decide` senza `confirm: true` rifiutato; con conferma esegue dallo stesso handler; Halt e Risk Gate la bloccano; stato mutato nel frattempo porta a `failed` con motivo; `dismiss` non esegue nulla (`test_action_without_capital_executed_immediately_with_actor_bridge`, `test_capital_action_only_proposed_pending_and_confirmation_flow`).
+5. Negative tool registry: comandi con capitale esclusi dal registro tool del Bridge (`test_capital_action_only_proposed_pending_and_confirmation_flow`).
+6. Budget giornaliero esaurito genera messaggio `kind: "error"` leggibile senza turno appeso; `bridge_stop` interrompe il turno al passo successivo (`test_budget_exhaustion_emits_error_message`, `test_bridge_stop_interrupts_turn`).
+7. Briefing: voci corrette da `since` (10 categorie), `mark_briefing_seen` sposta il default, `summary_text: null` se manca budget (`test_briefing_reading_and_marking_seen`).
+8. Eventi pubblicati solo al commit della transazione SQLite; idempotenza dei comandi (`test_bridge_events_published_only_at_commit_never_on_rollback`, `test_bridge_http_endpoints_and_idempotency`).
+9. Titolazione automatica post-primo turno, paginazione retrograda `before`, ricerca `q` con `archived="all"`, e filtri `conversation_id`/`limit` su azioni (`test_bridge_replaces_provisional_title_after_first_turn`, `test_bridge_conversation_pagination_and_search_filter`, `test_bridge_actions_filter_by_conversation_and_limit`).
+10. Conformità esatta delle forme degli eventi SSE contrattuali (`test_bridge_sse_event_shapes_conform_to_handoff_contract`).
+11. Scenario di sviluppo con 4 conversazioni, briefing a 10 tipi e `ScriptedBridgeBackend` (`test_dev_cockpit_scenario_seeds_office_data`).
+12. Smoke test live HTTP/SSE su porta 8774 con flusso completo confermato.
+

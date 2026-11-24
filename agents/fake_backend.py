@@ -144,6 +144,17 @@ class ScriptedBridgeBackend(AgentBackend):
         last_user_msg = next((m.content for m in reversed(chat_context) if m.role == "user"), "")
         lower = last_user_msg.lower()
 
+        # Post-execution commentary turn
+        has_post_execution = any(
+            "eseguita con successo" in m.content or "respinta" in m.content for m in chat_context
+        )
+        if has_post_execution:
+            return StepResult(
+                content="Ho verificato l'aggiornamento a mercato. L'operazione è stata registrata regolarmente.",
+                done=True,
+                usage=Usage(prompt_tokens=250, completion_tokens=40, cost=0.01),
+            )
+
         # Step 0: invoke tool
         has_tool_result = any(
             m.role == "system" and "Risultato tool" in m.content for m in chat_context

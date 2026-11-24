@@ -670,3 +670,56 @@ def test_bridge_sse_event_shapes_conform_to_handoff_contract(tmp_path):
     assert ev_finish.payload["tool"] == "read_portfolio"
     assert ev_finish.payload["conversation_id"] == cid
     assert ev_finish.payload["success"] is True
+
+
+def test_bridge_actions_filter_by_conversation_and_limit(tmp_path):
+    """TDD: verify GET /v1/read/bridge_actions supports conversation_id and limit filters."""
+    db = OfficeDB(tmp_path / "bridge.db")
+    office = build_test_office(db=db)
+    rt = Runtime(office=office)
+    client = TestClient(create_app(rt))
+
+    cid1 = db.create_bridge_conversation(title="Conv 1")
+    cid2 = db.create_bridge_conversation(title="Conv 2")
+
+    # Create two actions for cid1 and one action for cid2
+    act1 = db.create_bridge_action(
+        conversation_id=cid1,
+        command="close_position",
+        payload={"ticker": "AAPL", "qty": 1.0},
+        summary="Chiudi AAPL",
+        status="pending",
+    )
+    act2 = db.create_bridge_action(
+        conversation_id=cid1,
+        command="close_position",
+        payload={"ticker": "MSFT", "qty": 2.0},
+        summary="Chiudi MSFT",
+        status="pending",
+    )
+    act3 = db.create_bridge_action(
+        conversation_id=cid2,
+        command="close_position",
+        payload={"ticker": "GOOGL", "qty": 3.0},
+        summary="Chiudi GOOGL",
+        status="pending",
+    )
+
+    # Filtering by conversation_id=cid1 must only return actions for cid1
+    resp_conv = client.get("/v1/read/bridge_actions", params={"conversation_id": cid1}).json()
+    assert len(resp_conv) == 2
+    assert {a["id"] for a in resp_conv} == {act1, act2}
+    assert all(a["conversation_id"] == cid1 for a in resp_conv)
+
+    # Filtering by conversation_id=cid1 with limit=1 must return only the newest action for cid1
+    resp_limit = client.get(
+        "/v1/read/bridge_actions", params={"conversation_id": cid1, "limit": 1}
+    ).json()
+    assert len(resp_limit) == 1
+    assert resp_limit[0]["id"] == act2
+
+    # Filtering by conversation_id=cid2 must return act3
+    resp_cid2 = client.get("/v1/read/bridge_actions", params={"conversation_id": cid2}).json()
+    assert len(resp_cid2) == 1
+    assert resp_cid2[0]["id"] == act3
+

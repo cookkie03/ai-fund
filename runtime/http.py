@@ -446,7 +446,9 @@ def create_app(
             return conv
         elif norm == "bridge_actions":
             status = q.get("status")
-            return runtime.read.bridge_actions(status=status)
+            conv_id = int(q.get("conversation_id")) if q.get("conversation_id") else None
+            limit = int(q.get("limit", 50))
+            return runtime.read.bridge_actions(status=status, conversation_id=conv_id, limit=limit)
         elif norm == "briefing":
             since = q.get("since")
             return runtime.read.briefing(since=since)
