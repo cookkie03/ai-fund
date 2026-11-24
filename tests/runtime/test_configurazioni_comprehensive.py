@@ -172,29 +172,39 @@ def test_live_settings_immediate_application(test_env):
                 assert item["value"] == 7
 
 
-def test_prompt_next_cycle_loading(test_env):
+def test_cycle_runner_prompt_boundary_and_live_settings(test_env):
     db = test_env["db"]
-    from prompts.loader import load_prompt_full
+    client = test_env["client"]
+    from prompts.loader import load_prompt
 
-    # Seed initial version 1 in DB
-    v1, _ = db.insert_prompt_version("portfolio_manager", "luca", "initial", "Sei il Portfolio Manager v1.")
+    # Seed initial version 1
+    db.insert_prompt_version("market_analyst", "luca", "v1", "Prompt Cycle 1")
 
-    # Cycle 1 start: load prompt for portfolio_manager
-    text_c1, _, version_c1, _ = load_prompt_full("portfolio_manager", db=db)
-    assert version_c1 == 1
+    # Cycle 1 execution simulation
+    prompt_c1, _ = load_prompt("market_analyst", db=db)
+    assert "Cycle 1" in prompt_c1
 
-    # Mid-cycle: someone updates the prompt in the DB (version 2 inserted)
-    db.insert_prompt_version("portfolio_manager", "luca", "mid-cycle update", "Sei il Portfolio Manager v2 mid-cycle.")
+    # Mid-cycle update via API (or DB)
+    db.insert_prompt_version("market_analyst", "luca", "v2", "Prompt Cycle 2 (Next Cycle)")
 
-    # In-cycle check: agent/cycle using the prompt loaded at cycle start retains version 1
-    active_in_cycle = text_c1
-    assert version_c1 == 1
+    # Live setting update via API
+    r = client.post(
+        "/v1/commands/update_settings",
+        json={"changes": {"max_parallel": 6}, "reason": "test live settings engine read", "confirm": True},
+        headers={"X-Actor": "luca"}
+    )
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
 
-    # Cycle 2 start (next cycle): loader fetches the newly active version (version 2) from DB
-    text_c2, _, version_c2, _ = load_prompt_full("portfolio_manager", db=db)
-    assert version_c2 == 2
-    assert "mid-cycle" in text_c2
-    assert text_c2 != active_in_cycle
+    # Verify live settings are immediately read by active settings store
+    settings_store = SettingsStore(db)
+    assert settings_store.active_dict()["max_parallel"] == 6
+
+    # Cycle 2 execution simulation: next cycle loads the newly updated prompt version
+    prompt_c2, _ = load_prompt("market_analyst", db=db)
+    assert "Cycle 2" in prompt_c2
+    assert prompt_c2 != prompt_c1
+
 
 
 
