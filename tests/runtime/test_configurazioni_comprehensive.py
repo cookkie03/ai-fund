@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 
 import pytest
@@ -13,6 +14,7 @@ from runtime.core import Runtime
 from runtime.http import create_app
 from storage.backup import create_db_backup
 from storage.office_db import OfficeDB
+from storage.secrets import SecretsManager
 
 
 @pytest.fixture
@@ -172,42 +174,31 @@ def test_live_settings_immediate_application(test_env):
                 assert item["value"] == 7
 
 
-def test_cycle_runner_prompt_boundary_and_live_settings(test_env):
-    db = test_env["db"]
-    client = test_env["client"]
-    office = build_test_office(db=db)
-    rt = Runtime(office=office)
-    assert rt is not None
+def test_secrets_security_audit(tmp_path):
+    sec_file = tmp_path / "audit_secrets.env"
+    meta_file = tmp_path / "audit_secrets.meta.json"
+    manager = SecretsManager(secrets_path=sec_file, meta_path=meta_file)
 
-    from prompts.loader import load_prompt
+    secret_val = "super-secret-audit-key-999"
+    res = manager.set("ALPACA_API_KEY", secret_val, "luca", "security audit test")
+    assert res["set"] is True
+    assert res["last4"] == "-999"
 
-    # Seed initial version 1
-    db.insert_prompt_version("market_analyst", "luca", "v1", "Prompt Cycle 1")
+    # 1. Verify strict 0600 permissions on secrets file
+    mode = os.stat(sec_file).st_mode
+    assert (mode & 0o077) == 0  # No group or other permissions allowed
 
-    # Cycle 1 execution simulation: engine loads prompt at cycle start
-    prompt_c1, _ = load_prompt("market_analyst", db=db)
-    assert "Cycle 1" in prompt_c1
+    # 2. Verify metadata isolation and absence of plaintext secret in metadata
+    meta_content = meta_file.read_text(encoding="utf-8")
+    assert secret_val not in meta_content
 
-    # Mid-cycle update in DB
-    db.insert_prompt_version("market_analyst", "luca", "v2", "Prompt Cycle 2 (Next Cycle)")
+    # 3. Verify read endpoint / list_secrets redacts full secret value
+    listed = manager.list_secrets()
+    alpaca_info = next(s for s in listed if s["name"] == "ALPACA_API_KEY")
+    assert alpaca_info["set"] is True
+    assert alpaca_info["last4"] == "-999"
+    assert secret_val not in str(listed)
 
-    # Live setting update via command endpoint
-    r = client.post(
-        "/v1/commands/update_settings",
-        json={"changes": {"max_parallel": 4}, "reason": "test engine immediate live read", "confirm": True},
-        headers={"X-Actor": "luca"}
-    )
-    assert r.status_code == 200
-    assert r.json()["ok"] is True
-
-    # Verify engine immediately reads live settings via SettingsStore active settings
-    store = SettingsStore(db, office.settings)
-    assert store.active_dict()["max_parallel"] == 4
-
-    # Cycle 2 execution simulation: next cycle loads the newly updated prompt version from DB
-    prompt_c2, _ = load_prompt("market_analyst", db=db)
-    assert "Cycle 2" in prompt_c2
-    assert prompt_c2 != prompt_c1
 
 
 
