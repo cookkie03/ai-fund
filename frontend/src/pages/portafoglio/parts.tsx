@@ -1,5 +1,9 @@
 import { CircleAlert, CircleCheck, CircleX, Info, Plug } from "lucide-react";
+import { motion } from "motion/react";
+import { barTransition } from "@/lib/motion";
 import type { ReactNode } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { LimitName, LimitStatus, Sourced } from "@/features/portfolio/types";
 import { fmtMoney, fmtPct, toNum } from "@/lib/format";
@@ -70,17 +74,18 @@ export const STATUS_WORD: Record<LimitStatus, string> = { ok: "Entro", near: "Vi
 export function StatusWord({ status, className, compact = false }: { status: LimitStatus; className?: string; compact?: boolean }) {
   const Icon = status === "breach" ? CircleX : status === "near" ? CircleAlert : CircleCheck;
   return (
-    <span
+    <Badge
+      variant="outline"
       className={cn(
-        "inline-flex h-5 items-center gap-1 whitespace-nowrap rounded-tag px-1.5 text-2xs font-medium",
-        status === "breach" ? "bg-down-soft text-down" : status === "near" ? "bg-warn-soft text-warn" : "text-fg-subtle",
+        "h-5 gap-1 whitespace-nowrap rounded-tag px-1.5 text-2xs font-medium border-transparent",
+        status === "breach" ? "bg-down-soft text-down" : status === "near" ? "bg-warn-soft text-warn" : "text-fg-subtle bg-transparent",
         compact && status === "ok" && "px-0",
         className,
       )}
     >
       <Icon className="size-3" strokeWidth={2} aria-hidden />
       {STATUS_WORD[status]}
-    </span>
+    </Badge>
   );
 }
 
@@ -117,11 +122,14 @@ export function LimitBar({
   const t = limit !== null && scale > 0 ? Math.min(100, (limit / scale) * 100) : null;
   return (
     <span className={cn("relative block w-full", className)} role="img" aria-label={label}>
-      <span className="block overflow-hidden rounded-tag bg-[oklch(0_0_0/0.32)]" style={{ height }}>
-        <span
+      <span className="block overflow-hidden rounded-tag bg-muted/60" style={{ height }}>
+        <motion.span
+          initial={{ scaleX: 0, originX: 0 }}
+          animate={{ scaleX: 1, originX: 0 }}
+          transition={barTransition}
           className={cn(
-            "bar-grow block h-full rounded-tag",
-            status === "breach" ? "bg-down" : status === "near" ? "bg-warn" : min ? "bg-fg-subtle" : "bg-[oklch(0.62_0.012_255)]",
+            "block h-full rounded-tag",
+            status === "breach" ? "bg-down" : status === "near" ? "bg-warn" : min ? "bg-fg-subtle" : "bg-fg-muted",
           )}
           style={{ width: `${w}%` }}
         />
@@ -147,8 +155,8 @@ export function SourceNote({ sourced, className }: { sourced: Sourced<unknown> |
 /** A region with nothing honest to show yet: names the endpoint it waits for. */
 export function Unavailable({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn("flex items-start gap-2.5 rounded-control bg-[oklch(0_0_0/0.18)] px-3.5 py-3 text-xs leading-relaxed text-fg-muted", className)}>
-      <Plug className="mt-0.5 size-3.5 shrink-0 text-fg-subtle" aria-hidden />
+    <div className={cn("flex items-start gap-2.5 rounded-control border border-border/50 bg-muted/40 px-3.5 py-3 text-xs leading-relaxed text-muted-foreground", className)}>
+      <Plug className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
       <div>{children}</div>
     </div>
   );
@@ -166,7 +174,7 @@ export function Bones({ rows = 3, className }: { rows?: number; className?: stri
   return (
     <div className={cn("space-y-2", className)} aria-busy aria-label="Caricamento">
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="h-6 animate-pulse rounded-item bg-hover" style={{ width: `${92 - i * 9}%` }} />
+        <Skeleton key={i} className="h-6 rounded-item bg-hover" style={{ width: `${92 - i * 9}%` }} />
       ))}
     </div>
   );
@@ -184,7 +192,7 @@ export function Metric({ label, value, foot, hint, valueClass, className }: { la
   if (!hint) return body;
   return (
     <Tooltip>
-      <TooltipTrigger asChild>{body}</TooltipTrigger>
+      <TooltipTrigger render={body} />
       <TooltipContent className="max-w-64">{hint}</TooltipContent>
     </Tooltip>
   );

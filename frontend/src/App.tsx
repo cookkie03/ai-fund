@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { MotionConfig } from "motion/react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { RuntimeProvider } from "@/lib/runtime/provider";
@@ -21,7 +22,8 @@ export function App() {
     <RuntimeProvider>
       <ShellStateProvider>
         <TooltipProvider>
-          <BrowserRouter>
+          <MotionConfig reducedMotion="user">
+            <BrowserRouter>
             <AppShell>
               <Routes>
                 {/* Home is the Assistente; until it is built the cockpit opens on the Terminale. */}
@@ -67,8 +69,9 @@ export function App() {
                 <Route path="*" element={<Navigate to="/terminale" replace />} />
               </Routes>
             </AppShell>
-          </BrowserRouter>
+            </BrowserRouter>
             <Toaster position="bottom-right" />
+          </MotionConfig>
         </TooltipProvider>
       </ShellStateProvider>
     </RuntimeProvider>

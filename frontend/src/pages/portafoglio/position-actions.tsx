@@ -2,9 +2,11 @@ import { Check, MessageSquareText, MoreHorizontal, Plug, ShieldCheck, ShieldX, S
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AuthorChip } from "@/components/author-chip";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { isCommandMissing } from "@/features/portfolio/api";
 import { commandErrorText, useClosePosition, useModifyExit } from "@/features/portfolio/hooks";
 import type { ClosePreview, ExitPreview, GateOutcome, PortfolioPosition } from "@/features/portfolio/types";
@@ -32,27 +34,34 @@ export function RowActions({ p, onAction }: { p: PortfolioPosition; onAction: (k
   const block = useCapitalBlock();
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-xs" aria-label={`Azioni su ${p.ticker}`} className="text-fg-subtle data-[state=open]:bg-hover data-[state=open]:text-fg">
-          <MoreHorizontal />
-        </Button>
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger
+        render={
+          <Button variant="ghost" size="icon-xs" aria-label={`Azioni su ${p.ticker}`} className="text-fg-subtle data-[state=open]:bg-hover data-[state=open]:text-fg">
+            <MoreHorizontal />
+          </Button>
+        }
+      />
       <DropdownMenuContent align="end" className="w-60">
-        <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">{p.ticker}{block ? ` · ${block}: azioni di capitale sospese` : ""}</DropdownMenuLabel>
-        <DropdownMenuItem disabled={!!block} onSelect={() => onAction("close", p)}>
-          <SquareMinus /> Chiudi o riduci…
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={!!block} onSelect={() => onAction("exit", p)}>
-          <SlidersHorizontal /> Modifica stop e target…
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        {ASK_AGENTS.map((a) => (
-          <DropdownMenuItem key={a} asChild>
-            <Link to={askHref(a, p.ticker)}>
-              <AuthorChip actor={a} size="xs" /> Chiedi a {a === "portfolio_manager" ? "Portfolio Manager" : "Risk Analyst"}
-            </Link>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">{p.ticker}{block ? ` · ${block}: azioni di capitale sospese` : ""}</DropdownMenuLabel>
+          <DropdownMenuItem disabled={!!block} onClick={() => onAction("close", p)}>
+            <SquareMinus /> Chiudi o riduci…
           </DropdownMenuItem>
-        ))}
+          <DropdownMenuItem disabled={!!block} onClick={() => onAction("exit", p)}>
+            <SlidersHorizontal /> Modifica stop e target…
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          {ASK_AGENTS.map((a) => (
+            <DropdownMenuItem
+              key={a}
+              render={
+                <Link to={askHref(a, p.ticker)}>
+                  <AuthorChip actor={a} size="xs" /> Chiedi a {a === "portfolio_manager" ? "Portfolio Manager" : "Risk Analyst"}
+                </Link>
+              }
+            />
+          ))}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -69,21 +78,22 @@ function Field({ label, children, hint }: { label: string; children: ReactNode; 
 }
 
 const inputCls =
-  "num h-8 w-full rounded-control border border-line-strong bg-ground px-2.5 text-sm text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-accent-c disabled:opacity-50";
+  "num h-8 w-full rounded-control border-line-strong bg-ground px-2.5 text-sm text-fg outline-none transition-colors placeholder:text-fg-subtle focus-visible:border-accent-c focus-visible:ring-1 focus-visible:ring-accent-c/40 disabled:opacity-50";
 
 function GateBox({ gate, refusal }: { gate: GateOutcome | null; refusal: string[] | null }) {
   if (refusal) {
     return (
-      <div role="alert" className="rounded-control border border-[oklch(0.67_0.195_20/0.4)] bg-down-soft px-3 py-2.5 text-xs">
-        <p className="flex items-center gap-1.5 font-medium text-down">
-          <ShieldX className="size-3.5" /> Rifiutato dal Runtime
-        </p>
-        <ul className="mt-1 list-disc space-y-0.5 pl-5 text-fg">
-          {(refusal.length ? refusal : ["Nessuna ragione indicata"]).map((r) => (
-            <li key={r}>{r}</li>
-          ))}
-        </ul>
-      </div>
+      <Alert variant="destructive">
+        <ShieldX className="size-4" />
+        <AlertTitle>Rifiutato dal Runtime</AlertTitle>
+        <AlertDescription>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-fg">
+            {(refusal.length ? refusal : ["Nessuna ragione indicata"]).map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+        </AlertDescription>
+      </Alert>
     );
   }
   if (!gate) return null;
@@ -92,25 +102,26 @@ function GateBox({ gate, refusal }: { gate: GateOutcome | null; refusal: string[
       <ShieldCheck className="size-3.5 text-up" /> Il Risk Gate accetta l'anteprima. Ricontrolla tutto all'invio.
     </p>
   ) : (
-    <div className="rounded-control border border-[oklch(0.67_0.195_20/0.4)] bg-down-soft px-3 py-2.5 text-xs">
-      <p className="flex items-center gap-1.5 font-medium text-down">
-        <ShieldX className="size-3.5" /> Il Risk Gate lo rifiuterebbe
-      </p>
-      <ul className="mt-1 list-disc space-y-0.5 pl-5 text-fg">
-        {(gate.reasons.length ? gate.reasons : ["Nessuna ragione indicata"]).map((r) => (
-          <li key={r}>{r}</li>
-        ))}
-      </ul>
-    </div>
+    <Alert variant="destructive">
+      <ShieldX className="size-4" />
+      <AlertTitle>Il Risk Gate lo rifiuterebbe</AlertTitle>
+      <AlertDescription>
+        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-fg">
+          {(gate.reasons.length ? gate.reasons : ["Nessuna ragione indicata"]).map((r) => (
+            <li key={r}>{r}</li>
+          ))}
+        </ul>
+      </AlertDescription>
+    </Alert>
   );
 }
 
 function Missing({ name }: { name: string }) {
   return (
-    <div className="flex items-start gap-2 rounded-control bg-[oklch(0_0_0/0.2)] px-3 py-2.5 text-xs leading-relaxed text-fg-muted">
-      <Plug className="mt-0.5 size-3.5 shrink-0 text-fg-subtle" aria-hidden />
+    <div className="flex items-start gap-2 rounded-control border border-border bg-muted/40 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+      <Plug className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
       <span>
-        Il Runtime non espone ancora <span className="num text-fg">{name}</span>: anteprima e invio arrivano con il backend del Portafoglio. Nel frattempo puoi chiedere al PM di farlo.
+        Il Runtime non espone ancora <span className="num text-foreground">{name}</span>: anteprima e invio arrivano con il backend del Portafoglio. Nel frattempo puoi chiedere al PM di farlo.
       </span>
     </div>
   );
@@ -118,11 +129,11 @@ function Missing({ name }: { name: string }) {
 
 function PreviewGrid({ items }: { items: [string, ReactNode, string?][] }) {
   return (
-    <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-control bg-line sm:grid-cols-4">
+    <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-control bg-border sm:grid-cols-4">
       {items.map(([k, v, cls]) => (
-        <div key={k} className="bg-[oklch(0.215_0.008_260)] px-3 py-2">
-          <dt className="text-2xs text-fg-subtle">{k}</dt>
-          <dd className={cn("num mt-0.5 text-[13px] text-fg", cls)}>{v}</dd>
+        <div key={k} className="bg-card px-3 py-2">
+          <dt className="text-2xs text-muted-foreground">{k}</dt>
+          <dd className={cn("num mt-0.5 text-[13px] text-foreground", cls)}>{v}</dd>
         </div>
       ))}
     </dl>
@@ -236,14 +247,14 @@ export function CloseDialog({ p, onClose }: { p: PortfolioPosition; onClose: () 
                     </span>
                   }
                 >
-                  <input inputMode="numeric" value={qtyText} onChange={(e) => setQtyText(e.target.value)} aria-invalid={!qtyValid} className={cn(inputCls, !qtyValid && "border-down")} />
+                  <Input inputMode="numeric" value={qtyText} onChange={(e) => setQtyText(e.target.value)} aria-invalid={!qtyValid} className={cn(inputCls, !qtyValid && "border-down")} />
                 </Field>
               ) : (
                 <span />
               )}
               {type === "limit" && (
                 <Field label="Prezzo limite">
-                  <input inputMode="decimal" value={limitText} onChange={(e) => setLimitText(e.target.value)} aria-invalid={!limitValid} className={cn(inputCls, !limitValid && "border-down")} />
+                  <Input inputMode="decimal" value={limitText} onChange={(e) => setLimitText(e.target.value)} aria-invalid={!limitValid} className={cn(inputCls, !limitValid && "border-down")} />
                 </Field>
               )}
             </div>
@@ -346,10 +357,10 @@ export function ExitDialog({ p, equity, onClose }: { p: PortfolioPosition; equit
               label={`Stop (ora ${fmtPrice(p.stop_price)})`}
               hint={stopChanged ? <span className={loosens ? "text-warn" : "text-fg-muted"}>{loosens ? "Allarga lo stop: più rischio" : "Stringe lo stop"}</span> : undefined}
             >
-              <input inputMode="decimal" value={stopText} onChange={(e) => setStopText(e.target.value)} className={cn(inputCls, "text-down", px !== null && stop !== null && stop >= px && "border-down")} />
+              <Input inputMode="decimal" value={stopText} onChange={(e) => setStopText(e.target.value)} className={cn(inputCls, "text-down", px !== null && stop !== null && stop >= px && "border-down")} />
             </Field>
             <Field label={`Target (ora ${fmtPrice(p.target_price)})`}>
-              <input inputMode="decimal" value={targetText} onChange={(e) => setTargetText(e.target.value)} className={cn(inputCls, "text-up", px !== null && target !== null && target <= px && "border-down")} />
+              <Input inputMode="decimal" value={targetText} onChange={(e) => setTargetText(e.target.value)} className={cn(inputCls, "text-up", px !== null && target !== null && target <= px && "border-down")} />
             </Field>
           </div>
           {!valid && <p className="text-xs text-down">Lo stop va sotto il prezzo corrente e il target sopra.</p>}
@@ -391,11 +402,16 @@ export function AskLinks({ ticker, className }: { ticker: string; className?: st
   return (
     <div className={cn("flex flex-wrap gap-1.5", className)}>
       {ASK_AGENTS.map((a) => (
-        <Button key={a} asChild variant="outline" size="sm">
-          <Link to={askHref(a, ticker)}>
-            <MessageSquareText /> Chiedi a {a === "portfolio_manager" ? "PM" : "Risk Analyst"}
-          </Link>
-        </Button>
+        <Button
+          key={a}
+          variant="outline"
+          size="sm"
+          render={
+            <Link to={askHref(a, ticker)}>
+              <MessageSquareText /> Chiedi a {a === "portfolio_manager" ? "PM" : "Risk Analyst"}
+            </Link>
+          }
+        />
       ))}
     </div>
   );

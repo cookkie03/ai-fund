@@ -2,7 +2,9 @@ import { Check, ChevronsUpDown, MessagesSquare, OctagonPause, PanelBottom, Panel
 import { useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { IconButton } from "@/components/tile";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { fmtMoney, fmtPct, parseTs } from "@/lib/format";
 import { marketSession } from "@/lib/market";
@@ -35,18 +37,20 @@ function AccountSwitcher() {
         <ChevronsUpDown className="size-3.5 shrink-0 text-fg-subtle" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
-        <DropdownMenuLabel className="text-xs font-normal text-fg-subtle">Un Runtime per account broker</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {targets.map((t) => (
-          <DropdownMenuItem key={t.id} onSelect={() => selectTarget(t.id)} className="gap-2">
-            <Check className={cn("size-4", t.id === target.id ? "opacity-100" : "opacity-0")} />
-            <span className="truncate">{t.id === target.id ? label : (t.label ?? t.id)}</span>
-            <span className="ml-auto truncate text-xs text-fg-subtle">{t.url || "locale"}</span>
-          </DropdownMenuItem>
-        ))}
-        {targets.length === 1 && (
-          <p className="px-2 pb-1.5 pt-1 text-xs leading-relaxed text-fg-subtle">Altri account: aggiungili in VITE_COCKPIT_RUNTIMES.</p>
-        )}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="text-xs font-normal text-fg-subtle">Un Runtime per account broker</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {targets.map((t) => (
+            <DropdownMenuItem key={t.id} onClick={() => selectTarget(t.id)} className="gap-2">
+              <Check className={cn("size-4", t.id === target.id ? "opacity-100" : "opacity-0")} />
+              <span className="truncate">{t.id === target.id ? label : (t.label ?? t.id)}</span>
+              <span className="ml-auto truncate text-xs text-fg-subtle">{t.url || "locale"}</span>
+            </DropdownMenuItem>
+          ))}
+          {targets.length === 1 && (
+            <p className="px-2 pb-1.5 pt-1 text-xs leading-relaxed text-fg-subtle">Altri account: aggiungili in VITE_COCKPIT_RUNTIMES.</p>
+          )}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -118,7 +122,7 @@ function HaltControl() {
           variant="outline"
           onClick={() => setOpen(true)}
           disabled={!writable}
-          className="border-[oklch(0.67_0.195_20/0.5)] text-down hover:border-down hover:bg-down-soft hover:text-down"
+          className="border-destructive/40 text-destructive hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
         >
           <OctagonPause className="size-3.5" /> Halt
         </Button>
@@ -135,7 +139,7 @@ function HaltControl() {
           </AlertDialogHeader>
           {!halted && (
             <label className="flex cursor-pointer items-start gap-2.5 rounded-control border border-line px-3 py-2.5 text-sm">
-              <input type="checkbox" checked={cancelOpen} onChange={(e) => setCancelOpen(e.target.checked)} className="mt-0.5 accent-[var(--down)]" />
+              <Checkbox checked={cancelOpen} onCheckedChange={(c) => setCancelOpen(!!c)} className="mt-0.5" />
               <span>
                 Annulla anche gli ordini aperti
                 <span className="block text-xs text-fg-subtle">Inviati, in coda o aperti presso il broker.</span>
@@ -146,7 +150,7 @@ function HaltControl() {
             <AlertDialogCancel>Annulla</AlertDialogCancel>
             <AlertDialogAction
               disabled={busy}
-              className={halted ? "" : "bg-[oklch(0.56_0.19_22)] text-white hover:bg-[oklch(0.6_0.19_22)]"}
+              className={halted ? "" : "bg-destructive text-white hover:bg-destructive/90"}
               onClick={(e) => {
                 e.preventDefault();
                 const done = { onSuccess: () => setOpen(false) };
@@ -221,9 +225,9 @@ export function TopBar() {
       </div>
       <MarketClock />
       {halted && (
-        <span className="ml-2 inline-flex items-center gap-1.5 rounded-tag px-2 py-0.5 text-xs font-semibold text-[oklch(0.86_0.08_25)]">
+        <Badge variant="destructive" className="ml-2 gap-1.5 font-semibold">
           <OctagonPause className="size-3.5" /> Halt attivo
-        </span>
+        </Badge>
       )}
       <div className="ml-auto flex items-center gap-3">
         <EquityReadout />

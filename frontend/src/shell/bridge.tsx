@@ -3,6 +3,7 @@ import { ArrowUp, AtSign, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { AuthorChip } from "@/components/author-chip";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { AGENTS, AGENT_IDS, author } from "@/lib/authors";
 import { fmtWhen, parseTs } from "@/lib/format";
 import { useCommand } from "@/lib/runtime/hooks";
@@ -202,7 +203,7 @@ export function BridgePanel({ onClose, className }: { onClose?: () => void; clas
           </ul>
         )}
         <div className="rounded-control border border-line-strong bg-ground focus-within:border-accent-c/70">
-          <textarea
+          <Textarea
             ref={inputRef}
             value={text}
             onChange={(e) => onChange(e.target.value)}
@@ -211,7 +212,7 @@ export function BridgePanel({ onClose, className }: { onClose?: () => void; clas
             placeholder={writable ? "@agente scrivi un messaggio…" : "Runtime irraggiungibile: invio sospeso"}
             disabled={!writable}
             aria-label="Messaggio a un agente"
-            className="block max-h-40 w-full resize-none bg-transparent px-2.5 pt-2 text-sm text-fg outline-none placeholder:text-fg-subtle disabled:cursor-not-allowed"
+            className="block max-h-40 min-h-16 w-full resize-none border-none bg-transparent px-2.5 pt-2 text-sm text-fg shadow-none outline-none focus-visible:ring-0 placeholder:text-fg-subtle disabled:cursor-not-allowed"
           />
           <div className="flex items-center gap-2 px-2 pb-1.5">
             {agent ? (
@@ -219,17 +220,19 @@ export function BridgePanel({ onClose, className }: { onClose?: () => void; clas
                 A <AuthorChip actor={agent} size="xs" label />
               </span>
             ) : (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="xs"
                 onClick={() => {
                   setText("@");
                   setMenu({ query: "", index: 0 });
                   inputRef.current?.focus();
                 }}
-                className="inline-flex h-6 items-center gap-1 rounded-item px-1 text-2xs text-fg-subtle hover:bg-hover hover:text-fg"
+                className="h-6 gap-1 px-1 text-2xs text-fg-subtle"
               >
                 <AtSign className="size-3.5" /> Scegli un agente
-              </button>
+              </Button>
             )}
             <Button size="icon-sm" className="ml-auto size-7" disabled={!canSend} onClick={send} aria-label="Invia">
               <ArrowUp />

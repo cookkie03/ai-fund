@@ -3,8 +3,13 @@ import { ChartNoAxesCombined, Eye, FileText, EyeOff, Minus, MousePointer2, MoveU
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AuthorChip } from "@/components/author-chip";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Card } from "@/components/ui/card";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuGroup, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChartView, type PriceMark } from "@/features/chart/chart-view";
 import {
@@ -40,21 +45,23 @@ const TOOL_ICON: Partial<Record<DrawingKind, typeof Slash>> = {
 function ToolButton({ label, active, onClick, children, disabled, shortcut }: { label: string; active?: boolean; onClick: () => void; children: ReactNode; disabled?: boolean; shortcut?: string }) {
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          aria-pressed={active}
-          onClick={onClick}
-          disabled={disabled}
-          className={cn(
-            "grid size-6 place-items-center rounded-item transition-[background-color,color,transform] duration-150 active:scale-[0.92] disabled:opacity-35",
-            active ? "bg-raised text-fg shadow-[0_1px_2px_oklch(0_0_0/0.45),inset_0_0.5px_0_oklch(1_0_0/0.08)]" : "text-fg-subtle hover:text-fg",
-          )}
-        >
-          {children}
-        </button>
-      </TooltipTrigger>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label={label}
+            aria-pressed={active}
+            onClick={onClick}
+            disabled={disabled}
+            className={cn(
+              "grid size-6 place-items-center rounded-item transition-[background-color,color,transform] duration-150 active:scale-[0.92] disabled:opacity-35",
+              active ? "bg-raised text-fg shadow-[0_1px_2px_oklch(0_0_0/0.45),inset_0_0.5px_0_oklch(1_0_0/0.08)]" : "text-fg-subtle hover:text-fg",
+            )}
+          >
+            {children}
+          </button>
+        }
+      />
       <TooltipContent>
         {label}
         {shortcut && <kbd className="ml-2 rounded-tag bg-hover px-1 py-px font-sans text-2xs text-fg-subtle">{shortcut}</kbd>}
@@ -225,7 +232,7 @@ export function ChartPanel({
   const effectiveHidden = drawingsVisible ? hiddenAll : authors.map((a) => a.author.id);
 
   return (
-    <section id="chart" data-region="chart" aria-label="Grafico" className={cn("@container flex min-h-0 min-w-0 flex-1 flex-col bg-ground", className)}>
+    <Card id="chart" data-region="chart" aria-label="Grafico" className={cn("@container flex min-h-0 min-w-0 flex-1 flex-col rounded-none border-none bg-ground shadow-none p-0", className)}>
       {/* header: the instrument and its price lead, controls sit to the right */}
       <div data-region="chart-toolbar" className={cn("flex shrink-0 items-center gap-2 overflow-x-auto px-4", compact ? "h-14" : "h-[68px]")}>
         <div className="mr-3 flex min-w-0 shrink-0 flex-col justify-center">
@@ -250,40 +257,43 @@ export function ChartPanel({
               <span className={cn("leading-tight text-fg-faint", compact ? "text-[22px]" : "text-[30px]")}>—</span>
             )}
             {dayChange !== null && (
-              <span
+              <Badge
+                variant="outline"
                 data-role="change"
                 data-dir={dayChange >= 0 ? "up" : "down"}
-                className={cn("num -translate-y-1 rounded-tag px-1.5 py-0.5 text-xs font-semibold", dayChange >= 0 ? "bg-up-soft text-up" : "bg-down-soft text-down")}
+                className={cn("num -translate-y-1 rounded-tag px-1.5 py-0.5 text-xs font-semibold border-transparent", dayChange >= 0 ? "bg-up-soft text-up" : "bg-down-soft text-down")}
               >
                 {fmtPct(dayChange)}
-              </span>
+              </Badge>
             )}
           </span>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <div role="radiogroup" aria-label="Timeframe" className="seg">
+          <ToggleGroup type="single" value={timeframe} onValueChange={(value: string) => { if (value) setPrefs((p) => ({ ...p, timeframe: value })); }} aria-label="Timeframe" className="seg">
             {TIMEFRAMES.map((tf) => (
-              <button key={tf.id} role="radio" aria-checked={timeframe === tf.id} onClick={() => setPrefs((p) => ({ ...p, timeframe: tf.id }))} className="seg-item num px-2.5">
+              <ToggleGroupItem key={tf.id} value={tf.id} className="seg-item num px-2.5 data-pressed:bg-raised data-pressed:text-fg">
                 {tf.label}
-              </button>
+              </ToggleGroupItem>
             ))}
-          </div>
+          </ToggleGroup>
           <DropdownMenu>
             <DropdownMenuTrigger className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-xs font-medium text-fg-muted transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover data-[state=open]:text-fg">
               <ChartNoAxesCombined className="size-3.5" strokeWidth={1.75} /> <span className="sr-only @[52rem]:not-sr-only">Indicatori</span>
               <span className="num rounded-tag bg-hover px-1 text-[10px] leading-4 text-fg-subtle">{prefs.indicators.length}</span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">Calcolati dal Runtime, gli stessi valori che leggono gli agenti</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {INDICATORS.map((s) => (
-                <DropdownMenuCheckboxItem key={s.id} checked={prefs.indicators.includes(s.id)} onCheckedChange={() => toggleIndicator(s.id)} onSelect={(e) => e.preventDefault()} className="text-xs">
-                  <span className="flex flex-col">
-                    <span className="text-fg">{s.label}</span>
-                    <span className="text-2xs text-fg-subtle">{s.description}</span>
-                  </span>
-                </DropdownMenuCheckboxItem>
-              ))}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">Calcolati dal Runtime, gli stessi valori che leggono gli agenti</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {INDICATORS.map((s) => (
+                  <DropdownMenuCheckboxItem key={s.id} checked={prefs.indicators.includes(s.id)} onCheckedChange={() => toggleIndicator(s.id)} className="text-xs">
+                    <span className="flex flex-col">
+                      <span className="text-fg">{s.label}</span>
+                      <span className="text-2xs text-fg-subtle">{s.description}</span>
+                    </span>
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
           <div className={cn("seg", compact && "hidden")} role="toolbar" aria-label="Strumenti di disegno">
@@ -309,10 +319,10 @@ export function ChartPanel({
             </span>
           )}
           {symbol && bars.length > 0 && (freshness.state === "stale" || freshness.state === "down") && (
-            <span role="status" className="inline-flex h-6 items-center gap-1.5 rounded-item bg-warn-soft px-2 text-2xs text-warn">
+            <Badge variant="outline" role="status" className="h-6 gap-1.5 rounded-item bg-warn-soft px-2 text-2xs text-warn border-transparent">
               <span className="size-1.5 rounded-full bg-warn" style={{ animation: "status-pulse 1.6s ease-in-out infinite" }} aria-hidden />
               {freshness.age !== null && freshness.age >= 60_000 ? `Non in tempo reale · ${fmtAge(now - freshness.age, now)} fa` : "Non in tempo reale"}
-            </span>
+            </Badge>
           )}
         </div>
       </div>
@@ -381,22 +391,22 @@ export function ChartPanel({
           </Overlay>
         ) : barsQ.isPending ? (
           <div className="absolute inset-0 z-20 flex flex-col gap-3 bg-ground p-4" aria-busy aria-label="Caricamento del grafico">
-            <div className="h-3 w-72 animate-pulse rounded-item bg-hover" />
+            <Skeleton className="h-3 w-72 rounded-item bg-hover" />
             <div className="flex flex-1 items-end gap-[3px] opacity-60">
               {Array.from({ length: 64 }).map((_, i) => (
-                <div key={i} className="flex-1 animate-pulse rounded-[1px] bg-hover" style={{ height: `${30 + 40 * Math.abs(Math.sin(i * 0.37)) + 15 * Math.sin(i * 1.7)}%` }} />
+                <Skeleton key={i} className="flex-1 rounded-[1px] bg-hover" style={{ height: `${30 + 40 * Math.abs(Math.sin(i * 0.37)) + 15 * Math.sin(i * 1.7)}%` }} />
               ))}
             </div>
           </div>
         ) : barsQ.isError && !bars.length ? (
           <Overlay>
-            <div className="max-w-sm">
-              <p className="text-sm text-down">Barre non disponibili per {symbol}</p>
-              <p className="mt-1 text-xs text-fg-muted">{barsQ.error.message}</p>
+            <Alert variant="destructive" className="max-w-sm">
+              <AlertTitle>Barre non disponibili per {symbol}</AlertTitle>
+              <AlertDescription>{barsQ.error.message}</AlertDescription>
               <Button variant="outline" size="sm" className="mt-3" onClick={() => barsQ.refetch()}>
                 <RotateCw className="size-3.5" /> Riprova
               </Button>
-            </div>
+            </Alert>
           </Overlay>
         ) : !bars.length ? (
           <Overlay>
@@ -412,6 +422,6 @@ export function ChartPanel({
 
       </div>
       {upsert.isError && <span className="sr-only">Il disegno non è stato salvato</span>}
-    </section>
+    </Card>
   );
 }

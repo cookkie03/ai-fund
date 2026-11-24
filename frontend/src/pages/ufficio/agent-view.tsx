@@ -5,7 +5,7 @@ import { AuthorChip } from "@/components/author-chip";
 import { Gutter } from "@/components/gutter";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { COCKPIT_TOPIC, topicTitle } from "@/features/office/api";
 import { useChatTopics, useOfficeAgents, useToolCalls } from "@/features/office/hooks";
 import type { ChatTopic } from "@/features/office/types";
@@ -56,11 +56,13 @@ function ConversationHeader({ agent, topic, topics }: { agent: string; topic: st
       <div className="ml-auto flex shrink-0 items-center gap-1">
         {ticker && !tickerOf(agent) && (
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Link to={`/ticker/${ticker}`} aria-label={`Apri la scheda di ${ticker}`} className="inline-flex h-7 items-center gap-1.5 rounded-control px-2 text-xs font-medium text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/60">
-                <FileText className="size-3.5" strokeWidth={1.75} aria-hidden /> <span className="hidden xl:inline">Scheda</span>
-              </Link>
-            </TooltipTrigger>
+            <TooltipTrigger
+              render={
+                <Link to={`/ticker/${ticker}`} aria-label={`Apri la scheda di ${ticker}`} className="inline-flex h-7 items-center gap-1.5 rounded-control px-2 text-xs font-medium text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/60">
+                  <FileText className="size-3.5" strokeWidth={1.75} aria-hidden /> <span className="hidden xl:inline">Scheda</span>
+                </Link>
+              }
+            />
             <TooltipContent>Scheda di {ticker}</TooltipContent>
           </Tooltip>
         )}
@@ -86,7 +88,7 @@ function DossierStrip({ ticker }: { ticker: string }) {
   return (
     <Link
       to={`/ticker/${ticker}`}
-      className="group mx-1.5 mb-1 flex min-h-9 shrink-0 items-center gap-2.5 rounded-control bg-[oklch(0_0_0/0.22)] px-3 py-1.5 text-xs outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/60"
+      className="group mx-1.5 mb-1 flex min-h-9 shrink-0 items-center gap-2.5 rounded-control border border-border/50 bg-muted/50 px-3 py-1.5 text-xs outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/60"
     >
       <FileText className="size-3.5 shrink-0 text-fg-subtle" strokeWidth={1.75} aria-hidden />
       {q.isPending ? (
@@ -253,21 +255,23 @@ function MobileAgentView({ agent }: { agent: string }) {
             <ChevronDown className="size-4 shrink-0 text-fg-subtle" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-[min(340px,calc(100vw-16px))]">
-            <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">Chat di {author(agent).short}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {options.map((t) => (
-              <DropdownMenuItem key={t.topic} onSelect={() => navigate(`/ufficio/${agent}?chat=${encodeURIComponent(t.topic)}`, { replace: true })} className="items-start gap-2 py-2">
-                <TopicIcon topic={t.topic} className="mt-0.5 text-fg-subtle" />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className="truncate text-[13px] font-medium text-fg">{t.title}</span>
-                    <span className="num ml-auto text-2xs text-fg-subtle">{t.last_message ? fmtWhen(t.last_message.ts) : ""}</span>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">Chat di {author(agent).short}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {options.map((t) => (
+                <DropdownMenuItem key={t.topic} onClick={() => navigate(`/ufficio/${agent}?chat=${encodeURIComponent(t.topic)}`, { replace: true })} className="items-start gap-2 py-2">
+                  <TopicIcon topic={t.topic} className="mt-0.5 text-fg-subtle" />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="truncate text-[13px] font-medium text-fg">{t.title}</span>
+                      <span className="num ml-auto text-2xs text-fg-subtle">{t.last_message ? fmtWhen(t.last_message.ts) : ""}</span>
+                    </span>
+                    <span className="block truncate text-xs text-fg-subtle">{t.last_message?.text ?? "Nessun messaggio"}</span>
                   </span>
-                  <span className="block truncate text-xs text-fg-subtle">{t.last_message?.text ?? "Nessun messaggio"}</span>
-                </span>
-                <Check className={cn("mt-0.5 size-4", t.topic === topic ? "opacity-100" : "opacity-0")} />
-              </DropdownMenuItem>
-            ))}
+                  <Check className={cn("mt-0.5 size-4", t.topic === topic ? "opacity-100" : "opacity-0")} />
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

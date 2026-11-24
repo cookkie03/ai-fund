@@ -1,8 +1,10 @@
 import { ArrowDown, ArrowUp, ChevronRight, SlidersHorizontal, SquareMinus } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { AuthorChip } from "@/components/author-chip";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { PortfolioPosition, RiskLimitsRead, Sourced } from "@/features/portfolio/types";
 import { fmtPrice, fmtQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -32,11 +34,11 @@ function Th({ col, sort, onSort }: { col: (typeof COLS)[number]; sort: { key: So
   const active = col.key && sort.key === col.key;
   const Arrow = sort.dir === 1 ? ArrowUp : ArrowDown;
   return (
-    <th
+    <TableHead
       scope="col"
       aria-sort={active ? (sort.dir === 1 ? "ascending" : "descending") : undefined}
       title={col.hint}
-      className={cn("sticky top-0 z-[1] h-8 whitespace-nowrap bg-ground px-2.5 text-2xs font-medium text-fg-subtle", col.right ? "text-right" : "text-left")}
+      className={cn("sticky top-0 z-[1] h-8 whitespace-nowrap bg-ground px-2.5 text-2xs font-medium text-fg-subtle border-none", col.right ? "text-right" : "text-left")}
     >
       {col.key ? (
         <button type="button" onClick={() => onSort(col.key!)} className={cn("inline-flex items-center gap-1 rounded-tag hover:text-fg", active && "text-fg")}>
@@ -46,12 +48,12 @@ function Th({ col, sort, onSort }: { col: (typeof COLS)[number]; sort: { key: So
       ) : (
         col.label
       )}
-    </th>
+    </TableHead>
   );
 }
 
 function Td({ children, right, className }: { children?: ReactNode; right?: boolean; className?: string }) {
-  return <td className={cn("h-9 whitespace-nowrap px-2.5 text-xs transition-colors", right && "num text-right", className)}>{children}</td>;
+  return <TableCell className={cn("h-9 whitespace-nowrap px-2.5 text-xs transition-colors border-none", right && "num text-right", className)}>{children}</TableCell>;
 }
 
 function Agent({ actor }: { actor: string | null }) {
@@ -83,26 +85,26 @@ function PositionsTable({ rows, limits, onAction }: { rows: PortfolioPosition[];
     { value: 0, pnl: 0, risk: 0, w: 0, rf: 0 },
   );
   return (
-    <table className="tile-table w-full min-w-[1180px] border-separate border-spacing-0 px-1.5">
-      <thead>
-        <tr>
+    <Table className="tile-table w-full min-w-[1180px] border-separate border-spacing-0 px-1.5" containerClassName="overflow-x-auto">
+      <TableHeader>
+        <TableRow className="border-none hover:bg-transparent">
           {COLS.map((c) => (
             <Th key={c.label} col={c} sort={sort} onSort={onSort} />
           ))}
-          <th scope="col" className="sticky top-0 z-[1] h-8 w-10 bg-ground pr-2">
+          <TableHead scope="col" className="sticky top-0 z-[1] h-8 w-10 bg-ground pr-2 border-none">
             <span className="sr-only">Azioni</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {sorted.map((p) => {
           const wStatus = statusFor(p.weight, maxW);
           const rStatus = statusFor(p.open_risk_fraction, maxR);
           return (
-            <tr key={p.ticker} className="group hover:[&>td]:bg-hover">
+            <TableRow key={p.ticker} className="group border-none hover:[&>td]:bg-hover">
               <Td className="font-semibold text-fg">
                 {p.ticker}
-                {p.side === "short" && <span className="ml-1.5 text-2xs font-medium text-down">short</span>}
+                {p.side === "short" && <Badge variant="destructive" className="ml-1.5 h-4 px-1 text-[10px] leading-none uppercase">short</Badge>}
               </Td>
               <Td className="text-fg-muted">{p.sector ?? <span className="text-fg-subtle">—</span>}</Td>
               <Td right>{fmtQty(p.qty)}</Td>
@@ -135,25 +137,25 @@ function PositionsTable({ rows, limits, onAction }: { rows: PortfolioPosition[];
               <Td className="pr-2 text-right">
                 <RowActions p={p} onAction={onAction} />
               </Td>
-            </tr>
+            </TableRow>
           );
         })}
-      </tbody>
-      <tfoot>
-        <tr className="text-fg">
-          <td className="h-9 px-2.5 text-xs font-medium">Totale</td>
-          <td colSpan={4} />
-          <td className="num h-9 px-2.5 text-right text-xs font-medium">{fmtMoney(total.value, { decimals: 0 })}</td>
-          <td className="num h-9 px-2.5 text-right text-xs text-fg-muted">{fmtFrac(total.w, { decimals: 1 })}</td>
-          <td className={cn("num h-9 px-2.5 text-right text-xs font-medium", tone(total.pnl))}>{fmtMoney(total.pnl, { sign: true })}</td>
-          <td colSpan={3} />
-          <td className="num h-9 px-2.5 text-right text-xs">
+      </TableBody>
+      <TableFooter className="bg-transparent border-none">
+        <TableRow className="border-none text-fg hover:bg-transparent">
+          <TableCell className="h-9 px-2.5 text-xs font-medium border-none">Totale</TableCell>
+          <TableCell colSpan={4} className="border-none" />
+          <TableCell className="num h-9 px-2.5 text-right text-xs font-medium border-none">{fmtMoney(total.value, { decimals: 0 })}</TableCell>
+          <TableCell className="num h-9 px-2.5 text-right text-xs text-fg-muted border-none">{fmtFrac(total.w, { decimals: 1 })}</TableCell>
+          <TableCell className={cn("num h-9 px-2.5 text-right text-xs font-medium border-none", tone(total.pnl))}>{fmtMoney(total.pnl, { sign: true })}</TableCell>
+          <TableCell colSpan={3} className="border-none" />
+          <TableCell className="num h-9 px-2.5 text-right text-xs border-none">
             {fmtMoney(total.risk, { decimals: 0 })} <span className="text-2xs text-fg-subtle">{fmtFrac(total.rf)}</span>
-          </td>
-          <td colSpan={3} />
-        </tr>
-      </tfoot>
-    </table>
+          </TableCell>
+          <TableCell colSpan={3} className="border-none" />
+        </TableRow>
+      </TableFooter>
+    </Table>
   );
 }
 

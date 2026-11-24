@@ -1,8 +1,11 @@
 import { ListPlus } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "react";
 import { toast } from "sonner";
 import { AuthorChip } from "@/components/author-chip";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AGENT_IDS, author } from "@/lib/authors";
@@ -17,7 +20,7 @@ const TICKER = /^[A-Z][A-Z0-9.]{0,6}$/;
  * Assign a task to an agent on a ticker (`enqueue_task`). The agent picks it up on its next turn;
  * the Runtime may refuse it, and its reasons stay inside the form that caused them.
  */
-export function AssignTask({ agent: initialAgent, ticker: initialTicker, trigger, align = "end" }: { agent?: string; ticker?: string | null; trigger?: ReactNode; align?: "start" | "end" }) {
+export function AssignTask({ agent: initialAgent, ticker: initialTicker, trigger, align = "end" }: { agent?: string; ticker?: string | null; trigger?: ReactElement; align?: "start" | "end" }) {
   const { writable } = useShell();
   const [open, setOpen] = useState(false);
   const [agent, setAgent] = useState(initialAgent ?? "portfolio_manager");
@@ -66,22 +69,19 @@ export function AssignTask({ agent: initialAgent, ticker: initialTicker, trigger
   return (
     <Popover open={open} onOpenChange={setOpen}>
       {writable ? (
-        <PopoverTrigger asChild>{button}</PopoverTrigger>
+        <PopoverTrigger render={button} />
       ) : (
         <Tooltip>
-          <TooltipTrigger asChild>
-            <span tabIndex={0}>{button}</span>
-          </TooltipTrigger>
+          <TooltipTrigger
+            render={<span tabIndex={0}>{button}</span>}
+          />
           <TooltipContent>Runtime irraggiungibile: comandi sospesi</TooltipContent>
         </Tooltip>
       )}
       <PopoverContent
         align={align}
         className="w-[320px] p-0"
-        onOpenAutoFocus={(e) => {
-          e.preventDefault();
-          tickerRef.current?.focus();
-        }}
+        initialFocus={tickerRef}
       >
         <form onSubmit={submit} className="flex flex-col">
           <div className="px-4 pb-2 pt-3.5">
@@ -115,7 +115,7 @@ export function AssignTask({ agent: initialAgent, ticker: initialTicker, trigger
 
           <label className="block px-4 py-2">
             <span className="mb-1.5 block text-2xs text-fg-subtle">Ticker</span>
-            <input
+            <Input
               ref={tickerRef}
               value={ticker}
               onChange={(e) => setTicker(e.target.value.toUpperCase())}
@@ -123,31 +123,33 @@ export function AssignTask({ agent: initialAgent, ticker: initialTicker, trigger
               autoComplete="off"
               spellCheck={false}
               aria-invalid={ticker.length > 0 && !valid}
-              className="num h-8 w-full rounded-control border border-line-strong bg-ground px-2.5 text-sm uppercase text-fg outline-none placeholder:normal-case placeholder:text-fg-subtle focus:border-accent-c/70 aria-[invalid=true]:border-warn"
+              className="num h-8 w-full border-line-strong bg-ground px-2.5 text-sm uppercase text-fg outline-none placeholder:normal-case placeholder:text-fg-subtle focus-visible:border-accent-c/70 aria-[invalid=true]:border-warn"
             />
             {ticker.length > 0 && !valid && <span className="mt-1 block text-2xs text-warn">Un simbolo USA, per esempio AAPL o BRK.B.</span>}
           </label>
 
           <label className="block px-4 py-2">
             <span className="mb-1.5 block text-2xs text-fg-subtle">Cosa deve fare</span>
-            <textarea
+            <Textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
               placeholder="Rivedi i livelli dopo la trimestrale"
-              className="block w-full resize-none rounded-control border border-line-strong bg-ground px-2.5 py-2 text-sm text-fg outline-none placeholder:text-fg-subtle focus:border-accent-c/70"
+              className="block w-full resize-none border-line-strong bg-ground px-2.5 py-2 text-sm text-fg outline-none placeholder:text-fg-subtle focus-visible:border-accent-c/70"
             />
           </label>
 
           {refusal && (
-            <div role="alert" className="mx-4 mb-1 mt-1 rounded-item bg-warn-soft px-2.5 py-2 text-xs leading-4">
-              <p className="font-medium text-fg">Il Runtime ha rifiutato il task</p>
-              <ul className="mt-0.5 text-fg-muted">
-                {refusal.map((r) => (
-                  <li key={r}>{r}</li>
-                ))}
-              </ul>
-            </div>
+            <Alert variant="warning" className="mx-4 mb-1 mt-1 w-auto">
+              <AlertTitle>Il Runtime ha rifiutato il task</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-0.5">
+                  {refusal.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
           )}
 
           <div className="flex items-center justify-end gap-1.5 px-4 pb-3.5 pt-2">

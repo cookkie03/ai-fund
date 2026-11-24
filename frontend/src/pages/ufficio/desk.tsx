@@ -2,6 +2,7 @@ import { ChevronRight, FileText, History, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AuthorChip } from "@/components/author-chip";
+import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDossiers } from "@/features/dossier/hooks";
 import { DOSSIER_STATUS, fmtScore } from "@/features/dossier/labels";
@@ -127,12 +128,14 @@ function StaleTag({ n }: { n: number }) {
   if (!n) return null;
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="num inline-flex h-4 shrink-0 items-center gap-0.5 rounded-tag bg-warn-soft px-1 text-[10px] text-warn" aria-label={`${n} fatti vecchi`}>
-          <History className="size-2.5" strokeWidth={2} aria-hidden />
-          {n}
-        </span>
-      </TooltipTrigger>
+      <TooltipTrigger
+        render={
+          <span className="num inline-flex h-4 shrink-0 items-center gap-0.5 rounded-tag bg-warn-soft px-1 text-[10px] text-warn" aria-label={`${n} fatti vecchi`}>
+            <History className="size-2.5" strokeWidth={2} aria-hidden />
+            {n}
+          </span>
+        }
+      />
       <TooltipContent>{n === 1 ? "Un fatto della scheda è vecchio" : `${n} fatti della scheda sono vecchi`}: da rivedere al prossimo ciclo</TooltipContent>
     </Tooltip>
   );
@@ -141,15 +144,17 @@ function StaleTag({ n }: { n: number }) {
 function DossierLink({ ticker }: { ticker: string }) {
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <Link
-          to={`/ticker/${ticker}`}
-          aria-label={`Apri la scheda di ${ticker}`}
-          className="relative z-10 grid size-7 place-items-center rounded-item text-fg-subtle outline-none transition-colors hover:bg-raised hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/60"
-        >
-          <FileText className="size-[15px]" strokeWidth={1.75} />
-        </Link>
-      </TooltipTrigger>
+      <TooltipTrigger
+        render={
+          <Link
+            to={`/ticker/${ticker}`}
+            aria-label={`Apri la scheda di ${ticker}`}
+            className="relative z-10 grid size-7 place-items-center rounded-item text-fg-subtle outline-none transition-colors hover:bg-raised hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/60"
+          >
+            <FileText className="size-[15px]" strokeWidth={1.75} />
+          </Link>
+        }
+      />
       <TooltipContent>Scheda di {ticker}</TooltipContent>
     </Tooltip>
   );
@@ -266,13 +271,13 @@ export function TickerDesk({
       {rows.length > 10 && (
         <label className="relative ml-auto flex items-center">
           <Search className="pointer-events-none absolute left-2 size-3.5 text-fg-subtle" aria-hidden />
-          <input
+          <Input
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Filtra ticker"
             aria-label="Filtra ticker"
             spellCheck={false}
-            className="num h-7 w-32 rounded-control border border-line-strong bg-ground pl-7 pr-2 text-xs uppercase text-fg outline-none placeholder:normal-case placeholder:text-fg-subtle focus:border-accent-c/70"
+            className="num h-7 w-32 rounded-control border-line-strong bg-ground pl-7 pr-2 text-xs uppercase text-fg outline-none placeholder:normal-case placeholder:text-fg-subtle focus-visible:border-accent-c/70"
           />
         </label>
       )}

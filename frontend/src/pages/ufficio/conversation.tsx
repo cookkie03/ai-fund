@@ -1,7 +1,9 @@
 import { ArrowUp, Hash, MessageCircle } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { AuthorChip } from "@/components/author-chip";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { COCKPIT_TOPIC, topicTitle } from "@/features/office/api";
 import { useChat } from "@/features/office/hooks";
 import { author } from "@/lib/authors";
@@ -119,17 +121,19 @@ function Composer({ agent, topic }: { agent: string; topic: string }) {
   return (
     <div className="shrink-0 px-3 pb-3 pt-1">
       {refusal && (
-        <div role="alert" className="mb-2 rounded-item bg-warn-soft px-3 py-2 text-xs leading-4">
-          <p className="font-medium text-fg">Il Runtime non ha accettato il messaggio</p>
-          <ul className="mt-0.5 text-fg-muted">
-            {refusal.map((r) => (
-              <li key={r}>{r}</li>
-            ))}
-          </ul>
-        </div>
+        <Alert variant="warning" className="mb-2">
+          <AlertTitle>Il Runtime non ha accettato il messaggio</AlertTitle>
+          <AlertDescription>
+            <ul className="mt-0.5">
+              {refusal.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
       )}
-      <div className="rounded-control border border-line-strong bg-[oklch(0.205_0.008_260)] transition-colors focus-within:border-accent-c/70">
-        <textarea
+      <div className="rounded-control border border-line-strong bg-raised transition-colors focus-within:border-accent-c/70">
+        <Textarea
           ref={ref}
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -138,7 +142,7 @@ function Composer({ agent, topic }: { agent: string; topic: string }) {
           disabled={!writable}
           placeholder={writable ? `Scrivi a ${name} ${where}` : "Runtime irraggiungibile: invio sospeso"}
           aria-label={`Messaggio a ${author(agent).name}`}
-          className="block min-h-[44px] w-full resize-none bg-transparent px-3 pt-3 text-sm leading-5 text-fg outline-none placeholder:text-fg-subtle disabled:cursor-not-allowed"
+          className="block min-h-[44px] w-full resize-none border-none bg-transparent px-3 pt-3 text-sm leading-5 text-fg shadow-none outline-none focus-visible:ring-0 placeholder:text-fg-subtle disabled:cursor-not-allowed"
         />
         <div className="flex items-center gap-2 pb-2 pl-3 pr-2">
           <span className="min-w-0 truncate text-2xs text-fg-subtle">{name} lo pesa come il parere di un collega: può non essere d'accordo e dirti perché.</span>

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Gutter } from "@/components/gutter";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ChartDrawing } from "@/features/chart/chart-state";
 import { orderBucket } from "@/lib/orders";
 import { useOrders, useWatchlist } from "@/lib/runtime/hooks";
 import { useMediaQuery } from "@/lib/use-media-query";
-import { cn } from "@/lib/utils";
 import { PANEL_LIMITS, useShell } from "@/shell/shell-state";
 import { ActivityPanel } from "./activity-panel";
 import { ChartPanel } from "./chart-panel";
@@ -83,36 +84,33 @@ export function TerminalPage() {
             type="button"
             data-action="approve"
             onClick={() => setMobileTab("orders")}
-            className="mx-2 mt-2 flex h-10 shrink-0 items-center gap-2 rounded-control bg-warn-soft px-3 text-left text-xs transition-colors hover:bg-[oklch(0.82_0.14_78/0.2)]"
+            className="mx-2 mt-2 flex h-10 shrink-0 items-center gap-2 rounded-control bg-warn-soft px-3 text-left text-xs transition-colors hover:bg-warn-soft/80"
           >
-            <span className="size-1.5 rounded-full bg-warn" aria-hidden />
-            <span className="font-medium text-fg">
+            <Badge variant="outline" className="border-warn/40 text-warn bg-transparent gap-1.5 font-normal">
+              <span className="size-1.5 rounded-full bg-warn" aria-hidden />
               {pendingCount === 1 ? "1 ordine da approvare" : `${pendingCount} ordini da approvare`}
-            </span>
+            </Badge>
             <span className="ml-auto font-medium text-accent-c">Rivedi</span>
           </button>
         )}
-        <div role="tablist" aria-label="Sezioni del Terminale" className="sticky top-0 z-10 mx-2 mt-2 flex h-9 shrink-0 gap-0.5 rounded-control bg-ground p-0.5">
-          {MOBILE_TABS.map((t) => (
-            <button
-              key={t.id}
-              role="tab"
-              aria-selected={mobileTab === t.id}
-              onClick={() => setMobileTab(t.id)}
-              className={cn(
-                "flex-1 rounded-item text-xs font-medium transition-colors duration-150",
-                mobileTab === t.id ? "bg-hover text-fg" : "text-fg-subtle hover:text-fg",
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <div className="m-2 flex min-h-[50vh] flex-1 flex-col overflow-hidden rounded-tile bg-ground">
-          {mobileTab === "watchlist" && <Watchlist selected={selected} onSelect={select} className="flex-1" />}
-          {mobileTab === "activity" && activity({ className: "flex-1" })}
-          {mobileTab === "orders" && <OrdersDock selected={selected} onSelect={select} className="flex-1" />}
-        </div>
+        <Tabs value={mobileTab} onValueChange={(v) => setMobileTab(v as MobileTab)} className="contents">
+          <TabsList aria-label="Pannelli del Terminale" className="sticky top-0 z-10 mx-2 mt-2 h-9 w-auto shrink-0 bg-ground">
+            {MOBILE_TABS.map((t) => (
+              <TabsTrigger key={t.id} value={t.id} className="flex-1 text-xs">
+                {t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          <TabsContent value="watchlist" className="m-2 flex min-h-[50vh] flex-1 flex-col overflow-hidden rounded-tile bg-ground">
+            <Watchlist selected={selected} onSelect={select} className="flex-1" />
+          </TabsContent>
+          <TabsContent value="activity" className="m-2 flex min-h-[50vh] flex-1 flex-col overflow-hidden rounded-tile bg-ground">
+            {activity({ className: "flex-1" })}
+          </TabsContent>
+          <TabsContent value="orders" className="m-2 flex min-h-[50vh] flex-1 flex-col overflow-hidden rounded-tile bg-ground">
+            <OrdersDock selected={selected} onSelect={select} className="flex-1" />
+          </TabsContent>
+        </Tabs>
       </div>
     );
   }

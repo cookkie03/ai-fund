@@ -1,5 +1,13 @@
-import { NavLink } from "react-router-dom";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { NavLink, useLocation } from "react-router-dom";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { InboxButton } from "./inbox";
 import { NAV } from "./nav";
@@ -13,35 +21,49 @@ function Mark() {
   );
 }
 
-export function Rail() {
+export function AppSidebar() {
+  const { pathname } = useLocation();
+
   return (
-    <nav data-region="rail" aria-label="Pagine" className="hidden w-[56px] shrink-0 flex-col items-center gap-1 bg-desk pb-2.5 pt-2 md:flex">
-      <div className="mb-2 grid size-9 place-items-center" title="Cockpit">
-        <Mark />
-      </div>
-      {NAV.map((item) => (
-        <Tooltip key={item.path}>
-          <TooltipTrigger asChild>
-            <NavLink
-              to={item.path}
-              aria-label={item.label}
-              className={({ isActive }) =>
-                cn(
-                  "grid size-9 place-items-center rounded-control transition-[background-color,color,transform] duration-150 active:scale-[0.94]",
-                  isActive ? "bg-ground text-fg shadow-[inset_0_0.5px_0_oklch(1_0_0/0.06)]" : "text-fg-subtle hover:bg-hover hover:text-fg",
-                )
-              }
-            >
-              <item.icon className="size-[18px]" strokeWidth={1.75} />
-            </NavLink>
-          </TooltipTrigger>
-          <TooltipContent side="right">{item.label}</TooltipContent>
-        </Tooltip>
-      ))}
-      <div className="mt-auto">
+    <Sidebar collapsible="icon" className="border-r border-line bg-desk">
+      <SidebarHeader className="h-14 items-center justify-center p-2">
+        <div className="grid size-9 place-items-center" title="Cockpit">
+          <Mark />
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent className="px-2 py-1">
+        <SidebarMenu className="gap-1.5">
+          {NAV.map((item) => {
+            const isActive = pathname === item.path || (item.path !== "/" && pathname.startsWith(item.path));
+            return (
+              <SidebarMenuItem key={item.path}>
+                <SidebarMenuButton
+                  isActive={isActive}
+                  tooltip={item.label}
+                  className={cn(
+                    "flex items-center gap-3 rounded-control text-sm transition-[background-color,color,transform] duration-150 active:scale-[0.96]",
+                    isActive
+                      ? "bg-ground font-medium text-fg shadow-[inset_0_0.5px_0_oklch(1_0_0/0.06)]"
+                      : "text-fg-subtle hover:bg-hover hover:text-fg"
+                  )}
+                  render={
+                    <NavLink to={item.path} aria-label={item.label}>
+                      <item.icon className="size-[18px] shrink-0" strokeWidth={1.75} />
+                      <span className="truncate group-data-[collapsible=icon]:hidden">{item.label}</span>
+                    </NavLink>
+                  }
+                />
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+      </SidebarContent>
+
+      <SidebarFooter className="items-center p-2">
         <InboxButton />
-      </div>
-    </nav>
+      </SidebarFooter>
+    </Sidebar>
   );
 }
 

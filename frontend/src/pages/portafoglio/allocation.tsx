@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAllocation } from "@/features/portfolio/hooks";
 import type { AllocationRow } from "@/features/portfolio/types";
@@ -13,18 +14,20 @@ function Row({ label, row, scale, min = false, sub }: { label: string; row: Allo
   const tip = `${label}: ${fmtFrac(row.weight, { decimals: 1 })} · ${fmtMoney(row.value, { decimals: 0 })}${row.limit !== null ? ` · ${min ? "minimo" : "soglia"} ${fmtFrac(row.limit, { decimals: 0 })} · ${STATUS_WORD[status].toLowerCase()}` : ""}`;
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <li tabIndex={0} className="grid grid-cols-[5.5rem_1fr_3.25rem] items-center gap-3 rounded-item px-2.5 py-[7px] outline-none transition-colors duration-150 hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/60">
-          <span className="min-w-0">
-            <span className="block truncate text-xs font-medium text-fg">{label}</span>
-            {sub && <span className="num block truncate text-2xs text-fg-subtle">{sub}</span>}
-          </span>
-          <LimitBar value={row.weight} limit={row.limit} scale={scale} status={status} min={min} label={tip} />
-          <span className="text-right">
-            <span className={cn("num block text-xs", status === "breach" ? "text-down" : status === "near" ? "text-warn" : "text-fg")}>{fmtFrac(row.weight, { decimals: 1 })}</span>
-          </span>
-        </li>
-      </TooltipTrigger>
+      <TooltipTrigger
+        render={
+          <li tabIndex={0} className="grid grid-cols-[5.5rem_1fr_3.25rem] items-center gap-3 rounded-item px-2.5 py-[7px] outline-none transition-colors duration-150 hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/60">
+            <span className="min-w-0">
+              <span className="block truncate text-xs font-medium text-fg">{label}</span>
+              {sub && <span className="num block truncate text-2xs text-fg-subtle">{sub}</span>}
+            </span>
+            <LimitBar value={row.weight} limit={row.limit} scale={scale} status={status} min={min} label={tip} />
+            <span className="text-right">
+              <span className={cn("num block text-xs", status === "breach" ? "text-down" : status === "near" ? "text-warn" : "text-fg")}>{fmtFrac(row.weight, { decimals: 1 })}</span>
+            </span>
+          </li>
+        }
+      />
       <TooltipContent side="left">{tip}</TooltipContent>
     </Tooltip>
   );
@@ -50,7 +53,7 @@ export function AllocationTile({ className }: { className?: string }) {
   const cash = data?.cash;
 
   return (
-    <section aria-label="Allocazione" data-region="allocation" className={cn("flex min-w-0 flex-col rounded-tile bg-ground", className)}>
+    <Card aria-label="Allocazione" data-region="allocation" className={cn("flex min-w-0 flex-col rounded-tile border-line-strong/60 bg-ground p-0 shadow-sm", className)}>
       <TileTitle
         meta={limit !== null ? <span className="inline-flex items-center gap-1.5"><span aria-hidden className="inline-block h-2.5 w-[2px] rounded-full bg-fg" />soglia {fmtFrac(limit, { decimals: 0 })}</span> : undefined}
         end={
@@ -101,6 +104,6 @@ export function AllocationTile({ className }: { className?: string }) {
         )}
       </div>
       <SourceNote sourced={q.data} className="px-4 pb-3" />
-    </section>
+    </Card>
   );
 }

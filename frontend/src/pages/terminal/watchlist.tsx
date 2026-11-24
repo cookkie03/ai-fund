@@ -5,6 +5,8 @@ import { AuthorChip } from "@/components/author-chip";
 import { IconButton, TileHeader } from "@/components/tile";
 import { PANEL_SHORTCUT } from "@/shell/shell-state";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { author } from "@/lib/authors";
 import { fmtAge, fmtPct, fmtPrice, parseTs } from "@/lib/format";
@@ -86,26 +88,28 @@ function AddTicker({ existing, compact }: { existing: string[]; compact?: boolea
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button variant={compact ? "ghost" : "outline"} size="sm" disabled={!writable} aria-label="Aggiungi un ticker alla watchlist" className={compact ? "size-7 px-0" : ""}>
-          <Plus className="size-4" />
-          {!compact && "Aggiungi ticker"}
-        </Button>
-      </PopoverTrigger>
+      <PopoverTrigger
+        render={
+          <Button variant={compact ? "ghost" : "outline"} size="sm" disabled={!writable} aria-label="Aggiungi un ticker alla watchlist" className={compact ? "size-7 px-0" : ""}>
+            <Plus className="size-4" />
+            {!compact && "Aggiungi ticker"}
+          </Button>
+        }
+      />
       <PopoverContent align="start" className="w-72 border-line-strong bg-raised p-3">
         <form onSubmit={submit} className="space-y-2.5">
           <div>
             <label htmlFor="wl-ticker" className="text-xs text-fg-muted">
               Ticker
             </label>
-            <input
+            <Input
               id="wl-ticker"
               autoFocus
               value={ticker}
               onChange={(e) => setTicker(e.target.value)}
               placeholder="es. AMZN"
               autoComplete="off"
-              className="mt-1 h-8 w-full rounded-control border border-line-strong bg-ground px-2.5 text-sm uppercase text-fg outline-none placeholder:normal-case placeholder:text-fg-subtle focus:border-accent-c"
+              className="mt-1 h-8 w-full border-line-strong bg-ground px-2.5 text-sm uppercase text-fg outline-none placeholder:normal-case placeholder:text-fg-subtle focus-visible:border-accent-c"
             />
             {dup && <p className="mt-1 text-xs text-warn">{symbol} è già in watchlist.</p>}
           </div>
@@ -113,13 +117,13 @@ function AddTicker({ existing, compact }: { existing: string[]; compact?: boolea
             <label htmlFor="wl-note" className="text-xs text-fg-muted">
               Nota per gli agenti <span className="text-fg-subtle">(facoltativa)</span>
             </label>
-            <textarea
+            <Textarea
               id="wl-note"
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={2}
               placeholder="Perché seguirlo"
-              className="mt-1 w-full resize-none rounded-control border border-line-strong bg-ground px-2.5 py-1.5 text-sm text-fg outline-none placeholder:text-fg-subtle focus:border-accent-c"
+              className="mt-1 w-full resize-none border-line-strong bg-ground px-2.5 py-1.5 text-sm text-fg outline-none placeholder:text-fg-subtle focus-visible:border-accent-c"
             />
           </div>
           <p className="text-2xs leading-relaxed text-fg-subtle">Stesso comando degli agenti (add_watchlist): il ticker comparirà a tuo nome e lo vedranno al prossimo ciclo.</p>
@@ -144,17 +148,19 @@ function RemoveButton({ item, onDone }: { item: WatchlistItem; onDone?: () => vo
   const a = author(item.added_by);
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          disabled={!writable}
-          onClick={(e) => e.stopPropagation()}
-          aria-label={`Togli ${item.ticker} dalla watchlist`}
-          className="grid size-6 place-items-center rounded-item text-fg-subtle opacity-0 transition-opacity hover:bg-hover hover:text-down focus-visible:opacity-100 group-hover:opacity-100 group-data-[active=true]:opacity-100 disabled:hidden"
-        >
-          <X className="size-3.5" />
-        </button>
-      </PopoverTrigger>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            disabled={!writable}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Togli ${item.ticker} dalla watchlist`}
+            className="grid size-6 place-items-center rounded-item text-fg-subtle opacity-0 transition-opacity hover:bg-hover hover:text-down focus-visible:opacity-100 group-hover:opacity-100 group-data-[active=true]:opacity-100 disabled:hidden"
+          >
+            <X className="size-3.5" />
+          </button>
+        }
+      />
       <PopoverContent align="end" className="w-64 border-line-strong bg-raised p-3 text-xs" onClick={(e) => e.stopPropagation()}>
         <p className="text-sm text-fg">Togliere {item.ticker} dalla watchlist?</p>
         <p className="mt-1 leading-relaxed text-fg-muted">
