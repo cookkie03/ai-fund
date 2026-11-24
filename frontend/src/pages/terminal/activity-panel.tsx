@@ -90,11 +90,13 @@ function AgentsTab({ ticker }: { ticker: string }) {
         title="Decisione del PM"
         end={
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-6 px-1.5 text-2xs" disabled={!writable}>
-                <RefreshCw className="size-3" /> Chiedi analisi
-              </Button>
-            </DropdownMenuTrigger>
+            <DropdownMenuTrigger
+              render={
+                <Button variant="ghost" size="sm" className="h-6 px-1.5 text-2xs" disabled={!writable}>
+                  <RefreshCw className="size-3" /> Chiedi analisi
+                </Button>
+              }
+            />
             <DropdownMenuContent align="end" className="w-56 border-line-strong bg-raised">
               <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">Accoda un task su {ticker} (enqueue_task)</DropdownMenuLabel>
               <DropdownMenuSeparator />
@@ -153,16 +155,18 @@ function AgentsTab({ ticker }: { ticker: string }) {
                     </button>
                     {sug ? <Conviction s={sug} /> : <span className="text-2xs text-fg-subtle">solo analisi</span>}
                     <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => messageAgent(id, `[${ticker}]`)}
-                          className="grid size-6 place-items-center rounded-item text-fg-subtle opacity-0 hover:bg-raised hover:text-fg focus-visible:opacity-100 group-hover:opacity-100"
-                          aria-label={`Scrivi a ${AGENTS[id]?.name ?? id}`}
-                        >
-                          <MessageSquarePlus className="size-3.5" />
-                        </button>
-                      </TooltipTrigger>
+                      <TooltipTrigger
+                        render={
+                          <button
+                            type="button"
+                            onClick={() => messageAgent(id, `[${ticker}]`)}
+                            className="grid size-6 place-items-center rounded-item text-fg-subtle opacity-0 hover:bg-raised hover:text-fg focus-visible:opacity-100 group-hover:opacity-100"
+                            aria-label={`Scrivi a ${AGENTS[id]?.name ?? id}`}
+                          >
+                            <MessageSquarePlus className="size-3.5" />
+                          </button>
+                        }
+                      />
                       <TooltipContent>Scrivi a {AGENTS[id]?.short ?? id}</TooltipContent>
                     </Tooltip>
                   </div>

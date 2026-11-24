@@ -116,14 +116,16 @@ export function DecideProposal({ proposal, trigger }: { proposal: DecidablePropo
   };
 
   const triggerEl = writable ? (
-    <DialogTrigger asChild>{trigger}</DialogTrigger>
+    <DialogTrigger render={<span className="inline-flex">{trigger}</span>} />
   ) : (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <span tabIndex={0} className="inline-flex">
-          {trigger}
-        </span>
-      </TooltipTrigger>
+      <TooltipTrigger
+        render={
+          <span tabIndex={0} className="inline-flex">
+            {trigger}
+          </span>
+        }
+      />
       <TooltipContent>Runtime irraggiungibile: comandi sospesi</TooltipContent>
     </Tooltip>
   );

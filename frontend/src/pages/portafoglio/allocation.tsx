@@ -13,18 +13,20 @@ function Row({ label, row, scale, min = false, sub }: { label: string; row: Allo
   const tip = `${label}: ${fmtFrac(row.weight, { decimals: 1 })} · ${fmtMoney(row.value, { decimals: 0 })}${row.limit !== null ? ` · ${min ? "minimo" : "soglia"} ${fmtFrac(row.limit, { decimals: 0 })} · ${STATUS_WORD[status].toLowerCase()}` : ""}`;
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <li tabIndex={0} className="grid grid-cols-[5.5rem_1fr_3.25rem] items-center gap-3 rounded-item px-2.5 py-[7px] outline-none transition-colors duration-150 hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/60">
-          <span className="min-w-0">
-            <span className="block truncate text-xs font-medium text-fg">{label}</span>
-            {sub && <span className="num block truncate text-2xs text-fg-subtle">{sub}</span>}
-          </span>
-          <LimitBar value={row.weight} limit={row.limit} scale={scale} status={status} min={min} label={tip} />
-          <span className="text-right">
-            <span className={cn("num block text-xs", status === "breach" ? "text-down" : status === "near" ? "text-warn" : "text-fg")}>{fmtFrac(row.weight, { decimals: 1 })}</span>
-          </span>
-        </li>
-      </TooltipTrigger>
+      <TooltipTrigger
+        render={
+          <li tabIndex={0} className="grid grid-cols-[5.5rem_1fr_3.25rem] items-center gap-3 rounded-item px-2.5 py-[7px] outline-none transition-colors duration-150 hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/60">
+            <span className="min-w-0">
+              <span className="block truncate text-xs font-medium text-fg">{label}</span>
+              {sub && <span className="num block truncate text-2xs text-fg-subtle">{sub}</span>}
+            </span>
+            <LimitBar value={row.weight} limit={row.limit} scale={scale} status={status} min={min} label={tip} />
+            <span className="text-right">
+              <span className={cn("num block text-xs", status === "breach" ? "text-down" : status === "near" ? "text-warn" : "text-fg")}>{fmtFrac(row.weight, { decimals: 1 })}</span>
+            </span>
+          </li>
+        }
+      />
       <TooltipContent side="left">{tip}</TooltipContent>
     </Tooltip>
   );

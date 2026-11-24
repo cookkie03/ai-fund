@@ -21,20 +21,22 @@ export function Rail() {
       </div>
       {NAV.map((item) => (
         <Tooltip key={item.path}>
-          <TooltipTrigger asChild>
-            <NavLink
-              to={item.path}
-              aria-label={item.label}
-              className={({ isActive }) =>
-                cn(
-                  "grid size-9 place-items-center rounded-control transition-[background-color,color,transform] duration-150 active:scale-[0.94]",
-                  isActive ? "bg-ground text-fg shadow-[inset_0_0.5px_0_oklch(1_0_0/0.06)]" : "text-fg-subtle hover:bg-hover hover:text-fg",
-                )
-              }
-            >
-              <item.icon className="size-[18px]" strokeWidth={1.75} />
-            </NavLink>
-          </TooltipTrigger>
+          <TooltipTrigger
+            render={
+              <NavLink
+                to={item.path}
+                aria-label={item.label}
+                className={({ isActive }) =>
+                  cn(
+                    "grid size-9 place-items-center rounded-control transition-[background-color,color,transform] duration-150 active:scale-[0.94]",
+                    isActive ? "bg-ground text-fg shadow-[inset_0_0.5px_0_oklch(1_0_0/0.06)]" : "text-fg-subtle hover:bg-hover hover:text-fg",
+                  )
+                }
+              >
+                <item.icon className="size-[18px]" strokeWidth={1.75} />
+              </NavLink>
+            }
+          />
           <TooltipContent side="right">{item.label}</TooltipContent>
         </Tooltip>
       ))}

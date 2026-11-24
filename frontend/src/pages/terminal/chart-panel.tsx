@@ -40,21 +40,23 @@ const TOOL_ICON: Partial<Record<DrawingKind, typeof Slash>> = {
 function ToolButton({ label, active, onClick, children, disabled, shortcut }: { label: string; active?: boolean; onClick: () => void; children: ReactNode; disabled?: boolean; shortcut?: string }) {
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          aria-pressed={active}
-          onClick={onClick}
-          disabled={disabled}
-          className={cn(
-            "grid size-6 place-items-center rounded-item transition-[background-color,color,transform] duration-150 active:scale-[0.92] disabled:opacity-35",
-            active ? "bg-raised text-fg shadow-[0_1px_2px_oklch(0_0_0/0.45),inset_0_0.5px_0_oklch(1_0_0/0.08)]" : "text-fg-subtle hover:text-fg",
-          )}
-        >
-          {children}
-        </button>
-      </TooltipTrigger>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label={label}
+            aria-pressed={active}
+            onClick={onClick}
+            disabled={disabled}
+            className={cn(
+              "grid size-6 place-items-center rounded-item transition-[background-color,color,transform] duration-150 active:scale-[0.92] disabled:opacity-35",
+              active ? "bg-raised text-fg shadow-[0_1px_2px_oklch(0_0_0/0.45),inset_0_0.5px_0_oklch(1_0_0/0.08)]" : "text-fg-subtle hover:text-fg",
+            )}
+          >
+            {children}
+          </button>
+        }
+      />
       <TooltipContent>
         {label}
         {shortcut && <kbd className="ml-2 rounded-tag bg-hover px-1 py-px font-sans text-2xs text-fg-subtle">{shortcut}</kbd>}

@@ -62,11 +62,13 @@ export function StatusMark({ agent, status, compact = false, className }: { agen
   if (compact) {
     return (
       <Tooltip>
-        <TooltipTrigger asChild>
-          <span className={cn("inline-grid size-4 place-items-center", className)} role="img" aria-label={label}>
-            {dot}
-          </span>
-        </TooltipTrigger>
+        <TooltipTrigger
+          render={
+            <span className={cn("inline-grid size-4 place-items-center", className)} role="img" aria-label={label}>
+              {dot}
+            </span>
+          }
+        />
         <TooltipContent>{label}</TooltipContent>
       </Tooltip>
     );
@@ -105,7 +107,7 @@ export function Meter({ label, value, hint, className }: { label: string; value:
   if (!hint) return body;
   return (
     <Tooltip>
-      <TooltipTrigger asChild>{body}</TooltipTrigger>
+      <TooltipTrigger render={body} />
       <TooltipContent>{hint}</TooltipContent>
     </Tooltip>
   );

@@ -2,9 +2,9 @@ import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import { officeFixtures } from "./dev/office-fixtures";
-import { portfolioFixtures } from "./dev/portfolio-fixtures";
-import { tickerFixtures } from "./dev/ticker-fixtures";
+import { officeFixtures } from "./dev/office-fixtures.ts";
+import { portfolioFixtures } from "./dev/portfolio-fixtures.ts";
+import { tickerFixtures } from "./dev/ticker-fixtures.ts";
 
 // The Runtime has no CORS: the browser reaches it through this same-origin proxy.
 const runtimeUrl = process.env.COCKPIT_RUNTIME_URL ?? "http://127.0.0.1:8766";
@@ -23,7 +23,7 @@ export default defineConfig({
   ],
   // Lets the page mark fixture figures as samples; always "" in a build.
   define: { "import.meta.env.VITE_PORTFOLIO_FIXTURES": JSON.stringify(process.env.COCKPIT_PORTFOLIO_FIXTURES === "1" ? "1" : "") },
-  resolve: { alias: { "@": path.resolve(__dirname, "src") } },
+  resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
   server: {
     host: "127.0.0.1",
     port,

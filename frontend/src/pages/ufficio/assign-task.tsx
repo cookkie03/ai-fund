@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { toast } from "sonner";
 import { AuthorChip } from "@/components/author-chip";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AGENT_IDS, author } from "@/lib/authors";
@@ -66,22 +68,19 @@ export function AssignTask({ agent: initialAgent, ticker: initialTicker, trigger
   return (
     <Popover open={open} onOpenChange={setOpen}>
       {writable ? (
-        <PopoverTrigger asChild>{button}</PopoverTrigger>
+        <PopoverTrigger render={<span className="inline-flex">{button}</span>} />
       ) : (
         <Tooltip>
-          <TooltipTrigger asChild>
-            <span tabIndex={0}>{button}</span>
-          </TooltipTrigger>
+          <TooltipTrigger
+            render={<span tabIndex={0}>{button}</span>}
+          />
           <TooltipContent>Runtime irraggiungibile: comandi sospesi</TooltipContent>
         </Tooltip>
       )}
       <PopoverContent
         align={align}
         className="w-[320px] p-0"
-        onOpenAutoFocus={(e) => {
-          e.preventDefault();
-          tickerRef.current?.focus();
-        }}
+        initialFocus={tickerRef}
       >
         <form onSubmit={submit} className="flex flex-col">
           <div className="px-4 pb-2 pt-3.5">
@@ -115,7 +114,7 @@ export function AssignTask({ agent: initialAgent, ticker: initialTicker, trigger
 
           <label className="block px-4 py-2">
             <span className="mb-1.5 block text-2xs text-fg-subtle">Ticker</span>
-            <input
+            <Input
               ref={tickerRef}
               value={ticker}
               onChange={(e) => setTicker(e.target.value.toUpperCase())}
@@ -123,19 +122,19 @@ export function AssignTask({ agent: initialAgent, ticker: initialTicker, trigger
               autoComplete="off"
               spellCheck={false}
               aria-invalid={ticker.length > 0 && !valid}
-              className="num h-8 w-full rounded-control border border-line-strong bg-ground px-2.5 text-sm uppercase text-fg outline-none placeholder:normal-case placeholder:text-fg-subtle focus:border-accent-c/70 aria-[invalid=true]:border-warn"
+              className="num h-8 w-full border-line-strong bg-ground px-2.5 text-sm uppercase text-fg outline-none placeholder:normal-case placeholder:text-fg-subtle focus-visible:border-accent-c/70 aria-[invalid=true]:border-warn"
             />
             {ticker.length > 0 && !valid && <span className="mt-1 block text-2xs text-warn">Un simbolo USA, per esempio AAPL o BRK.B.</span>}
           </label>
 
           <label className="block px-4 py-2">
             <span className="mb-1.5 block text-2xs text-fg-subtle">Cosa deve fare</span>
-            <textarea
+            <Textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
               placeholder="Rivedi i livelli dopo la trimestrale"
-              className="block w-full resize-none rounded-control border border-line-strong bg-ground px-2.5 py-2 text-sm text-fg outline-none placeholder:text-fg-subtle focus:border-accent-c/70"
+              className="block w-full resize-none border-line-strong bg-ground px-2.5 py-2 text-sm text-fg outline-none placeholder:text-fg-subtle focus-visible:border-accent-c/70"
             />
           </label>
 

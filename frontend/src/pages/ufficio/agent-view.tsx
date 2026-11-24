@@ -56,11 +56,13 @@ function ConversationHeader({ agent, topic, topics }: { agent: string; topic: st
       <div className="ml-auto flex shrink-0 items-center gap-1">
         {ticker && !tickerOf(agent) && (
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Link to={`/ticker/${ticker}`} aria-label={`Apri la scheda di ${ticker}`} className="inline-flex h-7 items-center gap-1.5 rounded-control px-2 text-xs font-medium text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/60">
-                <FileText className="size-3.5" strokeWidth={1.75} aria-hidden /> <span className="hidden xl:inline">Scheda</span>
-              </Link>
-            </TooltipTrigger>
+            <TooltipTrigger
+              render={
+                <Link to={`/ticker/${ticker}`} aria-label={`Apri la scheda di ${ticker}`} className="inline-flex h-7 items-center gap-1.5 rounded-control px-2 text-xs font-medium text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/60">
+                  <FileText className="size-3.5" strokeWidth={1.75} aria-hidden /> <span className="hidden xl:inline">Scheda</span>
+                </Link>
+              }
+            />
             <TooltipContent>Scheda di {ticker}</TooltipContent>
           </Tooltip>
         )}

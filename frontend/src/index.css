@@ -231,6 +231,7 @@
   }
   .seg-item[aria-checked="true"],
   .seg-item[aria-selected="true"],
+  .seg-item[data-active],
   .seg-item[data-state="active"] {
     background: var(--raised);
     color: var(--fg);

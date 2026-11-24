@@ -68,19 +68,21 @@ function Contribution({ rows, empty }: { rows: { key: string; label: ReactNode; 
         const tip = `${fmtMoney(r.pnl, { sign: true })} · ${fmtFrac(r.frac, { sign: true })} del rendimento${r.extra ? ` · ${r.extra}` : ""}`;
         return (
           <Tooltip key={r.key}>
-            <TooltipTrigger asChild>
-              <li tabIndex={0} className="grid grid-cols-[7rem_1fr_4.5rem] items-center gap-2.5 rounded-item px-2 py-1.5 outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/60">
-                <span className="min-w-0 truncate text-xs text-fg">{r.label}</span>
-                <span className="relative h-2" role="img" aria-label={tip}>
-                  <span aria-hidden className="absolute inset-y-[-3px] left-1/2 w-px bg-line-strong" />
-                  <span
-                    className={cn("bar-grow absolute inset-y-0 rounded-tag", r.pnl >= 0 ? "bg-up" : "bg-down")}
-                    style={r.pnl >= 0 ? { left: "50%", width: `${w}%` } : { right: "50%", width: `${w}%`, transformOrigin: "right" }}
-                  />
-                </span>
-                <span className={cn("num text-right text-xs", tone(r.pnl))}>{fmtMoney(r.pnl, { sign: true, decimals: 0 })}</span>
-              </li>
-            </TooltipTrigger>
+            <TooltipTrigger
+              render={
+                <li tabIndex={0} className="grid grid-cols-[7rem_1fr_4.5rem] items-center gap-2.5 rounded-item px-2 py-1.5 outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/60">
+                  <span className="min-w-0 truncate text-xs text-fg">{r.label}</span>
+                  <span className="relative h-2" role="img" aria-label={tip}>
+                    <span aria-hidden className="absolute inset-y-[-3px] left-1/2 w-px bg-line-strong" />
+                    <span
+                      className={cn("bar-grow absolute inset-y-0 rounded-tag", r.pnl >= 0 ? "bg-up" : "bg-down")}
+                      style={r.pnl >= 0 ? { left: "50%", width: `${w}%` } : { right: "50%", width: `${w}%`, transformOrigin: "right" }}
+                    />
+                  </span>
+                  <span className={cn("num text-right text-xs", tone(r.pnl))}>{fmtMoney(r.pnl, { sign: true, decimals: 0 })}</span>
+                </li>
+              }
+            />
             <TooltipContent side="left">{tip}</TooltipContent>
           </Tooltip>
         );

@@ -3,6 +3,7 @@ import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { AuthorChip } from "@/components/author-chip";
 import { PanelTab, PanelTabContent, PanelTabs, PanelTabsList } from "@/components/panel-tabs";
 import { IconButton } from "@/components/tile";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { fmtMoney, fmtPrice, fmtQty, fmtWhen, toNum } from "@/lib/format";
@@ -58,15 +59,19 @@ export function StatusBadge({ order }: { order: Order }) {
   const s = order.approval_status === "pending" && order.status === "pending" ? "pending" : order.status;
   const tone =
     s === "pending"
-      ? "text-warn bg-warn-soft"
+      ? "text-warn bg-warn-soft border-transparent"
       : s === "filled"
-        ? "text-up bg-up-soft"
+        ? "text-up bg-up-soft border-transparent"
         : s === "rejected"
-          ? "text-down bg-down-soft"
+          ? "text-down bg-down-soft border-transparent"
           : ["cancelled", "canceled", "expired"].includes(s)
-            ? "text-fg-subtle bg-hover"
-            : "text-accent-c bg-accent-soft";
-  return <span data-part="badge" className={cn("inline-flex h-5 items-center rounded-tag px-1.5 text-2xs font-medium", tone)}>{s === "pending" ? "Da approvare" : (STATUS_LABEL[s] ?? s)}</span>;
+            ? "text-fg-subtle bg-hover border-transparent"
+            : "text-accent-c bg-accent-soft border-transparent";
+  return (
+    <Badge variant="outline" className={cn("h-5 px-1.5 text-2xs font-medium rounded-tag", tone)}>
+      {s === "pending" ? "Da approvare" : (STATUS_LABEL[s] ?? s)}
+    </Badge>
+  );
 }
 
 function Empty({ children }: { children: ReactNode }) {

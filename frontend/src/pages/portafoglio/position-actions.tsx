@@ -32,11 +32,13 @@ export function RowActions({ p, onAction }: { p: PortfolioPosition; onAction: (k
   const block = useCapitalBlock();
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-xs" aria-label={`Azioni su ${p.ticker}`} className="text-fg-subtle data-[state=open]:bg-hover data-[state=open]:text-fg">
-          <MoreHorizontal />
-        </Button>
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger
+        render={
+          <Button variant="ghost" size="icon-xs" aria-label={`Azioni su ${p.ticker}`} className="text-fg-subtle data-[state=open]:bg-hover data-[state=open]:text-fg">
+            <MoreHorizontal />
+          </Button>
+        }
+      />
       <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">{p.ticker}{block ? ` · ${block}: azioni di capitale sospese` : ""}</DropdownMenuLabel>
         <DropdownMenuItem disabled={!!block} onSelect={() => onAction("close", p)}>
@@ -47,11 +49,14 @@ export function RowActions({ p, onAction }: { p: PortfolioPosition; onAction: (k
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         {ASK_AGENTS.map((a) => (
-          <DropdownMenuItem key={a} asChild>
-            <Link to={askHref(a, p.ticker)}>
-              <AuthorChip actor={a} size="xs" /> Chiedi a {a === "portfolio_manager" ? "Portfolio Manager" : "Risk Analyst"}
-            </Link>
-          </DropdownMenuItem>
+          <DropdownMenuItem
+            key={a}
+            render={
+              <Link to={askHref(a, p.ticker)}>
+                <AuthorChip actor={a} size="xs" /> Chiedi a {a === "portfolio_manager" ? "Portfolio Manager" : "Risk Analyst"}
+              </Link>
+            }
+          />
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -391,11 +396,16 @@ export function AskLinks({ ticker, className }: { ticker: string; className?: st
   return (
     <div className={cn("flex flex-wrap gap-1.5", className)}>
       {ASK_AGENTS.map((a) => (
-        <Button key={a} asChild variant="outline" size="sm">
-          <Link to={askHref(a, ticker)}>
-            <MessageSquareText /> Chiedi a {a === "portfolio_manager" ? "PM" : "Risk Analyst"}
-          </Link>
-        </Button>
+        <Button
+          key={a}
+          variant="outline"
+          size="sm"
+          render={
+            <Link to={askHref(a, ticker)}>
+              <MessageSquareText /> Chiedi a {a === "portfolio_manager" ? "PM" : "Risk Analyst"}
+            </Link>
+          }
+        />
       ))}
     </div>
   );

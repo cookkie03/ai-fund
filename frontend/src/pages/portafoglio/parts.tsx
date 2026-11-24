@@ -1,5 +1,6 @@
 import { CircleAlert, CircleCheck, CircleX, Info, Plug } from "lucide-react";
 import type { ReactNode } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { LimitName, LimitStatus, Sourced } from "@/features/portfolio/types";
 import { fmtMoney, fmtPct, toNum } from "@/lib/format";
@@ -70,17 +71,18 @@ export const STATUS_WORD: Record<LimitStatus, string> = { ok: "Entro", near: "Vi
 export function StatusWord({ status, className, compact = false }: { status: LimitStatus; className?: string; compact?: boolean }) {
   const Icon = status === "breach" ? CircleX : status === "near" ? CircleAlert : CircleCheck;
   return (
-    <span
+    <Badge
+      variant="outline"
       className={cn(
-        "inline-flex h-5 items-center gap-1 whitespace-nowrap rounded-tag px-1.5 text-2xs font-medium",
-        status === "breach" ? "bg-down-soft text-down" : status === "near" ? "bg-warn-soft text-warn" : "text-fg-subtle",
+        "h-5 gap-1 whitespace-nowrap rounded-tag px-1.5 text-2xs font-medium border-transparent",
+        status === "breach" ? "bg-down-soft text-down" : status === "near" ? "bg-warn-soft text-warn" : "text-fg-subtle bg-transparent",
         compact && status === "ok" && "px-0",
         className,
       )}
     >
       <Icon className="size-3" strokeWidth={2} aria-hidden />
       {STATUS_WORD[status]}
-    </span>
+    </Badge>
   );
 }
 
@@ -184,7 +186,7 @@ export function Metric({ label, value, foot, hint, valueClass, className }: { la
   if (!hint) return body;
   return (
     <Tooltip>
-      <TooltipTrigger asChild>{body}</TooltipTrigger>
+      <TooltipTrigger render={body} />
       <TooltipContent className="max-w-64">{hint}</TooltipContent>
     </Tooltip>
   );

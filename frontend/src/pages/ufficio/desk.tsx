@@ -127,12 +127,14 @@ function StaleTag({ n }: { n: number }) {
   if (!n) return null;
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="num inline-flex h-4 shrink-0 items-center gap-0.5 rounded-tag bg-warn-soft px-1 text-[10px] text-warn" aria-label={`${n} fatti vecchi`}>
-          <History className="size-2.5" strokeWidth={2} aria-hidden />
-          {n}
-        </span>
-      </TooltipTrigger>
+      <TooltipTrigger
+        render={
+          <span className="num inline-flex h-4 shrink-0 items-center gap-0.5 rounded-tag bg-warn-soft px-1 text-[10px] text-warn" aria-label={`${n} fatti vecchi`}>
+            <History className="size-2.5" strokeWidth={2} aria-hidden />
+            {n}
+          </span>
+        }
+      />
       <TooltipContent>{n === 1 ? "Un fatto della scheda è vecchio" : `${n} fatti della scheda sono vecchi`}: da rivedere al prossimo ciclo</TooltipContent>
     </Tooltip>
   );
@@ -141,15 +143,17 @@ function StaleTag({ n }: { n: number }) {
 function DossierLink({ ticker }: { ticker: string }) {
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <Link
-          to={`/ticker/${ticker}`}
-          aria-label={`Apri la scheda di ${ticker}`}
-          className="relative z-10 grid size-7 place-items-center rounded-item text-fg-subtle outline-none transition-colors hover:bg-raised hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/60"
-        >
-          <FileText className="size-[15px]" strokeWidth={1.75} />
-        </Link>
-      </TooltipTrigger>
+      <TooltipTrigger
+        render={
+          <Link
+            to={`/ticker/${ticker}`}
+            aria-label={`Apri la scheda di ${ticker}`}
+            className="relative z-10 grid size-7 place-items-center rounded-item text-fg-subtle outline-none transition-colors hover:bg-raised hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/60"
+          >
+            <FileText className="size-[15px]" strokeWidth={1.75} />
+          </Link>
+        }
+      />
       <TooltipContent>Scheda di {ticker}</TooltipContent>
     </Tooltip>
   );

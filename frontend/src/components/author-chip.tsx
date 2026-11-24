@@ -47,7 +47,7 @@ export function AuthorChip({ actor, author, label = false, size = "sm", classNam
   if (label && !tooltip) return chip;
   return (
     <Tooltip>
-      <TooltipTrigger asChild>{chip}</TooltipTrigger>
+      <TooltipTrigger render={chip} />
       <TooltipContent side="top">{tooltip ?? `${a.name}${a.kind === "human" && a.channel ? ` · via ${a.channel}` : ""}`}</TooltipContent>
     </Tooltip>
   );
