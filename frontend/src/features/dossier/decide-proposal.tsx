@@ -1,5 +1,5 @@
 import { Gavel, ShieldCheck } from "lucide-react";
-import { useEffect, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { AuthorChip } from "@/components/author-chip";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { author, tickerAgentId } from "@/lib/authors";
 import { CommandRefused, useCommand } from "@/lib/runtime/hooks";
@@ -48,18 +49,6 @@ const isoDay = (offset: number) => {
   d.setDate(d.getDate() + offset);
   return d.toISOString().slice(0, 10);
 };
-
-function onRadioKeys(e: KeyboardEvent<HTMLElement>) {
-  const keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
-  if (!keys.includes(e.key)) return;
-  const radios = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)'));
-  const i = radios.indexOf(document.activeElement as HTMLButtonElement);
-  if (i < 0) return;
-  e.preventDefault();
-  const next = radios[(i + (e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : -1) + radios.length) % radios.length];
-  next.focus();
-  next.click();
-}
 
 /**
  * Luca decides a ticker's proposal in the PM's place (`decide_proposal`, `confirm: true`): same path as the PM,
@@ -165,13 +154,20 @@ export function DecideProposal({ proposal, trigger }: { proposal: DecidablePropo
 
           <fieldset className="mt-4 px-5">
             <legend className="mb-1.5 text-2xs text-fg-subtle">Decisione</legend>
-            <div role="radiogroup" aria-label="Decisione" className="seg flex w-full" onKeyDown={onRadioKeys}>
+            <ToggleGroup
+              type="single"
+              value={action}
+              onValueChange={(v) => {
+                if (v) setAction(v as DecideAction);
+              }}
+              className="flex w-full gap-1"
+            >
               {ACTIONS.map((a) => (
-                <button key={a} type="button" role="radio" aria-checked={action === a} tabIndex={action === a ? 0 : -1} onClick={() => setAction(a)} className="seg-item flex-1 justify-center">
+                <ToggleGroupItem key={a} value={a} className="flex-1 justify-center text-xs h-7">
                   {DECIDE_LABEL[a]}
-                </button>
+                </ToggleGroupItem>
               ))}
-            </div>
+            </ToggleGroup>
             <p className="mt-1.5 text-2xs leading-4 text-fg-subtle">{HINT[action]}</p>
           </fieldset>
 

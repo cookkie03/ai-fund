@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -36,20 +37,22 @@ export function IconButton({
     <Tooltip>
       <TooltipTrigger
         render={
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-sm"
             aria-label={label}
             aria-pressed={active}
             onClick={onClick}
             disabled={disabled}
             className={cn(
-              "grid size-7 place-items-center rounded-item transition-[background-color,color,transform] duration-150 active:scale-[0.94] disabled:pointer-events-none disabled:opacity-35",
-              active ? "text-fg hover:bg-hover" : "text-fg-subtle hover:bg-hover hover:text-fg",
+              "size-7 rounded-item p-0",
+              active ? "text-fg bg-hover" : "text-fg-subtle hover:text-fg",
               className,
             )}
           >
             <Icon className="size-[15px]" strokeWidth={1.75} />
-          </button>
+          </Button>
         }
       />
       <TooltipContent>

@@ -1,4 +1,5 @@
 import { BellDot, Bell, CheckCheck, CircleAlert, Info, ShieldAlert } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -29,14 +30,16 @@ function Row({ item, onRead, disabled }: { item: InboxItem; onRead: () => void; 
         <p className="mt-0.5 text-xs leading-snug text-fg">{item.text}</p>
       </div>
       {!item.read && (
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="xs"
           onClick={onRead}
           disabled={disabled}
-          className="mt-0.5 h-6 shrink-0 self-start rounded-item px-1.5 text-2xs text-fg-subtle transition-colors hover:bg-hover hover:text-fg disabled:opacity-40"
+          className="mt-0.5 h-6 shrink-0 self-start rounded-item px-1.5 text-2xs text-fg-subtle"
         >
           Letto
-        </button>
+        </Button>
       )}
     </li>
   );

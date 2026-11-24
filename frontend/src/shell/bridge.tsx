@@ -220,17 +220,19 @@ export function BridgePanel({ onClose, className }: { onClose?: () => void; clas
                 A <AuthorChip actor={agent} size="xs" label />
               </span>
             ) : (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="xs"
                 onClick={() => {
                   setText("@");
                   setMenu({ query: "", index: 0 });
                   inputRef.current?.focus();
                 }}
-                className="inline-flex h-6 items-center gap-1 rounded-item px-1 text-2xs text-fg-subtle hover:bg-hover hover:text-fg"
+                className="h-6 gap-1 px-1 text-2xs text-fg-subtle"
               >
                 <AtSign className="size-3.5" /> Scegli un agente
-              </button>
+              </Button>
             )}
             <Button size="icon-sm" className="ml-auto size-7" disabled={!canSend} onClick={send} aria-label="Invia">
               <ArrowUp />

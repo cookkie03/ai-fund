@@ -1,6 +1,7 @@
 import { AlertTriangle, Archive, Check, ChevronRight, Copy, Loader2, PanelRightClose, Wrench } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { IconButton } from "@/components/tile";
+import { Button } from "@/components/ui/button";
 import { useToolCalls } from "@/features/office/hooks";
 import type { ToolCall } from "@/features/office/types";
 import { author } from "@/lib/authors";
@@ -50,18 +51,20 @@ function Payload({ label, value, compacted, compactedAt }: { label: string; valu
       <div className="mb-1 flex h-5 items-center gap-2">
         <h4 className="text-2xs text-fg-subtle">{label}</h4>
         {!compacted && !empty && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="xs"
             onClick={() => {
               void navigator.clipboard?.writeText(text).then(() => {
                 setCopied(true);
                 setTimeout(() => setCopied(false), 1200);
               });
             }}
-            className="ml-auto inline-flex h-5 items-center gap-1 rounded-tag px-1 text-2xs text-fg-subtle transition-colors hover:bg-hover hover:text-fg"
+            className="ml-auto h-5 gap-1 rounded-tag px-1 text-2xs text-fg-subtle"
           >
             {copied ? <Check className="size-3" /> : <Copy className="size-3" />} {copied ? "Copiato" : "Copia"}
-          </button>
+          </Button>
         )}
       </div>
       {compacted ? (
