@@ -15,10 +15,24 @@ def test_agents_include_configured_agents_and_only_todays_usage(tmp_path):
     office = build_test_office(db=db)
     client = TestClient(create_app(Runtime(office=office)))
     today = datetime.now(UTC)
-    db.log_llm_call(agent="portfolio_manager", model="my-combo", tokens_in=100,
-                    tokens_out=50, cost=0.015, duration_ms=10, ts=today.isoformat())
-    db.log_llm_call(agent="portfolio_manager", model="my-combo", tokens_in=200,
-                    tokens_out=100, cost=0.03, duration_ms=10, ts=(today - timedelta(days=1)).isoformat())
+    db.log_llm_call(
+        agent="portfolio_manager",
+        model="my-combo",
+        tokens_in=100,
+        tokens_out=50,
+        cost=0.015,
+        duration_ms=10,
+        ts=today.isoformat(),
+    )
+    db.log_llm_call(
+        agent="portfolio_manager",
+        model="my-combo",
+        tokens_in=200,
+        tokens_out=100,
+        cost=0.03,
+        duration_ms=10,
+        ts=(today - timedelta(days=1)).isoformat(),
+    )
 
     response = client.get("/v1/read/agents")
 
@@ -49,28 +63,67 @@ def test_chat_topics_preserve_agent_configuration_and_messages(tmp_path):
     assert topic["id"] == chat_id
     assert topic["message_count"] == 2
     assert topic["last_message"]["text"] == "Grazie"
-    assert len(client.get("/v1/read/chat", params={"agent": "technical_analyst", "topic": "NVDA"}).json()) == 2
+    assert (
+        len(
+            client.get(
+                "/v1/read/chat", params={"agent": "technical_analyst", "topic": "NVDA"}
+            ).json()
+        )
+        == 2
+    )
 
     # Verify say command accepts topic field directly
-    post_say = client.post("/v1/commands/say", json={"agent": "technical_analyst", "topic": "NVDA", "text": "Aggiornamento"})
+    post_say = client.post(
+        "/v1/commands/say",
+        json={"agent": "technical_analyst", "topic": "NVDA", "text": "Aggiornamento"},
+    )
     assert post_say.status_code == 200
     assert post_say.json()["ok"] is True
-    assert len(client.get("/v1/read/chat", params={"agent": "technical_analyst", "topic": "NVDA"}).json()) == 3
+    assert (
+        len(
+            client.get(
+                "/v1/read/chat", params={"agent": "technical_analyst", "topic": "NVDA"}
+            ).json()
+        )
+        == 3
+    )
 
 
 def test_usage_filters_and_aggregates_calls(tmp_path):
     db = OfficeDB(tmp_path / "usage.db")
     client = TestClient(create_app(Runtime(office=build_test_office(db=db))))
-    db.log_llm_call(agent="a", model="m", tokens_in=10, tokens_out=3, cost=0.5,
-                    duration_ms=1, ts="2026-11-20T12:00:00Z")
-    db.log_llm_call(agent="a", model="m", tokens_in=20, tokens_out=5, cost=1.0,
-                    duration_ms=1, ts="2026-11-21T12:00:00Z")
-    db.log_llm_call(agent="b", model="m", tokens_in=50, tokens_out=7, cost=2.0,
-                    duration_ms=1, ts="2026-11-21T12:00:00Z")
+    db.log_llm_call(
+        agent="a",
+        model="m",
+        tokens_in=10,
+        tokens_out=3,
+        cost=0.5,
+        duration_ms=1,
+        ts="2026-11-20T12:00:00Z",
+    )
+    db.log_llm_call(
+        agent="a",
+        model="m",
+        tokens_in=20,
+        tokens_out=5,
+        cost=1.0,
+        duration_ms=1,
+        ts="2026-11-21T12:00:00Z",
+    )
+    db.log_llm_call(
+        agent="b",
+        model="m",
+        tokens_in=50,
+        tokens_out=7,
+        cost=2.0,
+        duration_ms=1,
+        ts="2026-11-21T12:00:00Z",
+    )
     response = client.get("/v1/read/usage", params={"agent": "a", "from": "2026-11-21T00:00:00Z"})
     assert response.status_code == 200
-    assert response.json() == [{"agent": "a", "tokens_in": 20, "tokens_out": 5,
-                                "cost": 1.0, "calls": 1}]
+    assert response.json() == [
+        {"agent": "a", "tokens_in": 20, "tokens_out": 5, "cost": 1.0, "calls": 1}
+    ]
 
 
 def test_tool_calls_expose_context_and_compaction(tmp_path):
@@ -78,8 +131,15 @@ def test_tool_calls_expose_context_and_compaction(tmp_path):
     rt = Runtime(office=build_test_office(db=db))
     client = TestClient(create_app(rt))
     chat_id = db.get_or_create_chat("technical_analyst", "NVDA")
-    call_id = db.log_tool_call("technical_analyst", "bars", {"ticker": "NVDA"},
-                               {"count": 10}, chat_id=chat_id, duration_ms=42, cycle_id=7)
+    call_id = db.log_tool_call(
+        "technical_analyst",
+        "bars",
+        {"ticker": "NVDA"},
+        {"count": 10},
+        chat_id=chat_id,
+        duration_ms=42,
+        cycle_id=7,
+    )
     db.log_tool_call("technical_analyst", "news", {}, {}, error="timeout", compacted=True)
     result = client.get("/v1/read/tool_calls", params={"agent": "technical_analyst"})
     assert result.status_code == 200
@@ -115,7 +175,9 @@ def test_agent_status_reflects_active_work_and_emits_event(tmp_path):
     rt = Runtime(office=build_test_office(db=db))
     client = TestClient(create_app(rt))
     db.set_agent_status("technical_analyst", "working", {"cycle_id": 4, "ticker": "NVDA"})
-    agent = next(a for a in client.get("/v1/read/agents").json() if a["name"] == "technical_analyst")
+    agent = next(
+        a for a in client.get("/v1/read/agents").json() if a["name"] == "technical_analyst"
+    )
     assert agent["status"] == "working"
     assert agent["current_task"]["ticker"] == "NVDA"
     assert agent["last_activity_ts"] is not None
@@ -157,6 +219,51 @@ def test_dev_cockpit_scenario_seeds_office_data(tmp_path):
     usage = client.get("/v1/read/usage").json()
     assert len(usage) >= 3
 
+    # 5. Bridge Scenario & Briefing with all item types and summary_text
+    convs = client.get("/v1/read/bridge_conversations", params={"archived": ""}).json()
+    assert len(convs) >= 4
+    # Check conversation with agent_relay
+    c1 = next(c for c in convs if c["title"] == "Livelli e supporti AMD")
+    c1_detail = client.get("/v1/read/bridge_conversation", params={"id": c1["id"]}).json()
+    assert any(m["kind"] == "agent_relay" for m in c1_detail["messages"])
+
+    # Check conversation with pending action
+    c2 = next(c for c in convs if c["title"] == "Riduzione esposizione semiconduttori")
+    assert c2["pending_actions"] >= 1
+
+    # Check conversation with executed and dismissed actions
+    c3 = next(c for c in convs if c["title"] == "Gestione posizioni tech")
+    c3_detail = client.get("/v1/read/bridge_conversation", params={"id": c3["id"]}).json()
+    assert len(c3_detail["messages"]) >= 4
+    actions_c3 = client.get("/v1/read/bridge_actions").json()
+    c3_actions = [a for a in actions_c3 if a["conversation_id"] == c3["id"]]
+    assert any(a["status"] == "executed" for a in c3_actions)
+    assert any(a["status"] == "dismissed" for a in c3_actions)
+
+    # Check archived conversation
+    c4 = next(c for c in convs if c["title"] == "Analisi trimestrale AAPL")
+    assert c4["archived"] is True
+
+    # Check briefing with summary_text and all item types
+    briefing = client.get("/v1/read/briefing").json()
+    assert briefing["summary_text"] is not None
+    item_types = {item["type"] for item in briefing["items"]}
+    required_types = {
+        "trade",
+        "order_pending",
+        "proposal_pending",
+        "proposal_decided",
+        "alert",
+        "halt",
+        "resume",
+        "dossier",
+        "agent_error",
+        "risk_limits",
+    }
+    assert required_types.issubset(item_types), (
+        f"Missing types in scenario briefing: {required_types - item_types}"
+    )
+
 
 def test_dev_cockpit_scenario_has_ticker_dossiers_and_mixed_proposals(tmp_path):
     from scripts.dev_cockpit_scenario import ScenarioMarketData, seed_scenario
@@ -169,7 +276,6 @@ def test_dev_cockpit_scenario_has_ticker_dossiers_and_mixed_proposals(tmp_path):
     dossier = rt.read.dossier("AAPL")
     assert dossier["stale_count"] >= 1
     assert dossier["notes"] and dossier["lessons"]
-
 
 
 def test_dossier_price_matches_portfolio_for_invested_ticker(tmp_path):

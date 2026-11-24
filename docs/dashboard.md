@@ -42,6 +42,8 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
     - `set_news_source_enabled`: Enable or disable a news source (`source_id`, `enabled`).
     - `remove_news_source`: Remove a news source (`source_id`).
     - `refresh_news`: Trigger immediate news ingestion (`source_id` optional).
+
+    - `bridge_say`, `bridge_rename_conversation`, `bridge_archive_conversation`, `bridge_stop`, `bridge_action_decide`, `mark_briefing_seen`: see §2.6 (Assistente & Bridge Agent).
   - Returns `CommandResult` as JSON: `{"ok": bool, "data": {...}, "reasons": [...]}`. A domain refusal (for example an order that is not pending) is `ok: false` with reasons, not an HTTP error. Validation errors are HTTP 422; unknown commands are 404. Repeating the same `Idempotency-Key` returns the saved result without executing again.
 
 ### 2.3 Read Model (Queries)
@@ -78,6 +80,11 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
     - `/v1/read/news_sources`: List of configured news sources.
     - `/v1/read/calendar?from=&to=&kind=macro|earnings`: Economic and earnings calendar events.
 
+    - `/v1/read/bridge_conversations?limit=&q=&archived=`: Bridge agent conversations list, newest first, with message counts, status, and pending action counts.
+    - `/v1/read/bridge_conversation?id=&limit=&before=`: Detailed conversation thread with messages in chronological order.
+    - `/v1/read/bridge_actions?status=`: Actions proposed by Bridge across conversations.
+    - `/v1/read/briefing?since=`: Briefing update items, counts, portfolio variation, and Bridge summary since timestamp.
+
 ### 2.4 Server-Sent Events (Live Stream)
 - `GET /v1/events`
   - Parameters / Headers:
@@ -99,6 +106,14 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
     - `news.ingested`: News source batch ingestion (`source_id`, `count`).
     - `news.used`: News item consumption or citation (`news_id`, `agent`, `kind`).
     - `news.source`: News source update (`source`).
+
+    - `tool.started`: Tool execution started (`agent`, `tool`, `chat_id`, `cycle_id`, `params`, `ts`).
+    - `tool.finished`: Tool execution finished (`agent`, `tool`, `chat_id`, `cycle_id`, `duration_ms`, `success`, `error`, `ts`).
+    - `bridge.conversation`: Bridge conversation created, renamed, or archived (`conversation`).
+    - `bridge.message`: Message appended to a bridge conversation (`conversation_id`, `message`).
+    - `bridge.status`: Bridge reasoning/tool status change (`conversation_id`, `status` in `thinking` | `tool` | `idle`, `tool`).
+    - `bridge.action`: Action proposed, confirmed, dismissed, executed, or failed (`conversation_id`, `action`).
+    - `briefing.updated`: Briefing baseline updated by `mark_briefing_seen` (`since`).
   - Terminal & chart event types: `annotation.created`, `annotation.updated`, `annotation.struck`.
   - Portafoglio events (published only after the transaction commits, never on rollback): `portfolio.updated` (`reason`, `ticker`), `position.changed` (`ticker`, `trade_id`, `change` in `opened` | `reduced` | `closed` | `exit_levels` | `trailing_stop`, `qty_remaining`, `stop_price`, `target_price`), `risk_limits.updated` (`version`, `updated_by`, `reason`, `before`, `after`, `limits`), plus the existing `order.created`, `order.status_changed`, `trade.opened`, `trade.closed` and the new `trade.reduced` (partial close: `trade_id`, `ticker`, `qty`, `price`, `ts`). `portfolio.updated` is emitted by trade opens/reduces/closes and by `reconcile_broker` (which also keeps emitting `portfolio.synced`).
 
@@ -152,6 +167,35 @@ Conventions: amounts are numbers in the account currency, percentages are fracti
 - `backup_db {}`
 
 **Real-broker note**: `close_position` on `AlpacaBracketAdapter` (cancel the stop/take-profit legs, market or limit sell, OCO on the residual quantity) is only covered with a fake Alpaca client; it has not been verified on a paper account.
+
+### 2.6 Assistente & Bridge Agent
+
+The Assistente is the home page of the Cockpit where Luca interacts in natural language with the **Bridge Agent** (`agents.bridge`), an active peer in the Runtime with full read access, cross-agent communication, and direct UI action capabilities.
+
+**Data contracts**
+```
+Message = {id, conversation_id, author: "luca"|"bridge"|<agent id>, kind: "text"|"agent_relay"|"action"|"error",
+           text, ts, context: {page, ticker, ref}|null,
+           refs: [{type: "ticker"|"order"|"position"|"proposal"|"cycle"|"agent"|"trade", id, label}],
+           action: Action|null}
+Action  = {id, command, payload, summary, capital: true, status: "pending"|"confirmed"|"dismissed"|"executed"|"failed",
+           preview: {ok, reasons: [str], detail}|null, result_reasons: [str], decided_ts|null, decided_by|null}
+```
+
+**Commands** (require `Idempotency-Key` and `X-Actor`, return `{ok, data, reasons}`)
+- `bridge_say {conversation_id: int|null, text, context: {page, ticker, ref}|null}`: Creates conversation (if `conversation_id: null` with provisional title, auto-synthesizing a crisp title after the first turn) or appends message, queues reasoning turn in Runtime background worker. Returns `{conversation_id, message_id}`.
+- `bridge_rename_conversation {conversation_id, title}`: Renames conversation title.
+- `bridge_archive_conversation {conversation_id, archived: bool}`: Archives or unarchives conversation.
+- `bridge_stop {conversation_id}`: Signals active reasoning turn to abort at the next tool/LLM step.
+- `bridge_action_decide {action_id, decision: "confirm"|"dismiss", confirm: bool}`: Decides a proposed capital action. `decision: "confirm"` requires `confirm: true`. Executes the original command using the same command handler with actor `luca`, revalidating current state, Halt, and the Risk Gate.
+- `mark_briefing_seen {ts}`: Updates the baseline timestamp for the home briefing reading.
+
+**Read Endpoints**
+- `GET /v1/read/bridge_conversations?limit=&q=&archived=`: List conversations ordered by `updated_ts` DESC; `q` filters across conversation title and message text; `archived` filters archived/active conversations.
+- `GET /v1/read/bridge_conversation?id=&limit=&before=`: Chronological message stream for a conversation (default limit 100); `before` paginates backward returning messages strictly prior to message ID.
+- `GET /v1/read/bridge_actions?status=`: Actions proposed by Bridge with conversation ID and preview details (`pending`, `confirmed`, `dismissed`, `executed`, `failed`).
+- `GET /v1/read/briefing?since=`: Home briefing update with portfolio change, key counts (`trades`, `orders_pending`, `proposals_pending`, `proposals_decided`, `alerts`, `agent_errors`), items list of all 10 types (`trade`, `order_pending`, `proposal_pending`, `proposal_decided`, `alert`, `halt`, `resume`, `dossier`, `agent_error`, `risk_limits`), and cached Bridge `summary_text`.
+
 
 ## 3. Frontend Integration
 

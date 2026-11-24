@@ -239,15 +239,63 @@ class AgentEnvironment:
         """Wrap a tool function with logging and error tracking."""
         def wrapped(**kwargs: Any) -> Any:
             started = time.monotonic()
+            if getattr(self.db, "event_log", None):
+                self.db.event_log.append(
+                    "tool.started",
+                    f"tool:{agent_name}:{name}",
+                    {
+                        "agent": agent_name,
+                        "tool": name,
+                        "chat_id": chat_id,
+                        "cycle_id": cycle_id,
+                        "params": _serialize(kwargs),
+                        "ts": self._now_iso(),
+                    },
+                    actor=agent_name,
+                )
             try:
                 res = handler(**kwargs)
+                dur = int((time.monotonic() - started) * 1000)
                 self._log_tool_call(agent_name, chat_id, name, kwargs, res, None,
-                                    int((time.monotonic() - started) * 1000), cycle_id)
+                                    dur, cycle_id)
+                if getattr(self.db, "event_log", None):
+                    self.db.event_log.append(
+                        "tool.finished",
+                        f"tool:{agent_name}:{name}",
+                        {
+                            "agent": agent_name,
+                            "tool": name,
+                            "chat_id": chat_id,
+                            "cycle_id": cycle_id,
+                            "duration_ms": dur,
+                            "success": True,
+                            "error": None,
+                            "ts": self._now_iso(),
+                        },
+                        actor=agent_name,
+                    )
                 return res
             except Exception as exc:
                 err_msg = str(exc)
+                dur = int((time.monotonic() - started) * 1000)
                 self._log_tool_call(agent_name, chat_id, name, kwargs, None, err_msg,
-                                    int((time.monotonic() - started) * 1000), cycle_id)
+                                    dur, cycle_id)
+                if getattr(self.db, "event_log", None):
+                    self.db.event_log.append(
+                        "tool.finished",
+                        f"tool:{agent_name}:{name}",
+                        {
+                            "agent": agent_name,
+                            "tool": name,
+                            "chat_id": chat_id,
+                            "cycle_id": cycle_id,
+                            "duration_ms": dur,
+                            "success": False,
+                            "error": err_msg,
+                            "ts": self._now_iso(),
+                        },
+                        actor=agent_name,
+                    )
                 raise
 
         return ToolSpec(
