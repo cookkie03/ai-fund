@@ -60,7 +60,7 @@ class AlpacaNewsProvider:
                     )
             
             page_token = getattr(response, "next_page_token", None) or (response.data.get("next_page_token") if hasattr(response, "data") else None)
-            if not page_token or len(news_batch) < req_limit:
+            if not page_token:
                 break
                 
         return tuple(all_news)

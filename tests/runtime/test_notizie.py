@@ -328,3 +328,42 @@ def test_agent_news_tools_and_calendars(tmp_path):
     assert len(res_earn) == 1
     assert res_earn[0]["ticker"] == "NVDA"
 
+
+class MockAlpacaItem:
+    def __init__(self, headline, source, url, created_at, symbols):
+        self.headline = headline
+        self.source = source
+        self.url = url
+        self.created_at = created_at
+        self.symbols = symbols
+
+
+class MockAlpacaResponse:
+    def __init__(self, news, next_page_token=None):
+        self.news = news
+        self.next_page_token = next_page_token
+
+
+class MockAlpacaClient:
+    def get_news(self, req):
+        dt = datetime(2026, 11, 24, 10, 0, 0, tzinfo=UTC)
+        if req.page_token is None:
+            item = MockAlpacaItem("Apple launches new chip", "Bloomberg", "https://example.com/apple1", dt, ["AAPL"])
+            return MockAlpacaResponse([item], next_page_token="token2")
+        else:
+            item = MockAlpacaItem("Apple expands services", "Reuters", "https://example.com/apple2", dt, ["AAPL"])
+            return MockAlpacaResponse([item], next_page_token=None)
+
+
+def test_alpaca_news_pagination():
+    from data.providers.alpaca_news import AlpacaNewsProvider
+    client = MockAlpacaClient()
+    provider = AlpacaNewsProvider(client)
+    start = datetime(2026, 11, 24, 0, 0, 0, tzinfo=UTC)
+    end = datetime(2026, 11, 25, 0, 0, 0, tzinfo=UTC)
+    items = provider.get_news("AAPL", start, end, limit=10)
+    assert len(items) == 2
+    assert items[0].headline == "Apple launches new chip"
+    assert items[1].headline == "Apple expands services"
+
+
