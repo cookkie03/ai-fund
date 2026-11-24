@@ -6,9 +6,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from bootstrap import build_test_office
+from data.providers.openbb import OpenBBProvider
 from data.providers.rss_news import RSSItem, RSSNewsProvider
 from runtime.core import Runtime
 from runtime.http import create_app
+from scripts.dev_cockpit_server import create_dev_app
 from storage.office_db import OfficeDB
 
 
@@ -28,6 +30,49 @@ def test_rss_provider_invalid_scheme():
     prov = RSSNewsProvider(url="ftp://example.com/feed", name="FTP Feed")
     with pytest.raises(ValueError, match="Invalid RSS URL scheme"):
         prov.fetch_news()
+
+
+def test_openbb_absent_unavailable_without_breaking_others(tmp_path):
+    db = OfficeDB(tmp_path / "openbb.db")
+    s_openbb = db.add_news_source("openbb", "OpenBB", None)
+    s_rss = db.add_news_source("rss", "Valid RSS", "https://example.com/rss")
+
+    # Simulate OpenBB absent / failing
+    try:
+        prov = OpenBBProvider(client=None)
+        prov.get_news()
+    except Exception as exc:
+        db.update_news_source_status(s_openbb, "unavailable", str(exc))
+
+    sources = db.list_news_sources()
+    openbb_status = next(s for s in sources if s["id"] == s_openbb)
+    rss_status = next(s for s in sources if s["id"] == s_rss)
+
+    assert openbb_status["status"] == "unavailable"
+    assert rss_status["status"] == "ok"
+
+
+def test_dev_server_http_and_sse_smoke(tmp_path):
+    db_path = tmp_path / "smoke.db"
+    app = create_dev_app(db_path=str(db_path))
+    client = TestClient(app)
+
+    # Smoke test read endpoints
+    r_news = client.get("/v1/read/news")
+    assert r_news.status_code == 200
+    assert "items" in r_news.json()
+
+    r_sources = client.get("/v1/read/news_sources")
+    assert r_sources.status_code == 200
+    assert len(r_sources.json()) >= 1
+
+    r_cal = client.get("/v1/read/calendar")
+    assert r_cal.status_code == 200
+    assert isinstance(r_cal.json(), list)
+
+    # Smoke test events stream (TestClient streaming response)
+    with client.stream("GET", "/v1/events", headers={"Accept": "text/event-stream"}) as resp:
+        assert resp.status_code == 200
 
 
 def test_news_deduplication(tmp_path):
