@@ -96,3 +96,18 @@ uv run trading-agent halt --no-cancel-open
 uv run trading-agent resume
 ```
 All halt/resume actions, commands, and order lifecycle changes are permanently logged in the append-only `events` table and in `inbox`.
+
+## 6. Bridge Agent and Asynchronous Turn Worker
+
+The Runtime hosts the **Bridge Agent** (`agents.bridge`), Luca's conversational peer across the office.
+
+- **Background Execution**: When a message is sent (`bridge_say`), turns run asynchronously inside `runtime.bridge_runner` (ThreadPool worker) to never block the HTTP loop.
+- **Turn Serialization**: Turns are strictly serialized per conversation, with subsequent messages queuing into the next turn. `bridge_stop` requests early termination at the next reasoning or tool step.
+- **Budgeting**: Step count per turn is bounded (`turn_budget_steps = 10`), and total daily spending is guarded by `daily_budget` in `config/office.toml`. If exhausted, a clear error message is posted.
+- **Tool Capabilities**:
+  - Full read access across portfolio, orders, trades, dossiers, agent chats, tool logs, annotations, and indicators.
+  - Cross-agent messaging via `message_agent`: writes with `[Per conto di Luca]`. If the agent replies, an `agent_relay` message enters the Bridge conversation and triggers an automatic synthesis turn.
+  - Immediate execution of non-capital commands (`add_watchlist`, `remove_watchlist`, `add_dossier_note`, `enqueue_task`, `refresh_data`, `upsert_annotation`, `strike_annotation`, `mark_inbox_read`).
+  - Strict capital protection via `propose_action`: capital-moving actions (orders, positions, exits, proposals, halt, limits) are saved as `pending` with preview and only executed through `bridge_action_decide` upon user confirmation.
+- **Home Briefing**: Deterministic digest of trades, pending orders/proposals, alerts, halt events, dossier versions, and agent errors from `since` (or last `mark_briefing_seen`), accompanied by an LLM synthesis text cached in SQLite.
+

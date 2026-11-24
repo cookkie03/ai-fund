@@ -1,9 +1,14 @@
 import { Gavel, ShieldCheck } from "lucide-react";
-import { useEffect, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 import { toast } from "sonner";
 import { AuthorChip } from "@/components/author-chip";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { author, tickerAgentId } from "@/lib/authors";
 import { CommandRefused, useCommand } from "@/lib/runtime/hooks";
@@ -45,24 +50,12 @@ const isoDay = (offset: number) => {
   return d.toISOString().slice(0, 10);
 };
 
-function onRadioKeys(e: KeyboardEvent<HTMLElement>) {
-  const keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
-  if (!keys.includes(e.key)) return;
-  const radios = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)'));
-  const i = radios.indexOf(document.activeElement as HTMLButtonElement);
-  if (i < 0) return;
-  e.preventDefault();
-  const next = radios[(i + (e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : -1) + radios.length) % radios.length];
-  next.focus();
-  next.click();
-}
-
 /**
  * Luca decides a ticker's proposal in the PM's place (`decide_proposal`, `confirm: true`): same path as the PM,
  * so an acceptance still goes through the deterministic draft and the sovereign Risk Gate. Refusals stay
  * inside the dialog, verbatim.
  */
-export function DecideProposal({ proposal, trigger }: { proposal: DecidableProposal; trigger: ReactNode }) {
+export function DecideProposal({ proposal, trigger }: { proposal: DecidableProposal; trigger: ReactElement }) {
   const { writable, halted } = useShell();
   const [open, setOpen] = useState(false);
   const [action, setAction] = useState<DecideAction>("accept");
@@ -116,14 +109,16 @@ export function DecideProposal({ proposal, trigger }: { proposal: DecidablePropo
   };
 
   const triggerEl = writable ? (
-    <DialogTrigger asChild>{trigger}</DialogTrigger>
+    <DialogTrigger render={trigger} />
   ) : (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <span tabIndex={0} className="inline-flex">
-          {trigger}
-        </span>
-      </TooltipTrigger>
+      <TooltipTrigger
+        render={
+          <span tabIndex={0} className="inline-flex">
+            {trigger}
+          </span>
+        }
+      />
       <TooltipContent>Runtime irraggiungibile: comandi sospesi</TooltipContent>
     </Tooltip>
   );
@@ -142,7 +137,7 @@ export function DecideProposal({ proposal, trigger }: { proposal: DecidablePropo
             </DialogDescription>
           </div>
 
-          <div className="mx-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-control bg-ground px-3 py-2.5 text-xs">
+          <Card className="mx-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-control border-line-strong/60 bg-ground p-3 text-xs shadow-none">
             <AuthorChip actor={agentId} size="sm" tooltip={author(agentId).name} />
             <span className="text-[13px] font-semibold text-fg">{proposal.ticker}</span>
             <DirectionTag value={proposal.direction} />
@@ -155,17 +150,24 @@ export function DecideProposal({ proposal, trigger }: { proposal: DecidablePropo
             <span className="text-fg-subtle">
               R:R <span className={cn("num", proposal.risk_reward !== null && proposal.risk_reward < 1.5 ? "text-warn" : "text-fg")}>{fmtRR(proposal.risk_reward)}</span>
             </span>
-          </div>
+          </Card>
 
           <fieldset className="mt-4 px-5">
             <legend className="mb-1.5 text-2xs text-fg-subtle">Decisione</legend>
-            <div role="radiogroup" aria-label="Decisione" className="seg flex w-full" onKeyDown={onRadioKeys}>
+            <ToggleGroup
+              type="single"
+              value={action}
+              onValueChange={(v) => {
+                if (v) setAction(v as DecideAction);
+              }}
+              className="flex w-full gap-1"
+            >
               {ACTIONS.map((a) => (
-                <button key={a} type="button" role="radio" aria-checked={action === a} tabIndex={action === a ? 0 : -1} onClick={() => setAction(a)} className="seg-item flex-1 justify-center">
+                <ToggleGroupItem key={a} value={a} className="flex-1 justify-center text-xs h-7">
                   {DECIDE_LABEL[a]}
-                </button>
+                </ToggleGroupItem>
               ))}
-            </div>
+            </ToggleGroup>
             <p className="mt-1.5 text-2xs leading-4 text-fg-subtle">{HINT[action]}</p>
           </fieldset>
 
@@ -173,12 +175,12 @@ export function DecideProposal({ proposal, trigger }: { proposal: DecidablePropo
             <label className="block px-5 pt-3">
               <span className="mb-1.5 block text-2xs text-fg-subtle">Sizing (% del capitale)</span>
               <span className="flex items-center gap-2">
-                <input
+                <Input
                   value={sizing}
                   onChange={(e) => setSizing(e.target.value)}
                   inputMode="decimal"
                   aria-invalid={!sizingValid}
-                  className="num h-8 w-24 rounded-control border border-line-strong bg-ground px-2.5 text-sm text-fg outline-none focus:border-accent-c/70 aria-[invalid=true]:border-warn"
+                  className="num h-8 w-24 rounded-control border-line-strong bg-ground px-2.5 text-sm text-fg outline-none focus-visible:border-accent-c/70 aria-[invalid=true]:border-warn"
                 />
                 <span className="text-2xs text-fg-subtle">{resized ? `ridimensionata da ${fmtFraction(proposal.sizing_fraction)}` : "come proposto"}</span>
               </span>
@@ -189,25 +191,25 @@ export function DecideProposal({ proposal, trigger }: { proposal: DecidablePropo
           {action === "defer" && (
             <label className="block px-5 pt-3">
               <span className="mb-1.5 block text-2xs text-fg-subtle">Riconsiderare il</span>
-              <input
+              <Input
                 type="date"
                 value={checkDate}
                 min={isoDay(1)}
                 onChange={(e) => setCheckDate(e.target.value)}
-                className="num h-8 rounded-control border border-line-strong bg-ground px-2.5 text-sm text-fg outline-none [color-scheme:dark] focus:border-accent-c/70"
+                className="num h-8 rounded-control border-line-strong bg-ground px-2.5 text-sm text-fg outline-none [color-scheme:dark] focus-visible:border-accent-c/70"
               />
             </label>
           )}
 
           <label className="block px-5 pt-3">
             <span className="mb-1.5 block text-2xs text-fg-subtle">Motivazione</span>
-            <textarea
+            <Textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
               required
               placeholder={PLACEHOLDER[action]}
-              className="block w-full resize-none rounded-control border border-line-strong bg-ground px-2.5 py-2 text-sm text-fg outline-none placeholder:text-fg-subtle focus:border-accent-c/70"
+              className="block w-full resize-none rounded-control border-line-strong bg-ground px-2.5 py-2 text-sm text-fg outline-none placeholder:text-fg-subtle focus-visible:border-accent-c/70"
             />
             <span className="mt-1 block text-2xs text-fg-subtle">Resta nello storico decisioni della scheda, firmata da te.</span>
           </label>
@@ -215,14 +217,16 @@ export function DecideProposal({ proposal, trigger }: { proposal: DecidablePropo
           {acceptBlocked && <p className="mx-5 mt-3 rounded-item bg-halt-ground px-2.5 py-2 text-xs text-fg">Halt attivo: non si accettano proposte finché il trading è fermo. Rimandare, rifiutare e chiedere restano possibili.</p>}
 
           {refusal && (
-            <div role="alert" className="mx-5 mt-3 rounded-item bg-warn-soft px-2.5 py-2 text-xs leading-4">
-              <p className="font-medium text-fg">Il Runtime ha rifiutato la decisione</p>
-              <ul className="mt-0.5 text-fg-muted">
-                {refusal.map((r) => (
-                  <li key={r}>{r}</li>
-                ))}
-              </ul>
-            </div>
+            <Alert variant="warning" className="mx-5 mt-3 w-auto">
+              <AlertTitle>Il Runtime ha rifiutato la decisione</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-0.5">
+                  {refusal.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
           )}
 
           <div className="flex items-center gap-1.5 px-5 pb-5 pt-4">

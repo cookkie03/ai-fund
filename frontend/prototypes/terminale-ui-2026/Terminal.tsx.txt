@@ -1,0 +1,81 @@
+import { useCallback, useEffect, useState } from 'react'
+import { Activity, Bell, BriefcaseBusiness, ChartCandlestick, Menu, MessageSquare, Newspaper, Plus, Settings, Trash2, Users, X } from 'lucide-react'
+import { Chart, type Annotation, type Indicators } from './Chart'
+import { command, health, read, type Bar, type Health, type Order, type Portfolio, type WatchItem } from './runtime'
+
+const navigation = [['Assistente', MessageSquare], ['Ufficio', Users], ['Terminale', ChartCandlestick], ['Notizie', Newspaper], ['Portafoglio', BriefcaseBusiness], ['Configurazioni', Settings]] as const
+const amount = (n: number | undefined) => n === undefined ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+const message = (e: unknown) => e instanceof Error ? e.message : 'Operazione non riuscita'
+
+export function Terminal() {
+  const [status, setStatus] = useState<Health | null>(null)
+  const [watchlist, setWatchlist] = useState<WatchItem[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
+  const [portfolio, setPortfolio] = useState<Portfolio>(null)
+  const [symbol, setSymbol] = useState('')
+  const [bars, setBars] = useState<Bar[]>([])
+  const [indicators, setIndicators] = useState<Indicators | null>(null)
+  const [annotations, setAnnotations] = useState<Annotation[]>([])
+  const [chartLoading, setChartLoading] = useState(false)
+  const [chartVersion, setChartVersion] = useState(0)
+  const [timeframe, setTimeframe] = useState('1h')
+  const [error, setError] = useState('')
+  const [commandError, setCommandError] = useState('')
+  const [chartError, setChartError] = useState('')
+  const [connected, setConnected] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [ticker, setTicker] = useState('')
+  const [note, setNote] = useState('')
+  const [level, setLevel] = useState('')
+  const [bridge, setBridge] = useState(false)
+  const [menu, setMenu] = useState(false)
+  const [lastRead, setLastRead] = useState<Date | null>(null)
+  const [tab, setTab] = useState('Tutti')
+  const [tickerState, setTickerState] = useState<unknown>(null)
+  useEffect(() => { setBars([]); setIndicators(null); setAnnotations([]) }, [symbol, timeframe])
+  const refresh = useCallback(async () => {
+    try {
+      const [h, w, o, p] = await Promise.all([health(), read<WatchItem[]>('watchlist'), read<Order[]>('orders'), read<Portfolio>('portfolio')])
+      setStatus(h); setWatchlist(w); setOrders(o); setPortfolio(p); setSymbol(current => w.some(item => item.ticker === current) ? current : w[0]?.ticker || ''); setError(''); setLastRead(new Date())
+    } catch (e) { setError(message(e)) } finally { setLoading(false) }
+  }, [])
+  useEffect(() => {
+    void refresh()
+    const timer = window.setInterval(() => { void refresh(); setChartVersion(v => v + 1) }, 15000)
+    const events = new EventSource('/v1/events')
+    events.onopen = () => setConnected(true)
+    events.onerror = () => setConnected(false)
+    for (const event of ['watchlist.added', 'watchlist.removed', 'order.created', 'order.updated', 'halt.activated', 'halt.resumed', 'annotation.created', 'annotation.updated', 'annotation.struck']) events.addEventListener(event, () => { void refresh(); if (event.startsWith('annotation.')) setChartVersion(v => v + 1) })
+    return () => { window.clearInterval(timer); events.close() }
+  }, [refresh])
+  useEffect(() => {
+    let active = true
+    setChartError(''); setTickerState(null); setChartLoading(Boolean(symbol))
+    if (symbol) {
+      const query = `?ticker=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&limit=300`
+      Promise.all([read<Bar[]>('bars', query), read<Indicators>('indicators', query), read<Annotation[]>('annotations', `?ticker=${encodeURIComponent(symbol)}`)]).then(([data, indicatorData, drawings]) => { if (active) { setBars(data); setIndicators(indicatorData); setAnnotations(drawings); setChartLoading(false) } }).catch(e => { if (active) { setChartError(message(e)); setChartLoading(false) } })
+      read<unknown>('ticker_state', `?ticker=${encodeURIComponent(symbol)}`).then(data => { if (active) setTickerState(data) }).catch(() => { if (active) setTickerState(null) })
+    }
+    return () => { active = false }
+  }, [symbol, timeframe, chartVersion])
+  async function run(name: string, body: object) {
+    try { setCommandError(''); const result = await command(name, body); if (!result.ok) throw new Error(result.reasons.join(', ') || 'Operazione rifiutata'); await refresh(); return true } catch (e) { setCommandError(message(e)); return false }
+  }
+  async function add(e: React.FormEvent) { e.preventDefault(); if (ticker.trim() && await run('add_watchlist', { ticker: ticker.trim().toUpperCase(), note: note.trim() || null })) { setTicker(''); setNote('') } }
+  async function addLevel(e: React.FormEvent) {
+    e.preventDefault()
+    const price = Number(level)
+    if (!symbol || !bars.length || !level.trim() || !Number.isFinite(price) || price <= 0) { setCommandError('Inserisci un prezzo valido e seleziona uno strumento con dati.'); return }
+    if (await run('upsert_annotation', { id: crypto.randomUUID(), ticker: symbol, timeframe, drawing: { type: 'horizontal_line', points: [{ time: bars[bars.length - 1].time, price }] } })) { setLevel(''); setChartVersion(v => v + 1) }
+  }
+  const shownOrders = tab === 'Tutti' ? orders : orders.filter(o => tab === 'Pendenti' ? o.approval_status === 'pending' : tab === 'Eseguiti' ? ['filled', 'executed'].includes(o.status.toLowerCase()) : !['filled', 'executed', 'cancelled', 'rejected'].includes(o.status.toLowerCase()))
+  return <div className="shell"><aside className={`sidebar ${menu ? 'expanded' : ''}`}><div className="brand"><Activity size={20}/> Trading Office <button className="icon mobile" onClick={() => setMenu(false)} aria-label="Chiudi menu"><X size={18}/></button></div><div className="nav-caption">SPAZIO DI LAVORO</div><nav>{navigation.map(([label, Icon]) => <button key={label} className={label === 'Terminale' ? 'nav active' : 'nav'} disabled={label !== 'Terminale'}><Icon size={17}/>{label}{label !== 'Terminale' && <small>Presto</small>}</button>)}</nav><div className="sidebar-bottom"><button className="nav" disabled><Bell size={17}/> Inbox</button><span>Ufficio autonomo</span></div></aside>
+    <div className="workspace"><header className="topbar"><button className="icon mobile" aria-label="Apri menu" onClick={() => setMenu(!menu)}><Menu size={19}/></button><div className="account"><small>ACCOUNT ATTIVO</small><strong>{status?.account_label ?? 'Non disponibile'}</strong></div><div className="connection"><i className={status && !error ? 'ok' : 'bad'}/><span>Runtime <b>{status && !error ? 'online' : 'non raggiungibile'}</b></span></div><div className="connection broker"><i className={status?.broker_stream_connected ? 'ok' : 'warning'}/><span>Broker <b>{status?.broker_stream_connected ? 'connesso' : 'disconnesso'}</b></span></div><div className="top-spacer"/><div className="equity"><small>Equity</small><strong>{amount(portfolio?.equity)}</strong></div><button className="outline" onClick={() => setBridge(!bridge)}><MessageSquare size={16}/> Bridge</button></header>
+      {commandError && <div className="banner" role="alert">Operazione non riuscita: {commandError}</div>}{status?.halted && <div className="banner danger">Halt attivo — nuove operazioni bloccate.</div>}{error && <div className="banner" role="alert">{error} · I dati potrebbero non essere aggiornati. <button onClick={() => void refresh()}>Riprova</button></div>}
+      <main className="content"><div className="page-heading"><div><h1>Terminale</h1><p>Analisi e attività dell'ufficio</p></div><div className="fresh"><i className={connected ? 'ok' : 'warning'}/>{connected ? 'Stream attivo' : 'Stream disconnesso'} · {lastRead ? `aggiornato ${lastRead.toLocaleTimeString('it-IT')}` : 'in attesa'}</div></div>
+      <div className="terminal-grid"><section className="panel watch"><div className="panel-heading"><h2>Watchlist</h2><span>{watchlist.length} strumenti</span></div><form className="add-form" onSubmit={add}><label htmlFor="symbol">Aggiungi strumento</label><div><input id="symbol" placeholder="Simbolo" value={ticker} onChange={e => setTicker(e.target.value)}/><button aria-label="Aggiungi alla watchlist"><Plus size={17}/></button></div><input aria-label="Nota" placeholder="Nota facoltativa" value={note} onChange={e => setNote(e.target.value)}/></form><div className="table-label">STRUMENTO <span>AGGIUNTO DA</span></div>{loading ? <p className="empty">Caricamento…</p> : !watchlist.length ? <p className="empty">Watchlist vuota. Aggiungi uno strumento.</p> : watchlist.map(item => <div className={`watch-row ${symbol === item.ticker ? 'selected' : ''}`} key={item.ticker}><button className="watch-select" aria-pressed={symbol === item.ticker} onClick={() => setSymbol(item.ticker)}><strong>{item.ticker}</strong><span>{item.added_by}</span><small>{item.note || 'Nessuna nota'} · {new Date(item.added_ts).toLocaleDateString('it-IT')}</small></button><button className="icon remove" aria-label={`Rimuovi ${item.ticker}`} onClick={() => { if (window.confirm(`Rimuovere ${item.ticker} dalla watchlist?`)) void run('remove_watchlist', { ticker: item.ticker }) }}><Trash2 size={15}/></button></div>)}</section>
+      <section className="panel chart-panel"><div className="instrument"><div><label htmlFor="chart-symbol">Strumento</label><select id="chart-symbol" value={symbol} onChange={e => setSymbol(e.target.value)} aria-label="Seleziona strumento">{!watchlist.length && <option value="">Nessuno strumento</option>}{watchlist.map(item => <option value={item.ticker} key={item.ticker}>{item.ticker}</option>)}</select><p>Prezzo e volumi · dati Runtime</p></div><div className="timeframes">{['15m', '1h', '1d'].map(t => <button key={t} className={timeframe === t ? 'selected' : ''} aria-pressed={timeframe === t} onClick={() => setTimeframe(t)}>{t}</button>)}</div></div>{bars.length ? <Chart state={{ symbol, timeframe, bars, indicators, drawings: annotations, notes: [] }}/> : <div className="chart-empty">{chartError || (chartLoading ? 'Caricamento dati…' : symbol ? 'Nessun dato disponibile per questo intervallo.' : 'Seleziona un simbolo dalla watchlist.')}</div>}<form className="level-form" onSubmit={addLevel}><label htmlFor="level-price">Livello condiviso</label><input id="level-price" type="number" min="0.000001" step="any" value={level} onChange={e => setLevel(e.target.value)} placeholder="Prezzo"/><button disabled={!symbol || !bars.length}>Aggiungi</button></form><div className="chart-footer">{bars.length ? `${bars.length} barre · ultimo dato ${new Date(bars[bars.length - 1].time * 1000).toLocaleString('it-IT')}${Date.now() - bars[bars.length - 1].time * 1000 > 86400000 ? ' · dato non recente' : ''}` : 'Dati di mercato non disponibili'}</div></section>
+      <section className="panel activity"><div className="panel-heading"><h2>Attività</h2><span>{symbol || '—'}</span></div><div className="activity-content"><h3>Analisi dello strumento</h3>{tickerState && Object.keys(tickerState as object).length > 0 ? <pre>{JSON.stringify(tickerState, null, 2)}</pre> : <p>Nessuna analisi disponibile per questo strumento.</p>}</div></section>
+      <section className="panel orders"><div className="panel-heading"><h2>Ordini</h2><span>Attività dell'account</span></div><div className="tabs">{['Tutti', 'Aperti', 'Pendenti', 'Eseguiti'].map(t => <button className={tab === t ? 'selected' : ''} onClick={() => setTab(t)} key={t}>{t}</button>)}</div><div className="table-wrap"><table><thead><tr><th>Simbolo</th><th>Direzione</th><th>Quantità</th><th>Stato</th><th>Approvazione</th><th>Data</th><th>Azioni</th></tr></thead><tbody>{shownOrders.map(order => <tr key={order.id}><td>{order.ticker}</td><td>{order.side}</td><td>{order.qty}</td><td>{order.status}</td><td>{order.approval_status}</td><td>{new Date(order.created_ts).toLocaleString('it-IT')}</td><td>{order.approval_status === 'pending' && <><button onClick={() => { if (window.confirm(`Approvare l'ordine ${order.id}?`)) void run('approve_order', { order_id: order.id, confirm: true }) }}>Approva</button><button onClick={() => { const reason = window.prompt('Motivo del rifiuto:'); if (reason?.trim()) void run('reject_order', { order_id: order.id, reason }) }}>Rifiuta</button></>}</td></tr>)}</tbody></table>{!shownOrders.length && <p className="empty">Nessun ordine disponibile.</p>}</div></section></div></main></div>
+      {bridge && <aside className="bridge"><div className="panel-heading"><h2>Bridge</h2><button className="icon" onClick={() => setBridge(false)} aria-label="Chiudi Bridge"><X size={18}/></button></div><p>L'agente Bridge non è ancora disponibile.</p><textarea disabled placeholder="Scrivi un messaggio…" aria-label="Messaggio al Bridge"/></aside>}</div>
+}

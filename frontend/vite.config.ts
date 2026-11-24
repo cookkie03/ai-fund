@@ -2,9 +2,12 @@ import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import { officeFixtures } from "./dev/office-fixtures";
-import { portfolioFixtures } from "./dev/portfolio-fixtures";
-import { tickerFixtures } from "./dev/ticker-fixtures";
+import { assistantFixtures } from "./dev/assistant-fixtures.ts";
+import { newsFixtures } from "./dev/news-fixtures.ts";
+import { officeFixtures } from "./dev/office-fixtures.ts";
+import { portfolioFixtures } from "./dev/portfolio-fixtures.ts";
+import { settingsFixtures } from "./dev/settings-fixtures.ts";
+import { tickerFixtures } from "./dev/ticker-fixtures.ts";
 
 // The Runtime has no CORS: the browser reaches it through this same-origin proxy.
 const runtimeUrl = process.env.COCKPIT_RUNTIME_URL ?? "http://127.0.0.1:8766";
@@ -13,17 +16,29 @@ const port = Number(process.env.COCKPIT_PORT ?? 5174);
 export default defineConfig({
   // COCKPIT_OFFICE_FIXTURES=1: synthetic answers for the Ufficio reads the Runtime does not expose yet (dev server only).
   // COCKPIT_PORTFOLIO_FIXTURES=1: the same for the Portafoglio reads and commands (contract in handoff-backend-portafoglio.md).
+  // COCKPIT_NEWS_FIXTURES=1: the news reads, commands and a synthetic news.* stream (contract in .scratch/notizie/handoff-backend.md).
   // COCKPIT_TICKER_FIXTURES=1 (or =dense, 40 tickers): synthetic ticker agents, dossiers and proposals (dev server only).
+  // COCKPIT_ASSISTANT_FIXTURES=1 (or empty, slow, nobudget; combinable with commas): the Bridge's reads, commands
+  // and a turn's SSE events, contract in .scratch/assistente/handoff-backend.md (dev server only).
   plugins: [
     react(),
+    ...(process.env.COCKPIT_ASSISTANT_FIXTURES ? [assistantFixtures(runtimeUrl, process.env.COCKPIT_ASSISTANT_FIXTURES)] : []),
     tailwindcss(),
     ...(process.env.COCKPIT_TICKER_FIXTURES ? [tickerFixtures(runtimeUrl, process.env.COCKPIT_TICKER_FIXTURES)] : []),
     ...(process.env.COCKPIT_OFFICE_FIXTURES === "1" ? [officeFixtures()] : []),
     ...(process.env.COCKPIT_PORTFOLIO_FIXTURES === "1" ? [portfolioFixtures()] : []),
+    // COCKPIT_SETTINGS_FIXTURES=1 (busy office) or =empty (fresh install): the Configurazioni reads and commands.
+    ...(process.env.COCKPIT_SETTINGS_FIXTURES ? [settingsFixtures(process.env.COCKPIT_SETTINGS_FIXTURES)] : []),
+    ...(process.env.COCKPIT_NEWS_FIXTURES === "1" ? [newsFixtures()] : []),
   ],
-  // Lets the page mark fixture figures as samples; always "" in a build.
-  define: { "import.meta.env.VITE_PORTFOLIO_FIXTURES": JSON.stringify(process.env.COCKPIT_PORTFOLIO_FIXTURES === "1" ? "1" : "") },
-  resolve: { alias: { "@": path.resolve(__dirname, "src") } },
+  // Lets the pages mark fixture figures as samples; always "" in a build.
+  define: {
+    "import.meta.env.VITE_PORTFOLIO_FIXTURES": JSON.stringify(process.env.COCKPIT_PORTFOLIO_FIXTURES === "1" ? "1" : ""),
+    "import.meta.env.VITE_SETTINGS_FIXTURES": JSON.stringify(process.env.COCKPIT_SETTINGS_FIXTURES && !process.argv.includes("build") ? "1" : ""),
+    "import.meta.env.VITE_NEWS_FIXTURES": JSON.stringify(process.env.COCKPIT_NEWS_FIXTURES === "1" ? "1" : ""),
+    "import.meta.env.VITE_ASSISTANT_FIXTURES": JSON.stringify(process.env.COCKPIT_ASSISTANT_FIXTURES ? "1" : ""),
+  },
+  resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
   server: {
     host: "127.0.0.1",
     port,
@@ -44,5 +59,14 @@ export default defineConfig({
       },
     },
   },
-  preview: { host: "127.0.0.1", port },
+  preview: {
+    host: "127.0.0.1",
+    port,
+    proxy: {
+      "/v1": {
+        target: runtimeUrl,
+        changeOrigin: false,
+      },
+    },
+  },
 });

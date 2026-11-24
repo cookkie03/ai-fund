@@ -1,5 +1,7 @@
 import { OctagonPause } from "lucide-react";
 import type { PortfolioPosition, PortfolioSummary, RiskLimitsRead, Sourced } from "@/features/portfolio/types";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { fmtAge } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { fmtFrac, fmtMoney, Metric, SourceNote, tone } from "./parts";
@@ -23,12 +25,14 @@ export function Freshness({ summary, now }: { summary: PortfolioSummary | null |
 
 export function HaltBanner({ className }: { className?: string }) {
   return (
-    <div role="status" className={cn("flex items-center gap-2.5 rounded-control bg-halt-ground px-4 py-2.5 text-xs text-fg", className)}>
-      <OctagonPause className="size-4 shrink-0 text-down" aria-hidden />
+    <Card role="status" className={cn("flex items-center gap-2.5 rounded-control border-down/30 bg-halt-ground px-4 py-2.5 text-xs text-fg shadow-none", className)}>
+      <Badge variant="destructive" className="h-5 px-1.5 gap-1 shrink-0">
+        <OctagonPause className="size-3" aria-hidden /> Halt
+      </Badge>
       <span>
         <span className="font-semibold">Halt attivo.</span> Chiusure, modifiche di stop e target e approvazioni sono sospese finché il trading non riprende. Le letture restano vere.
       </span>
-    </div>
+    </Card>
   );
 }
 
@@ -88,11 +92,11 @@ export function SummaryBand({
           {fmtMoney(s.equity)}
         </span>
         {s.day_change !== null ? (
-          <span className={cn("num inline-flex h-6 items-center gap-1.5 rounded-tag px-2 text-xs font-medium", dayUp ? "bg-up-soft text-up" : "bg-down-soft text-down")}>
+          <Badge variant="outline" className={cn("num inline-flex h-6 items-center gap-1.5 px-2 text-xs font-medium border-transparent", dayUp ? "bg-up-soft text-up" : "bg-down-soft text-down")}>
             {fmtMoney(s.day_change, { sign: true })}
             <span className="opacity-80">{fmtFrac(s.day_change_fraction, { sign: true })}</span>
             <span className="font-normal text-fg-muted">oggi</span>
-          </span>
+          </Badge>
         ) : (
           <span className="text-2xs text-fg-subtle">variazione di oggi n/d: manca la chiusura di ieri</span>
         )}

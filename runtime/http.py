@@ -25,23 +25,42 @@ from analysis.indicators import (
 )
 from runtime.commands import (
     AddDossierNote,
+    AddNewsSource,
     AddWatchlist,
     ApproveOrder,
+    BackupDB,
+    ClearSecret,
+    BridgeActionDecide,
+    BridgeArchiveConversation,
+    BridgeRenameConversation,
+    BridgeSay,
+    BridgeStop,
     ClosePosition,
     DecideProposal,
     EnqueueTask,
+    ForwardNews,
     Halt,
     IngestAlert,
+    MarkBriefingSeen,
     MarkInboxRead,
     ModifyExit,
     ReconcileBroker,
     RefreshData,
+    RefreshNews,
     RejectOrder,
+    RemoveNewsSource,
     RemoveWatchlist,
+    RestorePrompt,
+    RestoreSettings,
     Resume,
     Say,
+    SetSecret,
+    SetNewsSourceEnabled,
     StrikeAnnotation,
+    TestConnection,
+    UpdatePrompt,
     UpdateRiskLimits,
+    UpdateSettings,
     UpsertAnnotation,
 )
 
@@ -71,6 +90,25 @@ _COMMAND_MAP = {
     "refresh_data": RefreshData,
     "mark_inbox_read": MarkInboxRead,
     "ingest_alert": IngestAlert,
+    "update_settings": UpdateSettings,
+    "restore_settings": RestoreSettings,
+    "update_prompt": UpdatePrompt,
+    "restore_prompt": RestorePrompt,
+    "set_secret": SetSecret,
+    "clear_secret": ClearSecret,
+    "test_connection": TestConnection,
+    "backup_db": BackupDB,
+    "forward_news": ForwardNews,
+    "add_news_source": AddNewsSource,
+    "set_news_source_enabled": SetNewsSourceEnabled,
+    "remove_news_source": RemoveNewsSource,
+    "refresh_news": RefreshNews,
+    "bridge_say": BridgeSay,
+    "bridge_rename_conversation": BridgeRenameConversation,
+    "bridge_archive_conversation": BridgeArchiveConversation,
+    "bridge_stop": BridgeStop,
+    "bridge_action_decide": BridgeActionDecide,
+    "mark_briefing_seen": MarkBriefingSeen,
 }
 
 
@@ -110,14 +148,19 @@ def create_app(
             body = await request.json() if await request.body() else {}
             cmd = cmd_cls.model_validate(body)
         except ValidationError as val_err:
-            raise HTTPException(status_code=422, detail=val_err.errors(include_context=False)) from val_err
+            raise HTTPException(status_code=422, detail=val_err.errors(include_input=False, include_context=False)) from val_err
+            raise HTTPException(
+                status_code=422, detail=val_err.errors(include_context=False)
+            ) from val_err
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         command_id = request.headers.get("Idempotency-Key")
         actor = request.headers.get("X-Actor", "client")
         if isinstance(cmd, (AddDossierNote, DecideProposal)) and (
-            not command_id or not command_id.strip() or not request.headers.get("X-Actor", "").strip()
+            not command_id
+            or not command_id.strip()
+            or not request.headers.get("X-Actor", "").strip()
         ):
             raise HTTPException(status_code=422, detail="Idempotency-Key and X-Actor are required")
 
@@ -135,7 +178,9 @@ def create_app(
         end: datetime | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
-        timeframe = timeframe if timeframe is not None else runtime.office.settings.market.bar_timeframe
+        timeframe = (
+            timeframe if timeframe is not None else runtime.office.settings.market.bar_timeframe
+        )
         if not ticker.strip() or not timeframe.strip() or limit < 1 or limit > 10000:
             raise HTTPException(status_code=422, detail="Invalid ticker, timeframe or limit")
         if (start and start.tzinfo is None) or (end and end.tzinfo is None):
@@ -166,10 +211,16 @@ def create_app(
 
     @app.get("/v1/read/indicators", dependencies=[Depends(verify_token)])
     def get_indicators(
-        ticker: str, names: str = "ema20,rsi14,atr14", timeframe: str | None = None, limit: int = 100,
-        start: datetime | None = None, end: datetime | None = None,
+        ticker: str,
+        names: str = "ema20,rsi14,atr14",
+        timeframe: str | None = None,
+        limit: int = 100,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> dict[str, Any]:
-        timeframe = timeframe if timeframe is not None else runtime.office.settings.market.bar_timeframe
+        timeframe = (
+            timeframe if timeframe is not None else runtime.office.settings.market.bar_timeframe
+        )
         selected = get_bars(ticker=ticker, timeframe=timeframe, start=start, end=end, limit=limit)
         bars = get_bars(ticker=ticker, timeframe=timeframe, end=end, limit=10000)
         highs = [Decimal(str(b["high"])) for b in bars]
@@ -280,10 +331,44 @@ def create_app(
     def get_risk_limits_history(limit: int = Query(default=50, ge=1, le=500)) -> list[dict]:
         return runtime.read.risk_limits_history(limit=limit)
 
+    @app.get("/v1/read/settings", dependencies=[Depends(verify_token)])
+    def get_settings() -> dict[str, Any]:
+        return runtime.read.settings()
+
+    @app.get("/v1/read/settings_history", dependencies=[Depends(verify_token)])
+    def get_settings_history(limit: int = Query(default=50, ge=1, le=500)) -> list[dict[str, Any]]:
+        return runtime.read.settings_history(limit=limit)
+
+    @app.get("/v1/read/agent_configs", dependencies=[Depends(verify_token)])
+    def get_agent_configs() -> list[dict[str, Any]]:
+        return runtime.read.agent_configs()
+
+    @app.get("/v1/read/prompt", dependencies=[Depends(verify_token)])
+    def get_prompt(agent: str) -> dict[str, Any]:
+        return runtime.read.prompt(agent)
+
+    @app.get("/v1/read/prompt_history", dependencies=[Depends(verify_token)])
+    def get_prompt_history(agent: str, limit: int = Query(default=50, ge=1, le=500)) -> list[dict[str, Any]]:
+        return runtime.read.prompt_history(agent=agent, limit=limit)
+
+    @app.get("/v1/read/secrets", dependencies=[Depends(verify_token)])
+    def get_secrets() -> list[dict[str, Any]]:
+        return runtime.read.secrets()
+
+    @app.get("/v1/read/runtime_health", dependencies=[Depends(verify_token)])
+    def get_runtime_health() -> dict[str, Any]:
+        return runtime.read.runtime_health()
+
+    @app.get("/v1/read/backups", dependencies=[Depends(verify_token)])
+    def get_backups() -> list[dict[str, Any]]:
+        return runtime.read.backups()
+
     @app.get("/v1/read/tool_calls", dependencies=[Depends(verify_token)])
     def get_tool_calls(
-        agent: str | None = None, cycle: int | None = Query(default=None, ge=1),
-        after: int = Query(default=0, ge=0), limit: int = Query(default=100, ge=1, le=1000),
+        agent: str | None = None,
+        cycle: int | None = Query(default=None, ge=1),
+        after: int = Query(default=0, ge=0),
+        limit: int = Query(default=100, ge=1, le=1000),
     ) -> list[dict[str, Any]]:
         return runtime.read.tool_calls(agent=agent, cycle=cycle, after=after, limit=limit)
 
@@ -370,8 +455,11 @@ def create_app(
             if norm == "dossier_history":
                 return runtime.read.dossier_history(ticker, int(q.get("limit", 50)))
             version = q.get("version")
-            dossier = (runtime.read.dossier_version(ticker, int(version)) if version
-                       else runtime.read.dossier(ticker))
+            dossier = (
+                runtime.read.dossier_version(ticker, int(version))
+                if version
+                else runtime.read.dossier(ticker)
+            )
             if dossier is None:
                 raise HTTPException(status_code=404, detail="Dossier not found")
             return dossier
@@ -393,6 +481,61 @@ def create_app(
             return [
                 t.model_dump() for t in runtime.read.scheduled_tasks(status=status, limit=limit)
             ]
+        elif norm == "news":
+            return runtime.read.news_items(
+                ticker=q.get("ticker"),
+                theme=q.get("theme"),
+                source_id=int(q.get("source_id")) if q.get("source_id") else None,
+                provider=q.get("provider"),
+                scope=q.get("scope", "all"),
+                q=q.get("q"),
+                before=q.get("before"),
+                limit=int(q.get("limit", 50)),
+            )
+        elif norm == "news_item":
+            nid = int(q.get("id") or 0)
+            item = runtime.read.news_item_detail(nid)
+            if not item:
+                raise HTTPException(status_code=404, detail="News item not found")
+            return item
+        elif norm == "news_sources":
+            return runtime.read.news_sources_list()
+        elif norm == "calendar":
+            return runtime.read.calendar_events(
+                from_ts=q.get("from"),
+                to_ts=q.get("to"),
+                kind=q.get("kind"),
+            )
+        elif norm == "bridge_conversations":
+            limit = int(q.get("limit", 50))
+            query_text = q.get("q")
+            archived_param = q.get("archived")
+            archived = (
+                None
+                if archived_param is None
+                or archived_param == ""
+                or str(archived_param).lower() in ("all", "any", "none")
+                else (str(archived_param).lower() in ("true", "1"))
+            )
+            return runtime.read.bridge_conversations(limit=limit, q=query_text, archived=archived)
+        elif norm == "bridge_conversation":
+            conv_id_str = q.get("id") or q.get("conversation_id")
+            if not conv_id_str:
+                raise HTTPException(status_code=422, detail="id is required")
+            limit = int(q.get("limit", 100))
+            before = int(q.get("before")) if q.get("before") else None
+            conv = runtime.read.bridge_conversation(id=int(conv_id_str), limit=limit, before=before)
+            if conv is None:
+                raise HTTPException(status_code=404, detail="Bridge conversation not found")
+            return conv
+        elif norm == "bridge_actions":
+            status = q.get("status")
+            conv_id = int(q.get("conversation_id")) if q.get("conversation_id") else None
+            limit = int(q.get("limit", 50))
+            return runtime.read.bridge_actions(status=status, conversation_id=conv_id, limit=limit)
+        elif norm == "briefing":
+            since = q.get("since")
+            return runtime.read.briefing(since=since)
         else:
             raise HTTPException(status_code=404, detail=f"Read endpoint '{name}' not found")
 

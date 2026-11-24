@@ -4,19 +4,25 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from config.office_settings import OfficeSettings
+from config.settings_store import SETTINGS_SCHEMA, SettingsStore, get_nested
 from execution.risk_limits import (
     ConnRiskLimitsReader,
     RiskLimitsStore,
     bounds_payload,
     defaults_from_settings,
 )
+from prompts.loader import normalize_agent_name
 from runtime import portfolio
+from storage.office_db import utc_now_iso
+from storage.secrets import SecretsManager
 
 if TYPE_CHECKING:
     from runtime.core import Runtime
@@ -941,3 +947,905 @@ class ReadModel:
         finally:
             if self.db_path != ":memory:":
                 conn.close()
+
+    def settings(self) -> dict[str, Any]:
+        office = getattr(self._runtime, "office", None)
+        base = office.settings if office else OfficeSettings()
+        db = office.db if office else self._with_conn(lambda c: c)
+        store = SettingsStore(db, base)
+        active_d = store.active_dict()
+        row = db.latest_settings_version() if hasattr(db, "latest_settings_version") else None
+        
+        overridden_keys = set()
+        if row and row.get("after_json"):
+            try:
+                overridden_keys = set(json.loads(row["after_json"]).keys())
+            except Exception:
+                pass
+
+        sections_map = {
+            "mercato": {"id": "mercato", "title": "Mercato e orari", "items": []},
+            "agenti": {"id": "agenti", "title": "Agenti", "items": []},
+            "dati": {"id": "dati", "title": "Dati e archivio", "items": []},
+        }
+
+        for k, meta in SETTINGS_SCHEMA.items():
+            sec = meta.get("section", "mercato")
+            val = get_nested(active_d, k)
+            default_val = get_nested(base.model_dump(), k)
+            if sec not in sections_map:
+                sections_map[sec] = {"id": sec, "title": sec.capitalize(), "items": []}
+            sections_map[sec]["items"].append({
+                "key": k,
+                "label": meta["label"],
+                "description": meta["description"],
+                "type": meta["type"],
+                "value": val,
+                "default": default_val,
+                "min": meta.get("min"),
+                "max": meta.get("max"),
+                "options": meta.get("options"),
+                "unit": meta.get("unit"),
+                "apply": meta["apply"],
+                "capital": bool(meta.get("capital", False)),
+                "overridden": k in overridden_keys,
+            })
+
+        return {
+            "version": int(row["version"]) if row else 0,
+            "updated_ts": row.get("ts") if row else None,
+            "updated_by": row.get("actor") if row else None,
+            "pending_restart": [k for k in overridden_keys if SETTINGS_SCHEMA.get(k, {}).get("apply") == "restart"],
+            "sections": list(sections_map.values()),
+        }
+
+    def settings_history(self, limit: int = 50) -> list[dict[str, Any]]:
+        office = getattr(self._runtime, "office", None)
+        db = office.db if office else self._with_conn(lambda c: c)
+        if not hasattr(db, "list_settings_versions"):
+            return []
+        rows = db.list_settings_versions(limit=limit)
+        out = []
+        for r in rows:
+            before = json.loads(r["before_json"])
+            after = json.loads(r["after_json"])
+            changes = [{"key": k, "old": before.get(k), "new": after.get(k)} for k in before.keys() | after.keys()]
+            out.append({
+                "version": int(r["version"]),
+                "ts": r["ts"],
+                "actor": r["actor"],
+                "reason": r["reason"],
+                "changes": changes,
+            })
+        return out
+
+    def agent_configs(self) -> list[dict[str, Any]]:
+        office = getattr(self._runtime, "office", None)
+        settings = office.settings if office else OfficeSettings()
+        db = office.db if office else None
+        today_str = datetime.now(UTC).strftime("%Y-%m-%d")
+        out = []
+        for agent_name, cfg in settings.agents.items():
+            today_cost = 0.0
+            prompt_version = 0
+            prompt_updated_ts = None
+            if db:
+                try:
+                    c_row = db.connection.execute(
+                        "SELECT SUM(cost) FROM llm_calls WHERE agent = ? AND ts LIKE ?",
+                        (agent_name, f"{today_str}%")
+                    ).fetchone()
+                    if c_row and c_row[0]:
+                        today_cost = float(c_row[0])
+                except Exception:
+                    pass
+                try:
+                    p_row = db.latest_prompt_version(agent_name)
+                    if p_row:
+                        prompt_version = int(p_row["version"])
+                        prompt_updated_ts = p_row["ts"]
+                except Exception:
+                    pass
+
+            out.append({
+                "agent": agent_name,
+                "role": agent_name,
+                "model": cfg.model,
+                "endpoint": cfg.endpoint,
+                "effort": cfg.effort,
+                "daily_budget_usd": 50.0,
+                "today_cost": today_cost,
+                "prompt_version": prompt_version,
+                "prompt_updated_ts": prompt_updated_ts,
+            })
+        return out
+
+    def prompt(self, agent: str) -> dict[str, Any]:
+        office = getattr(self._runtime, "office", None)
+        db = office.db if office else None
+        canonical = normalize_agent_name(agent)
+        from prompts.loader import load_prompt_full
+        text, _, version, is_default = load_prompt_full(canonical, db=db)
+        updated_ts = None
+        updated_by = None
+        reason = "Default file prompt"
+        if not is_default and db:
+            row = db.latest_prompt_version(canonical)
+            if row:
+                updated_ts = row["ts"]
+                updated_by = row["actor"]
+                reason = row["reason"]
+
+        return {
+            "agent": canonical,
+            "version": version,
+            "text": text,
+            "updated_ts": updated_ts,
+            "updated_by": updated_by,
+            "reason": reason,
+            "is_default": is_default,
+        }
+
+    def prompt_history(self, agent: str, limit: int = 50) -> list[dict[str, Any]]:
+        office = getattr(self._runtime, "office", None)
+        db = office.db if office else None
+        canonical = normalize_agent_name(agent)
+        if not db or not hasattr(db, "list_prompt_versions"):
+            return []
+        rows = db.list_prompt_versions(canonical, limit=limit)
+        return [
+            {
+                "version": int(r["version"]),
+                "ts": r["ts"],
+                "actor": r["actor"],
+                "reason": r["reason"],
+                "chars": int(r["chars"]),
+            }
+            for r in rows
+        ]
+
+    def secrets(self) -> list[dict[str, Any]]:
+        manager = SecretsManager()
+        return manager.list_secrets()
+
+    def runtime_health(self) -> dict[str, Any]:
+        office = getattr(self._runtime, "office", None)
+        db = office.db if office else self._with_conn(lambda c: c)
+        
+        try:
+            commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+        except Exception:
+            commit = "unknown"
+
+        size_bytes = db.db_size_bytes() if hasattr(db, "db_size_bytes") else 0
+        alert_mb = office.settings.db_size_alert_mb if office else 500
+        
+        last_backup_ts = None
+        if hasattr(db, "list_backup_records"):
+            backs = db.list_backup_records(limit=1)
+            if backs:
+                last_backup_ts = backs[0]["ts"]
+
+        jobs = [
+            {"name": "DataRefreshJob", "last_run_ts": utc_now_iso(), "last_status": "ok", "last_error": None, "next_run_ts": None},
+            {"name": "RetentionJob", "last_run_ts": utc_now_iso(), "last_status": "ok", "last_error": None, "next_run_ts": None},
+        ]
+
+        errors = []
+        try:
+            err_rows = db.connection.execute(
+                "SELECT ts, source, text FROM inbox WHERE kind LIKE '%error%' OR text LIKE '%errore%' ORDER BY id DESC LIMIT 5"
+            ).fetchall() if hasattr(db, "connection") else []
+            for r in err_rows:
+                errors.append({"ts": r["ts"], "source": r["source"], "message": r["text"]})
+        except Exception:
+            pass
+
+        broker_ok = True
+        broker_detail = "Connesso"
+        if office and hasattr(office, "order_flow") and office.order_flow:
+            try:
+                acc = office.order_flow.broker.get_account()
+                broker_ok = True
+                broker_detail = f"Equity: {acc.get('equity', 'N/A')}"
+            except Exception as exc:
+                broker_ok = False
+                broker_detail = str(exc)
+
+        return {
+            "version": "0.1.0",
+            "commit": commit,
+            "started_ts": utc_now_iso(),
+            "uptime_s": 3600,
+            "db": {
+                "path_label": str(db.path) if hasattr(db, "path") else "db",
+                "size_bytes": size_bytes,
+                "wal_bytes": 0,
+                "alert_mb": alert_mb,
+                "last_backup_ts": last_backup_ts,
+            },
+            "jobs": jobs,
+            "errors": errors,
+            "sse_clients": 1,
+            "broker": {"ok": broker_ok, "detail": broker_detail},
+            "llm": {"ok": True, "detail": "OmniRoute pronto"},
+        }
+
+    def backups(self) -> list[dict[str, Any]]:
+        office = getattr(self._runtime, "office", None)
+        db = office.db if office else self._with_conn(lambda c: c)
+        if not hasattr(db, "list_backup_records"):
+            return []
+        return [
+            {"name": r["name"], "ts": r["ts"], "size_bytes": int(r["size_bytes"])}
+            for r in db.list_backup_records(limit=100)
+        ]
+
+    def news_items(
+        self,
+        ticker: str | None = None,
+        theme: str | None = None,
+        source_id: int | None = None,
+        provider: str | None = None,
+        scope: str = "all", # all | portfolio | watchlist
+        q: str | None = None,
+        before: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        conn = self._get_connection()
+        try:
+            portfolio_tickers = set()
+            portfolio = self.portfolio()
+            if portfolio and portfolio.positions:
+                for p in portfolio.positions:
+                    sym = p.get("ticker") or p.get("symbol")
+                    if sym:
+                        portfolio_tickers.add(str(sym).upper())
+
+            watchlist_tickers = set()
+            for w in self.watchlist():
+                watchlist_tickers.add(str(w.ticker).upper())
+
+            query = "SELECT * FROM news WHERE 1=1"
+            params: list[Any] = []
+
+            if ticker:
+                query += " AND (tickers_json LIKE ? OR headline LIKE ?)"
+                params.extend([f'%"{ticker.upper()}"%', f'%{ticker}%'])
+            if source_id is not None:
+                query += " AND source_id = ?"
+                params.append(source_id)
+            if provider:
+                query += " AND provider = ?"
+                params.append(provider)
+            if before:
+                query += " AND published_ts < ?"
+                params.append(before)
+            if q:
+                query += " AND (headline LIKE ? OR summary LIKE ?)"
+                params.extend([f'%{q}%', f'%{q}%'])
+
+            query += " ORDER BY published_ts DESC, id DESC LIMIT ?"
+            params.append(limit + 1)
+
+            rows = conn.execute(query, params).fetchall()
+            has_more = len(rows) > limit
+            if has_more:
+                rows = rows[:limit]
+
+            items = []
+            for r in rows:
+                tickers = json.loads(r["tickers_json"] or "[]")
+                themes = json.loads(r["themes_json"] or "[]")
+                
+                in_port = any(t.upper() in portfolio_tickers for t in tickers)
+                in_watch = any(t.upper() in watchlist_tickers for t in tickers)
+
+                if scope == "portfolio" and not in_port:
+                    continue
+                if scope == "watchlist" and not in_watch:
+                    continue
+                if theme and theme.lower() not in [th.lower() for th in themes]:
+                    continue
+
+                usage_rows = conn.execute(
+                    "SELECT kind, COUNT(*) as cnt FROM news_usage WHERE news_id = ? GROUP BY kind",
+                    (r["id"],)
+                ).fetchall()
+                usage_map = {row["kind"]: row["cnt"] for row in usage_rows}
+
+                items.append({
+                    "id": int(r["id"]),
+                    "headline": str(r["headline"]),
+                    "summary": r["summary"],
+                    "url": r["url"],
+                    "source": str(r["source"]),
+                    "provider": str(r["provider"]),
+                    "published_ts": str(r["published_ts"]),
+                    "fetched_ts": str(r["fetched_ts"]),
+                    "tickers": tickers,
+                    "themes": themes,
+                    "image_url": r["image_url"],
+                    "has_full_text": bool(r["has_full_text"]),
+                    "in_portfolio": in_port,
+                    "in_watchlist": in_watch,
+                    "usage": {
+                        "reads": usage_map.get("read", 0),
+                        "citations": usage_map.get("cited", 0),
+                        "forwards": usage_map.get("forwarded", 0),
+                    }
+                })
+
+            next_before = rows[-1]["published_ts"] if has_more and rows else None
+            return {"items": items, "next_before": next_before}
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def news_item_detail(self, news_id: int) -> dict[str, Any] | None:
+        conn = self._get_connection()
+        try:
+            r = conn.execute("SELECT * FROM news WHERE id = ?", (news_id,)).fetchone()
+            if not r:
+                return None
+            portfolio_tickers = {str(p.get('ticker') or p.get('symbol')).upper() for p in (self.portfolio().positions if self.portfolio() and self.portfolio().positions else [])}
+            watchlist_tickers = {str(w.ticker).upper() for w in self.watchlist()}
+
+            tickers = json.loads(r["tickers_json"] or "[]")
+            themes = json.loads(r["themes_json"] or "[]")
+            in_port = any(t.upper() in portfolio_tickers for t in tickers)
+            in_watch = any(t.upper() in watchlist_tickers for t in tickers)
+
+            usage_rows = conn.execute(
+                "SELECT kind, COUNT(*) as cnt FROM news_usage WHERE news_id = ? GROUP BY kind",
+                (news_id,)
+            ).fetchall()
+            usage_map = {row["kind"]: row["cnt"] for row in usage_rows}
+
+            detail_rows = conn.execute(
+                "SELECT * FROM news_usage WHERE news_id = ? ORDER BY ts DESC, id DESC",
+                (news_id,)
+            ).fetchall()
+            usage_detail = [{
+                "agent": dr["agent"],
+                "kind": dr["kind"],
+                "ts": dr["ts"],
+                "cycle_id": dr["cycle_id"],
+                "chat_id": dr["chat_id"],
+                "topic": dr["topic"],
+                "note": dr["note"],
+            } for dr in detail_rows]
+
+            return {
+                "id": int(r["id"]),
+                "headline": str(r["headline"]),
+                "summary": r["summary"],
+                "url": r["url"],
+                "source": str(r["source"]),
+                "provider": str(r["provider"]),
+                "published_ts": str(r["published_ts"]),
+                "fetched_ts": str(r["fetched_ts"]),
+                "tickers": tickers,
+                "themes": themes,
+                "image_url": r["image_url"],
+                "has_full_text": bool(r["has_full_text"]),
+                "in_portfolio": in_port,
+                "in_watchlist": in_watch,
+                "usage": {
+                    "reads": usage_map.get("read", 0),
+                    "citations": usage_map.get("cited", 0),
+                    "forwards": usage_map.get("forwarded", 0),
+                },
+                "full_text": r["full_text"],
+                "usage_detail": usage_detail,
+            }
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def news_sources_list(self) -> list[dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            rows = conn.execute(
+                """
+                SELECT s.*, 
+                       (SELECT COUNT(*) FROM news n WHERE n.source_id = s.id AND julianday(n.published_ts) >= julianday('now', '-1 day')) AS items_24h
+                FROM news_sources s
+                ORDER BY s.id
+                """
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def calendar_events(
+        self,
+        from_ts: str | None = None,
+        to_ts: str | None = None,
+        kind: str | None = None,
+    ) -> list[dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            portfolio_tickers = {str(p.get('ticker') or p.get('symbol')).upper() for p in (self.portfolio().positions if self.portfolio() and self.portfolio().positions else [])}
+            watchlist_tickers = {str(w.ticker).upper() for w in self.watchlist()}
+
+            query = "SELECT * FROM calendar_events WHERE 1=1"
+            params: list[Any] = []
+            if kind:
+                query += " AND kind = ?"
+                params.append(kind)
+            if from_ts:
+                query += " AND ts >= ?"
+                params.append(from_ts)
+            if to_ts:
+                query += " AND ts <= ?"
+                params.append(to_ts)
+            query += " ORDER BY ts ASC, id ASC"
+
+            rows = conn.execute(query, params).fetchall()
+            result = []
+            for r in rows:
+                ticker = r["ticker"]
+                in_port = bool(ticker and ticker.upper() in portfolio_tickers)
+                in_watch = bool(ticker and ticker.upper() in watchlist_tickers)
+                result.append({
+                    "id": int(r["id"]),
+                    "kind": str(r["kind"]),
+                    "ts": str(r["ts"]),
+                    "title": str(r["title"]),
+                    "country": r["country"],
+                    "ticker": ticker,
+                    "importance": r["importance"],
+                    "actual": r["actual"],
+                    "forecast": r["forecast"],
+                    "previous": r["previous"],
+                    "source": str(r["source"]),
+                    "in_portfolio": in_port,
+                    "in_watchlist": in_watch,
+                })
+            return result
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    # --- Bridge & Briefing Read Endpoints ---
+
+    def bridge_conversations(
+        self,
+        limit: int = 50,
+        q: str | None = None,
+        archived: bool | None = False,
+    ) -> list[dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            query = """
+                SELECT c.*,
+                       (SELECT COUNT(*) FROM bridge_messages m WHERE m.conversation_id = c.id) AS message_count,
+                       (SELECT COUNT(*) FROM bridge_actions a WHERE a.conversation_id = c.id AND a.status = 'pending') AS pending_actions
+                FROM bridge_conversations c
+                WHERE 1=1
+            """
+            params: list[Any] = []
+            if archived is not None:
+                query += " AND c.archived = ?"
+                params.append(1 if archived else 0)
+            if q and q.strip():
+                pattern = f"%{q.strip()}%"
+                query += " AND (c.title LIKE ? OR EXISTS (SELECT 1 FROM bridge_messages m WHERE m.conversation_id = c.id AND m.text LIKE ?))"
+                params.extend([pattern, pattern])
+            query += " ORDER BY c.updated_ts DESC, c.id DESC LIMIT ?"
+            params.append(limit)
+
+            rows = conn.execute(query, params).fetchall()
+            result: list[dict[str, Any]] = []
+            for r in rows:
+                conv = dict(r)
+                conv["archived"] = bool(conv["archived"])
+                last_msg_row = conn.execute(
+                    "SELECT author, text, ts FROM bridge_messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 1",
+                    (conv["id"],),
+                ).fetchone()
+                conv["last_message"] = dict(last_msg_row) if last_msg_row else None
+                result.append(conv)
+            return result
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+
+    def bridge_conversation(
+        self,
+        id: int,
+        limit: int = 100,
+        before: int | None = None,
+    ) -> dict[str, Any] | None:
+        conn = self._get_connection()
+        try:
+            row = conn.execute("SELECT * FROM bridge_conversations WHERE id = ?", (id,)).fetchone()
+            if not row:
+                return None
+            conv = dict(row)
+            conv["archived"] = bool(conv["archived"])
+
+            if before is not None:
+                msg_rows = conn.execute(
+                    """
+                    SELECT * FROM (
+                        SELECT * FROM bridge_messages
+                        WHERE conversation_id = ? AND id < ?
+                        ORDER BY id DESC LIMIT ?
+                    ) ORDER BY id ASC
+                    """,
+                    (id, before, limit),
+                ).fetchall()
+            else:
+                msg_rows = conn.execute(
+                    """
+                    SELECT * FROM (
+                        SELECT * FROM bridge_messages
+                        WHERE conversation_id = ?
+                        ORDER BY id DESC LIMIT ?
+                    ) ORDER BY id ASC
+                    """,
+                    (id, limit),
+                ).fetchall()
+
+            messages: list[dict[str, Any]] = []
+            for mr in msg_rows:
+                m = dict(mr)
+                m["context"] = json.loads(m["context_json"]) if m.get("context_json") else None
+                m["refs"] = json.loads(m["refs_json"]) if m.get("refs_json") else []
+                action_id = m.get("action_id")
+                action_dict = None
+                if action_id:
+                    act_row = conn.execute("SELECT * FROM bridge_actions WHERE id = ?", (action_id,)).fetchone()
+                    if act_row:
+                        action_dict = dict(act_row)
+                        action_dict["payload"] = json.loads(action_dict["payload_json"]) if action_dict.get("payload_json") else {}
+                        action_dict["preview"] = json.loads(action_dict["preview_json"]) if action_dict.get("preview_json") else None
+                        action_dict["result_reasons"] = json.loads(action_dict["result_reasons_json"]) if action_dict.get("result_reasons_json") else []
+                        action_dict["capital"] = bool(action_dict["capital"])
+                        action_dict.pop("payload_json", None)
+                        action_dict.pop("preview_json", None)
+                        action_dict.pop("result_reasons_json", None)
+                m["action"] = action_dict
+                m.pop("context_json", None)
+                m.pop("refs_json", None)
+                m.pop("action_id", None)
+                messages.append(m)
+
+            conv["messages"] = messages
+            return conv
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def bridge_actions(
+        self,
+        status: str | None = None,
+        conversation_id: int | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            query = "SELECT * FROM bridge_actions WHERE 1=1"
+            params: list[Any] = []
+            if status:
+                statuses = [s.strip() for s in status.split(",") if s.strip()]
+                if len(statuses) == 1:
+                    query += " AND status = ?"
+                    params.append(statuses[0])
+                elif len(statuses) > 1:
+                    placeholders = ", ".join("?" for _ in statuses)
+                    query += f" AND status IN ({placeholders})"
+                    params.extend(statuses)
+            if conversation_id is not None:
+                query += " AND conversation_id = ?"
+                params.append(conversation_id)
+            query += " ORDER BY id DESC LIMIT ?"
+            params.append(limit)
+            rows = conn.execute(query, params).fetchall()
+            actions: list[dict[str, Any]] = []
+            for r in rows:
+                a = dict(r)
+                a["payload"] = json.loads(a["payload_json"]) if a.get("payload_json") else {}
+                a["preview"] = json.loads(a["preview_json"]) if a.get("preview_json") else None
+                a["result_reasons"] = json.loads(a["result_reasons_json"]) if a.get("result_reasons_json") else []
+                a["capital"] = bool(a["capital"])
+                a.pop("payload_json", None)
+                a.pop("preview_json", None)
+                a.pop("result_reasons_json", None)
+                actions.append(a)
+            return actions
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def briefing(self, since: str | None = None) -> dict[str, Any]:
+        from datetime import timedelta
+
+        conn = self._get_connection()
+        try:
+            now_dt = self._now()
+            now_iso = now_dt.isoformat().replace("+00:00", "Z")
+
+            if not since:
+                row_seen = conn.execute("SELECT value FROM briefing_state WHERE key = 'last_seen_ts'").fetchone()
+                if row_seen and row_seen["value"]:
+                    since_ts = str(row_seen["value"])
+                else:
+                    since_ts = (now_dt - timedelta(hours=24)).isoformat().replace("+00:00", "Z")
+            else:
+                since_ts = since
+
+            # 1. Portfolio stats
+            port = self.portfolio()
+            portfolio_data = None
+            if port:
+                val = float(port.equity)
+                snap = conn.execute(
+                    "SELECT equity FROM portfolio_snapshots WHERE ts <= ? ORDER BY ts DESC LIMIT 1",
+                    (since_ts,),
+                ).fetchone()
+                if snap:
+                    base_eq = float(snap["equity"])
+                    change = val - base_eq
+                    chg_frac = (change / base_eq) if base_eq > 0 else 0.0
+                else:
+                    change = float(port.realized_pnl_today + port.unrealized_pnl)
+                    base = val - change
+                    chg_frac = (change / base) if base > 0 else 0.0
+                portfolio_data = {
+                    "value": round(val, 2),
+                    "change": round(change, 2),
+                    "change_fraction": round(chg_frac, 4),
+                }
+
+            items: list[dict[str, Any]] = []
+
+            # 2. Trades
+            trade_rows = conn.execute(
+                """
+                SELECT id, ticker, CASE WHEN closed_ts IS NULL THEN 'open' ELSE 'closed' END AS status,
+                       qty, entry_price, exit_price, realized_pnl, opened_ts, closed_ts
+                FROM trades
+                WHERE opened_ts >= ? OR (closed_ts IS NOT NULL AND closed_ts >= ?)
+                ORDER BY COALESCE(closed_ts, opened_ts) DESC LIMIT 50
+                """,
+                (since_ts, since_ts),
+            ).fetchall()
+            for tr in trade_rows:
+                ts_val = tr["closed_ts"] or tr["opened_ts"]
+                pnl_str = f" P&L: {round(float(tr['realized_pnl']), 2)}" if tr["realized_pnl"] is not None else ""
+                items.append({
+                    "id": f"trade-{tr['id']}",
+                    "type": "trade",
+                    "ts": ts_val,
+                    "title": f"Trade {tr['ticker']} {tr['status']} ({tr['qty']} @ {tr['entry_price'] or 0}){pnl_str}",
+                    "detail": f"Uscita: {tr['exit_price']}" if tr["exit_price"] else None,
+                    "ticker": tr["ticker"],
+                    "ref": {"type": "trade", "id": int(tr["id"])},
+                    "severity": "info",
+                })
+
+            # 3. Orders pending approval
+            ord_rows = self.orders(status="pending", limit=50)
+            for o in ord_rows:
+                items.append({
+                    "id": f"order-pending-{o.id}",
+                    "type": "order_pending",
+                    "ts": o.created_ts,
+                    "title": f"Ordine in attesa: {o.ticker} {o.side} {o.qty}",
+                    "detail": f"{o.order_type} limit {o.limit_price}" if o.limit_price else o.order_type,
+                    "ticker": o.ticker,
+                    "ref": {"type": "order", "id": int(o.id)},
+                    "severity": "attention",
+                })
+
+            # 4. Proposals pending
+            prop_pending = conn.execute(
+                """
+                SELECT id, ticker, agent, direction, conviction, submitted_ts, reason
+                FROM proposals
+                WHERE status = 'pending'
+                ORDER BY id DESC LIMIT 50
+                """
+            ).fetchall()
+            for p in prop_pending:
+                items.append({
+                    "id": f"proposal-pending-{p['id']}",
+                    "type": "proposal_pending",
+                    "ts": p["submitted_ts"],
+                    "title": f"Proposta in attesa: {p['ticker']} ({p['direction']})",
+                    "detail": p["reason"],
+                    "ticker": p["ticker"],
+                    "ref": {"type": "proposal", "id": int(p["id"])},
+                    "severity": "attention",
+                })
+
+            # 5. Proposals decided
+            prop_decided = conn.execute(
+                """
+                SELECT id, ticker, agent, status, direction, decided_ts, decided_by, reason
+                FROM proposals
+                WHERE status IN ('accepted', 'rejected', 'deferred') AND decided_ts >= ?
+                ORDER BY decided_ts DESC LIMIT 50
+                """,
+                (since_ts,),
+            ).fetchall()
+            for p in prop_decided:
+                items.append({
+                    "id": f"proposal-decided-{p['id']}",
+                    "type": "proposal_decided",
+                    "ts": p["decided_ts"],
+                    "title": f"Proposta {p['ticker']} {p['status']} da {p['decided_by'] or 'PM'}",
+                    "detail": p["reason"],
+                    "ticker": p["ticker"],
+                    "ref": {"type": "proposal", "id": int(p["id"])},
+                    "severity": "info",
+                })
+
+            # 6. Alerts
+            alert_rows = conn.execute(
+                """
+                SELECT id, text, ts FROM inbox
+                WHERE kind = 'alert' AND ts >= ?
+                ORDER BY id DESC LIMIT 50
+                """,
+                (since_ts,),
+            ).fetchall()
+            for a in alert_rows:
+                items.append({
+                    "id": f"alert-{a['id']}",
+                    "type": "alert",
+                    "ts": a["ts"],
+                    "title": f"Alert: {a['text'][:80]}",
+                    "detail": a["text"],
+                    "ticker": None,
+                    "ref": None,
+                    "severity": "attention",
+                })
+
+            # 7. Halt / Resume
+            halt_rows = conn.execute(
+                """
+                SELECT id, payload, ts FROM events
+                WHERE type = 'halt.changed' AND ts >= ?
+                ORDER BY id DESC LIMIT 50
+                """,
+                (since_ts,),
+            ).fetchall()
+            for h in halt_rows:
+                payload = json.loads(h["payload"]) if h["payload"] else {}
+                status = payload.get("status")
+                if status == "halted":
+                    items.append({
+                        "id": f"halt-{h['id']}",
+                        "type": "halt",
+                        "ts": h["ts"],
+                        "title": "Trading Halt attivato",
+                        "detail": payload.get("reason"),
+                        "ticker": None,
+                        "ref": None,
+                        "severity": "critical",
+                    })
+                elif status == "resumed":
+                    items.append({
+                        "id": f"resume-{h['id']}",
+                        "type": "resume",
+                        "ts": h["ts"],
+                        "title": "Trading ripreso",
+                        "detail": payload.get("reason"),
+                        "ticker": None,
+                        "ref": None,
+                        "severity": "info",
+                    })
+
+            # 8. Dossiers
+            dos_rows = conn.execute(
+                """
+                SELECT ticker, version, ts, author FROM dossier_versions
+                WHERE ts >= ?
+                ORDER BY ts DESC LIMIT 50
+                """,
+                (since_ts,),
+            ).fetchall()
+            for d in dos_rows:
+                items.append({
+                    "id": f"dossier-{d['ticker']}-{d['version']}",
+                    "type": "dossier",
+                    "ts": d["ts"],
+                    "title": f"Scheda {d['ticker']} aggiornata (v{d['version']})",
+                    "detail": f"Aggiornata da {d['author']}",
+                    "ticker": d["ticker"],
+                    "ref": {"type": "ticker", "id": d["ticker"]},
+                    "severity": "info",
+                })
+
+            # 9. Agent errors
+            err_rows = conn.execute(
+                """
+                SELECT id, text, ts FROM inbox
+                WHERE kind = 'error' AND ts >= ?
+                ORDER BY id DESC LIMIT 50
+                """,
+                (since_ts,),
+            ).fetchall()
+            for er in err_rows:
+                items.append({
+                    "id": f"agent-error-{er['id']}",
+                    "type": "agent_error",
+                    "ts": er["ts"],
+                    "title": f"Errore: {er['text'][:80]}",
+                    "detail": er["text"],
+                    "ticker": None,
+                    "ref": None,
+                    "severity": "critical",
+                })
+
+            # 10. Risk limits
+            lim_rows = conn.execute(
+                """
+                SELECT version, ts, actor, reason FROM risk_limits_versions
+                WHERE ts >= ?
+                ORDER BY version DESC LIMIT 50
+                """,
+                (since_ts,),
+            ).fetchall()
+            for lr in lim_rows:
+                items.append({
+                    "id": f"risk-limits-{lr['version']}",
+                    "type": "risk_limits",
+                    "ts": lr["ts"],
+                    "title": f"Limiti di rischio v{lr['version']} modificati da {lr['actor']}",
+                    "detail": lr["reason"],
+                    "ticker": None,
+                    "ref": {"type": "risk_limits", "id": lr["version"]},
+                    "severity": "attention",
+                })
+
+            # Counts
+            counts = {
+                "trades": len(trade_rows),
+                "orders_pending": len(ord_rows),
+                "proposals_pending": len(prop_pending),
+                "proposals_decided": len(prop_decided),
+                "alerts": len(alert_rows),
+                "agent_errors": len(err_rows),
+            }
+
+            # Sort all items by ts DESC and cap at 50
+            items.sort(key=lambda x: str(x.get("ts", "")), reverse=True)
+            capped_items = items[:50]
+
+            # Summary text from cache or Bridge
+            summary_text = None
+            summary_ts = None
+            cached_sum_row = conn.execute(
+                "SELECT value, updated_ts FROM briefing_state WHERE key = ?",
+                (f"summary:{since_ts}",),
+            ).fetchone()
+            if cached_sum_row:
+                summary_text = str(cached_sum_row["value"])
+                summary_ts = str(cached_sum_row["updated_ts"])
+            elif getattr(self._runtime, "bridge_runner", None):
+                res = self._runtime.bridge_runner.generate_briefing_summary(
+                    since=since_ts, items=capped_items, portfolio=portfolio_data
+                )
+                if res:
+                    summary_text, summary_ts = res
+
+            return {
+                "since": since_ts,
+                "generated_ts": now_iso,
+                "summary_text": summary_text,
+                "summary_ts": summary_ts,
+                "portfolio": portfolio_data,
+                "counts": counts,
+                "items": capped_items,
+            }
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+

@@ -1,0 +1,6 @@
+# Passo 0: Census Report (Backend Configurazioni)
+
+Analisi dello stato esistente per la configurazione, i prompt e le chiavi API:
+1. **`office.toml` e impostazioni**: Caricate da `config/office_settings.py` tramite `tomllib.loads` in un modello Pydantic `OfficeSettings`. I limiti di rischio utilizzavano già il pattern versionato `RiskLimitsStore` con la tabella `risk_limits_versions` in `storage/office_db.py`. Abbiamo esteso questo modello con `SettingsStore` e la tabella `settings_versions` per tutte le impostazioni (agenti, schedule, retention, budgets, ecc.).
+2. **Prompt**: Caricati in precedenza da file markdown in `prompts/*.md` tramite `prompts/loader.py`. Abbiamo introdotto la tabella `prompt_versions` in `storage/office_db.py` e aggiornato `prompts/loader.py` affinché legga la versione attiva dal DB con fallback sul file.
+3. **Chiavi API**: In precedenza lette esclusivamente da variabili d'ambiente o `.env` tramite `os.environ` / `load_office_settings`. Abbiamo implementato `SecretsManager` (`storage/secrets.py`) che gestisce un file protetto (`0600`) in `~/.config/trading-agent/secrets.env` (o percorso configurabile) con precedenza su `.env` e mai esposto in chiaro o nei log/eventi.

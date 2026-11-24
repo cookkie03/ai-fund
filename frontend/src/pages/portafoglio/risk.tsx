@@ -1,8 +1,12 @@
 import { ArrowRight, History, Pencil, Plug, ShieldX } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { AuthorChip } from "@/components/author-chip";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { isCommandMissing } from "@/features/portfolio/api";
 import { commandErrorText, useRiskHistory, useUpdateRiskLimits } from "@/features/portfolio/hooks";
 import { LIMIT_NAMES, type LimitName, type LimitUsage, type RiskLimits, type RiskLimitsRead, type Sourced } from "@/features/portfolio/types";
@@ -50,46 +54,44 @@ function LimitsTable({ data, mobile }: { data: RiskLimitsRead; mobile: boolean }
     );
   }
   return (
-    <div className="overflow-x-auto">
-      <table className="tile-table w-full min-w-[860px] border-separate border-spacing-0 px-1.5">
-        <thead>
-          <tr className="text-2xs text-fg-subtle">
-            <th scope="col" className="h-8 px-2.5 text-left font-medium">Vincolo</th>
-            <th scope="col" className="h-8 px-2.5 text-right font-medium">Soglia</th>
-            <th scope="col" className="h-8 px-2.5 text-right font-medium">Attuale</th>
-            <th scope="col" className="h-8 w-[22%] px-2.5 text-left font-medium">Utilizzo</th>
-            <th scope="col" className="h-8 px-2.5 text-left font-medium">Stato</th>
-            <th scope="col" className="h-8 px-2.5 text-left font-medium">Dettaglio</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ name, threshold, u }) => (
-            <tr key={name} className="hover:[&>td]:bg-hover">
-              <td className="h-11 px-2.5 transition-colors">
-                <span className="block text-xs font-medium text-fg">{LIMIT_META[name].label}</span>
-                <span className="block text-2xs text-fg-subtle">{LIMIT_META[name].hint}</span>
-              </td>
-              <td className="num h-11 whitespace-nowrap px-2.5 text-right text-xs text-fg transition-colors">
-                <span className="text-fg-subtle">{LIMIT_META[name].min ? "≥ " : "≤ "}</span>
-                {fmtLimit(name, threshold)}
-              </td>
-              <td className={cn("num h-11 whitespace-nowrap px-2.5 text-right text-xs transition-colors", u.status === "breach" ? "text-down" : u.status === "near" ? "text-warn" : "text-fg")}>
-                {u.current === null ? <span className="text-fg-subtle">—</span> : fmtLimit(name, u.current)}
-              </td>
-              <td className="h-11 px-2.5 transition-colors">
-                <UsageBar u={u} threshold={threshold} />
-              </td>
-              <td className="h-11 px-2.5 transition-colors">
-                <StatusWord status={u.status} />
-              </td>
-              <td className="h-11 max-w-[260px] truncate px-2.5 text-2xs text-fg-subtle transition-colors" title={u.detail ?? undefined}>
-                {u.detail ?? ""}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Table className="tile-table w-full min-w-[860px] border-separate border-spacing-0 px-1.5" containerClassName="overflow-x-auto">
+      <TableHeader>
+        <TableRow className="border-none text-2xs text-fg-subtle hover:bg-transparent">
+          <TableHead scope="col" className="h-8 px-2.5 text-left font-medium border-none">Vincolo</TableHead>
+          <TableHead scope="col" className="h-8 px-2.5 text-right font-medium border-none">Soglia</TableHead>
+          <TableHead scope="col" className="h-8 px-2.5 text-right font-medium border-none">Attuale</TableHead>
+          <TableHead scope="col" className="h-8 w-[22%] px-2.5 text-left font-medium border-none">Utilizzo</TableHead>
+          <TableHead scope="col" className="h-8 px-2.5 text-left font-medium border-none">Stato</TableHead>
+          <TableHead scope="col" className="h-8 px-2.5 text-left font-medium border-none">Dettaglio</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map(({ name, threshold, u }) => (
+          <TableRow key={name} className="border-none hover:[&>td]:bg-hover">
+            <TableCell className="h-11 px-2.5 transition-colors border-none">
+              <span className="block text-xs font-medium text-fg">{LIMIT_META[name].label}</span>
+              <span className="block text-2xs text-fg-subtle">{LIMIT_META[name].hint}</span>
+            </TableCell>
+            <TableCell className="num h-11 whitespace-nowrap px-2.5 text-right text-xs text-fg transition-colors border-none">
+              <span className="text-fg-subtle">{LIMIT_META[name].min ? "≥ " : "≤ "}</span>
+              {fmtLimit(name, threshold)}
+            </TableCell>
+            <TableCell className={cn("num h-11 whitespace-nowrap px-2.5 text-right text-xs transition-colors border-none", u.status === "breach" ? "text-down" : u.status === "near" ? "text-warn" : "text-fg")}>
+              {u.current === null ? <span className="text-fg-subtle">—</span> : fmtLimit(name, u.current)}
+            </TableCell>
+            <TableCell className="h-11 px-2.5 transition-colors border-none">
+              <UsageBar u={u} threshold={threshold} />
+            </TableCell>
+            <TableCell className="h-11 px-2.5 transition-colors border-none">
+              <StatusWord status={u.status} />
+            </TableCell>
+            <TableCell className="h-11 max-w-[260px] truncate px-2.5 text-2xs text-fg-subtle transition-colors border-none" title={u.detail ?? undefined}>
+              {u.detail ?? ""}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
@@ -160,13 +162,13 @@ function EditDialog({ data, onClose }: { data: RiskLimitsRead; onClose: () => vo
                     </span>
                   </span>
                   <span className="relative">
-                    <input
+                    <Input
                       inputMode="decimal"
                       value={text[name]}
                       onChange={(e) => setText((t) => ({ ...t, [name]: e.target.value }))}
                       aria-invalid={!!invalid}
                       aria-label={LIMIT_META[name].label}
-                      className={cn("num h-8 w-full rounded-control border bg-ground pl-2.5 pr-12 text-right text-sm text-fg outline-none transition-colors focus:border-accent-c", invalid ? "border-down" : "border-line-strong")}
+                      className={cn("num h-8 w-full rounded-control border bg-ground pl-2.5 pr-12 text-right text-sm text-fg outline-none transition-colors focus-visible:border-accent-c", invalid ? "border-down" : "border-line-strong")}
                     />
                     <span className="pointer-events-none absolute inset-y-0 right-2.5 grid place-items-center text-2xs text-fg-subtle">{unit(name)}</span>
                   </span>
@@ -175,12 +177,12 @@ function EditDialog({ data, onClose }: { data: RiskLimitsRead; onClose: () => vo
             })}
             <label className="block px-2 pb-1 pt-3">
               <span className="text-2xs text-fg-subtle">Motivo (obbligatorio, lo leggono anche gli agenti)</span>
-              <textarea
+              <Textarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 rows={2}
                 placeholder="Es. riduco il peso massimo dopo la volatilità della settimana"
-                className="mt-1 w-full resize-none rounded-control border border-line-strong bg-ground px-2.5 py-2 text-sm text-fg outline-none placeholder:text-fg-subtle focus:border-accent-c"
+                className="mt-1 w-full resize-none rounded-control border-line-strong bg-ground px-2.5 py-2 text-sm text-fg outline-none placeholder:text-fg-subtle focus-visible:border-accent-c"
               />
             </label>
           </div>
@@ -192,7 +194,7 @@ function EditDialog({ data, onClose }: { data: RiskLimitsRead; onClose: () => vo
                 const before = u?.status ?? "ok";
                 const after = u && u.current !== null ? statusFor(u.current, value!, !!LIMIT_META[name].min) : "ok";
                 return (
-                  <li key={name} className="rounded-control bg-[oklch(0_0_0/0.18)] px-3 py-2.5">
+                  <li key={name} className="rounded-control border border-border/50 bg-muted/40 px-3 py-2.5">
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       <span className="font-medium text-fg">{LIMIT_META[name].label}</span>
                       <span className="num ml-auto inline-flex items-center gap-1.5 text-fg-muted">
@@ -219,7 +221,7 @@ function EditDialog({ data, onClose }: { data: RiskLimitsRead; onClose: () => vo
                 );
               })}
             </ul>
-            <p className="rounded-control bg-[oklch(0_0_0/0.18)] px-3 py-2 text-xs text-fg-muted">
+            <p className="rounded-control border border-border/50 bg-muted/40 px-3 py-2 text-xs text-fg-muted">
               <span className="text-fg-subtle">Motivo · </span>
               {reason.trim()}
             </p>
@@ -231,16 +233,17 @@ function EditDialog({ data, onClose }: { data: RiskLimitsRead; onClose: () => vo
               <p className="text-xs text-down">{commandErrorText(failure, "update_risk_limits")}</p>
             ) : null}
             {refusal && (
-              <div role="alert" className="rounded-control border border-[oklch(0.67_0.195_20/0.4)] bg-down-soft px-3 py-2.5 text-xs">
-                <p className="flex items-center gap-1.5 font-medium text-down">
-                  <ShieldX className="size-3.5" /> Rifiutato dal Runtime
-                </p>
-                <ul className="mt-1 list-disc space-y-0.5 pl-5 text-fg">
-                  {(refusal.length ? refusal : ["Nessuna ragione indicata"]).map((r) => (
-                    <li key={r}>{r}</li>
-                  ))}
-                </ul>
-              </div>
+              <Alert variant="destructive">
+                <ShieldX className="size-4" />
+                <AlertTitle>Rifiutato dal Runtime</AlertTitle>
+                <AlertDescription>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4 text-fg">
+                    {(refusal.length ? refusal : ["Nessuna ragione indicata"]).map((r) => (
+                      <li key={r}>{r}</li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </Alert>
             )}
             {block && <p className="text-xs text-warn">{block}: la modifica non può partire ora.</p>}
           </div>

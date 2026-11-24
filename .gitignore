@@ -37,3 +37,9 @@ nohup.out
 *.db-wal
 *.db.lock
 frontend/tsconfig.tsbuildinfo
+data/
+secrets.env
+secrets.meta.json
+
+# Local wiki source archive; never publish it.
+/raw/

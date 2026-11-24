@@ -12,6 +12,12 @@ Flusso di un ciclo su un ticker: Scheduled task → il PM scrive ai quattro Anal
 
 ## Configurazione
 
+Copia il template delle variabili d'ambiente:
+
+```bash
+cp .env.example .env
+```
+
 I segreti stanno solo nel file `.env` (mai committato, mai nel TOML):
 
 | Variabile | Uso |
@@ -34,12 +40,30 @@ Controlla configurazione e credenziali con `uv run trading-agent config check`.
 
 I prompt degli agenti sono in [`prompts/`](prompts/) (un file Markdown per agente, versionato; l'hash finisce nel registro di ogni chiamata LLM). Sono bozze marcate "DRAFT per la revisione di Luca": rileggili e correggili.
 
-## Uso in locale
+## Uso in locale (Sviluppo)
+
+### 1. Avvio rapido con un solo comando (Issue #11)
+
+Per avviare insieme il backend Runtime e il frontend Cockpit con log coordinati e shutdown pulito su `Ctrl+C`:
 
 ```bash
+./scripts/dev.sh
+```
+
+Il cockpit sarà raggiungibile su `http://127.0.0.1:5174` con proxy trasparente verso il Runtime.
+
+### 2. Avvio manuale dei singoli componenti
+
+Se preferisci terminali dedicati:
+
+```bash
+# Terminale 1: Backend Runtime
 uv sync
-uv run trading-agent config check # verifica configurazione (comando locale)
-uv run trading-agent run          # avvia il Runtime single-writer (scheduler event-driven + API HTTP/SSE su :8765)
+uv run trading-agent config check
+uv run trading-agent run
+
+# Terminale 2: Frontend Cockpit
+cd frontend && npm install && npm run dev
 ```
 
 Un Runtime serve un solo account broker. Variabili utili:
@@ -73,17 +97,24 @@ uv run trading-agent resume
 
 Ogni sottocomando ha `--help`.
 
-## Produzione con Docker
+## Produzione con Docker Compose (Issue #10)
+
+Il deployment production-grade avvia sia il runtime (`engine`) sia il cockpit web (`cockpit` su Nginx con supporto streaming SSE senza buffering):
 
 ```bash
-docker compose -f compose.engine.yaml up -d --build
-docker compose -f compose.engine.yaml logs -f engine
+docker compose up -d --build
+docker compose logs -f
 ```
 
-Il servizio `engine` legge `.env`, tiene il DB nel volume `trading-agent-data` e si unisce alla rete Docker `omniroute_default` per raggiungere OmniRoute (`OFFICE_LLM_ENDPOINT`). Per usare la CLI dentro il container:
+- **Cockpit Web**: raggiungibile su `http://localhost:3000` (o porta definita da `COCKPIT_PUBLIC_PORT`).
+- **Engine API**: esposto su `127.0.0.1:8765`.
+- **Database**: persistito nel volume Docker `trading-agent-data`.
+- **Rete**: connesso automaticamente alla rete `omniroute_default` per raggiungere OmniRoute.
+
+Per eseguire comandi CLI dentro il container:
 
 ```bash
-docker compose -f compose.engine.yaml exec -T engine uv run --no-sync trading-agent <comando>
+docker compose exec -T engine uv run --no-sync trading-agent <comando>
 ```
 
 ## Test

@@ -5,26 +5,38 @@ from __future__ import annotations
 import json
 import logging
 import threading
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from runtime.commands import (
     AddDossierNote,
+    AddNewsSource,
     AddWatchlist,
     ApproveOrder,
+    BridgeActionDecide,
+    BridgeArchiveConversation,
+    BridgeRenameConversation,
+    BridgeSay,
+    BridgeStop,
     ClosePosition,
     CommandResult,
     DecideProposal,
     EnqueueTask,
+    ForwardNews,
     Halt,
     IngestAlert,
+    MarkBriefingSeen,
     MarkInboxRead,
     ModifyExit,
     ReconcileBroker,
     RefreshData,
+    RefreshNews,
     RejectOrder,
+    RemoveNewsSource,
     RemoveWatchlist,
     Resume,
     Say,
+    SetNewsSourceEnabled,
     StrikeAnnotation,
     UpdateRiskLimits,
     UpsertAnnotation,
@@ -480,3 +492,381 @@ def handle_modify_exit(ctx: RuntimeContext, cmd: ModifyExit, actor: str) -> Comm
         return CommandResult(ok=True, data={"dry_run": True, **preview})
     ok, data, reasons = exits.modify(trade, stop, target, price, gate_ctx, actor)
     return CommandResult(ok=ok, data=data, reasons=reasons)
+
+def handle_forward_news(ctx: RuntimeContext, cmd: ForwardNews, actor: str) -> CommandResult:
+    db = ctx.office.db
+    item = db.connection.execute("SELECT * FROM news WHERE id = ?", (cmd.news_id,)).fetchone()
+    if not item:
+        return CommandResult(ok=False, reasons=["News item not found"])
+    
+    to_spec = cmd.to
+    target_agent = to_spec.get("agent")
+    ticker_target = to_spec.get("ticker")
+    
+    if target_agent:
+        chat_id = db.get_or_create_chat(target_agent, "direct")
+    elif ticker_target:
+        sym = ticker_target.upper().strip()
+        target_agent = f"ticker:{sym}"
+        agent_exists = db.get_agent(target_agent)
+        if not agent_exists:
+            target_agent = "portfolio_manager"
+        chat_id = db.get_or_create_chat(target_agent, sym)
+    else:
+        return CommandResult(ok=False, reasons=["Invalid 'to' destination spec"])
+
+    text = f"[Inoltrata da Luca] **{item['headline']}**\nFonte: {item['source']} | {item['url'] or 'N/A'}"
+    if cmd.note:
+        text += f"\nNota: {cmd.note}"
+    
+    msg_id = db.append_message(chat_id=chat_id, author=actor, text=text, kind="original")
+    db.log_news_usage(news_id=cmd.news_id, agent=target_agent, kind="forwarded", chat_id=chat_id, note=cmd.note)
+    return CommandResult(ok=True, data={"message_id": msg_id, "chat_id": chat_id})
+
+
+def handle_add_news_source(ctx: RuntimeContext, cmd: AddNewsSource, actor: str) -> CommandResult:
+    source_id = ctx.office.db.add_news_source(cmd.provider, cmd.name, cmd.url)
+    return CommandResult(ok=True, data={"source_id": source_id})
+
+
+def handle_set_news_source_enabled(ctx: RuntimeContext, cmd: SetNewsSourceEnabled, actor: str) -> CommandResult:
+    success = ctx.office.db.set_news_source_enabled(cmd.source_id, cmd.enabled)
+    return CommandResult(ok=success, reasons=[] if success else ["Source not found"])
+
+
+def handle_remove_news_source(ctx: RuntimeContext, cmd: RemoveNewsSource, actor: str) -> CommandResult:
+    success = ctx.office.db.remove_news_source(cmd.source_id)
+    return CommandResult(ok=success, reasons=[] if success else ["Source not found"])
+
+
+def handle_refresh_news(ctx: RuntimeContext, cmd: RefreshNews, actor: str) -> CommandResult:
+    from runtime.jobs import NewsIngestionJob
+    job = NewsIngestionJob(ctx.runtime)
+    job.run(datetime.now(UTC))
+    return CommandResult(ok=True, data={"refreshed": True})
+
+
+
+# --- Bridge & Briefing Command Handlers ---
+
+
+def handle_bridge_say(ctx: RuntimeContext, cmd: BridgeSay, actor: str) -> CommandResult:
+    now_iso = ctx.office.get_now_iso()
+    text = cmd.text.strip()
+    conv_id = cmd.conversation_id
+
+    if conv_id is None:
+        words = text.split()
+        title = " ".join(words[:6])
+        if len(words) > 6 or len(title) > 35:
+            title = title[:35] + "..."
+        conv_id = ctx.office.db.create_bridge_conversation(
+            title=title, created_ts=now_iso, status="thinking"
+        )
+        if ctx.event_log:
+            conv = ctx.office.db.get_bridge_conversation(conv_id)
+            ctx.event_log.append(
+                "bridge.conversation",
+                f"bridge_conv:{conv_id}",
+                {"conversation": conv},
+                actor=actor,
+            )
+    else:
+        conv = ctx.office.db.get_bridge_conversation(conv_id)
+        if not conv:
+            return CommandResult(ok=False, reasons=[f"Conversation {conv_id} not found"])
+        ctx.office.db.update_bridge_conversation(conv_id, status="thinking")
+
+    msg_id = ctx.office.db.append_bridge_message(
+        conversation_id=conv_id,
+        author="luca",
+        kind="text",
+        text=text,
+        ts=now_iso,
+        context=cmd.context,
+    )
+
+    if ctx.event_log:
+        msg_payload = {
+            "id": msg_id,
+            "conversation_id": conv_id,
+            "author": "luca",
+            "kind": "text",
+            "text": text,
+            "ts": now_iso,
+            "context": cmd.context,
+            "refs": [],
+            "action": None,
+        }
+        ctx.event_log.append(
+            "bridge.message",
+            f"bridge_conv:{conv_id}",
+            {"conversation_id": conv_id, "message": msg_payload},
+            actor=actor,
+        )
+
+    if getattr(ctx.runtime, "bridge_runner", None):
+        ctx.runtime.bridge_runner.enqueue_turn(conv_id)
+
+    return CommandResult(ok=True, data={"conversation_id": conv_id, "message_id": msg_id})
+
+
+def handle_bridge_rename_conversation(
+    ctx: RuntimeContext, cmd: BridgeRenameConversation, actor: str
+) -> CommandResult:
+    conv = ctx.office.db.get_bridge_conversation(cmd.conversation_id)
+    if not conv:
+        return CommandResult(ok=False, reasons=[f"Conversation {cmd.conversation_id} not found"])
+
+    title = cmd.title.strip()
+    ctx.office.db.update_bridge_conversation(cmd.conversation_id, title=title)
+    if ctx.event_log:
+        updated = ctx.office.db.get_bridge_conversation(cmd.conversation_id)
+        ctx.event_log.append(
+            "bridge.conversation",
+            f"bridge_conv:{cmd.conversation_id}",
+            {"conversation": updated},
+            actor=actor,
+        )
+    return CommandResult(ok=True, data={"conversation_id": cmd.conversation_id, "title": title})
+
+
+def handle_bridge_archive_conversation(
+    ctx: RuntimeContext, cmd: BridgeArchiveConversation, actor: str
+) -> CommandResult:
+    conv = ctx.office.db.get_bridge_conversation(cmd.conversation_id)
+    if not conv:
+        return CommandResult(ok=False, reasons=[f"Conversation {cmd.conversation_id} not found"])
+
+    ctx.office.db.update_bridge_conversation(cmd.conversation_id, archived=cmd.archived)
+    if ctx.event_log:
+        updated = ctx.office.db.get_bridge_conversation(cmd.conversation_id)
+        ctx.event_log.append(
+            "bridge.conversation",
+            f"bridge_conv:{cmd.conversation_id}",
+            {"conversation": updated},
+            actor=actor,
+        )
+    return CommandResult(ok=True, data={"conversation_id": cmd.conversation_id, "archived": cmd.archived})
+
+
+def handle_bridge_stop(ctx: RuntimeContext, cmd: BridgeStop, actor: str) -> CommandResult:
+    stopped = False
+    if getattr(ctx.runtime, "bridge_runner", None):
+        stopped = ctx.runtime.bridge_runner.request_stop(cmd.conversation_id)
+    return CommandResult(ok=True, data={"conversation_id": cmd.conversation_id, "stopped": stopped})
+
+
+def handle_bridge_action_decide(
+    ctx: RuntimeContext, cmd: BridgeActionDecide, actor: str
+) -> CommandResult:
+    action = ctx.office.db.get_bridge_action(cmd.action_id)
+    if not action:
+        return CommandResult(ok=False, reasons=[f"Action {cmd.action_id} not found"])
+
+    if action["status"] != "pending":
+        return CommandResult(
+            ok=False,
+            reasons=[f"Action {cmd.action_id} is not pending (status: '{action['status']}')"],
+        )
+
+    conv_id = int(action["conversation_id"])
+    now_iso = ctx.office.get_now_iso()
+
+    if cmd.decision == "dismiss":
+        ctx.office.db.update_bridge_action(
+            action_id=cmd.action_id,
+            status="dismissed",
+            decided_ts=now_iso,
+            decided_by=actor,
+        )
+        if ctx.event_log:
+            act_obj = ctx.office.db.get_bridge_action(cmd.action_id)
+            ctx.event_log.append(
+                "bridge.action",
+                f"bridge_action:{cmd.action_id}",
+                {"conversation_id": conv_id, "action": act_obj},
+                actor=actor,
+            )
+
+        dismiss_msg = f"Azione '{action['summary']}' respinta da {actor}."
+        msg_id = ctx.office.db.append_bridge_message(
+            conversation_id=conv_id,
+            author="bridge",
+            kind="text",
+            text=dismiss_msg,
+            ts=now_iso,
+        )
+        if ctx.event_log:
+            ctx.event_log.append(
+                "bridge.message",
+                f"bridge_conv:{conv_id}",
+                {
+                    "conversation_id": conv_id,
+                    "message": {
+                        "id": msg_id,
+                        "conversation_id": conv_id,
+                        "author": "bridge",
+                        "kind": "text",
+                        "text": dismiss_msg,
+                        "ts": now_iso,
+                        "context": None,
+                        "refs": [],
+                        "action": None,
+                    },
+                },
+                actor="bridge",
+            )
+        return CommandResult(ok=True, data={"action_id": cmd.action_id, "status": "dismissed"})
+
+    # decision == "confirm"
+    from tools.bridge_tools import CAPITAL_COMMAND_MODELS
+
+    cmd_name = action["command"]
+    cmd_cls = CAPITAL_COMMAND_MODELS.get(cmd_name)
+    if not cmd_cls:
+        return CommandResult(ok=False, reasons=[f"Unknown capital command '{cmd_name}'"])
+
+    raw_payload = action.get("payload_json") or action.get("payload") or "{}"
+    payload = json.loads(raw_payload) if isinstance(raw_payload, str) else dict(raw_payload)
+    if "confirm" in cmd_cls.model_fields:
+        payload["confirm"] = True
+    if "dry_run" in cmd_cls.model_fields:
+        payload["dry_run"] = False
+
+    try:
+        orig_cmd = cmd_cls.model_validate(payload)
+    except Exception as exc:
+        err_msg = f"Invalid payload for {cmd_name}: {exc}"
+        ctx.office.db.update_bridge_action(
+            action_id=cmd.action_id,
+            status="failed",
+            result_reasons=[err_msg],
+            decided_ts=now_iso,
+            decided_by=actor,
+        )
+        return CommandResult(ok=False, reasons=[err_msg])
+
+    # Execute from same handler via runtime with actor='luca'
+    exec_res = ctx.runtime.execute(orig_cmd, actor="luca")
+
+    if exec_res.ok:
+        ctx.office.db.update_bridge_action(
+            action_id=cmd.action_id,
+            status="executed",
+            result_reasons=[],
+            decided_ts=now_iso,
+            decided_by=actor,
+        )
+        if ctx.event_log:
+            act_obj = ctx.office.db.get_bridge_action(cmd.action_id)
+            ctx.event_log.append(
+                "bridge.action",
+                f"bridge_action:{cmd.action_id}",
+                {"conversation_id": conv_id, "action": act_obj},
+                actor=actor,
+            )
+
+        confirm_msg = f"Azione '{action['summary']}' eseguita con successo."
+        msg_id = ctx.office.db.append_bridge_message(
+            conversation_id=conv_id,
+            author="bridge",
+            kind="text",
+            text=confirm_msg,
+            ts=now_iso,
+        )
+        if ctx.event_log:
+            ctx.event_log.append(
+                "bridge.message",
+                f"bridge_conv:{conv_id}",
+                {
+                    "conversation_id": conv_id,
+                    "message": {
+                        "id": msg_id,
+                        "conversation_id": conv_id,
+                        "author": "bridge",
+                        "kind": "text",
+                        "text": confirm_msg,
+                        "ts": now_iso,
+                        "context": None,
+                        "refs": [],
+                        "action": None,
+                    },
+                },
+                actor="bridge",
+            )
+        if getattr(ctx.runtime, "bridge_runner", None):
+            ctx.runtime.bridge_runner.enqueue_turn(conv_id)
+
+        return CommandResult(
+            ok=True,
+            data={"action_id": cmd.action_id, "status": "executed", "result": exec_res.data},
+        )
+    else:
+        ctx.office.db.update_bridge_action(
+            action_id=cmd.action_id,
+            status="failed",
+            result_reasons=exec_res.reasons,
+            decided_ts=now_iso,
+            decided_by=actor,
+        )
+        if ctx.event_log:
+            act_obj = ctx.office.db.get_bridge_action(cmd.action_id)
+            ctx.event_log.append(
+                "bridge.action",
+                f"bridge_action:{cmd.action_id}",
+                {"conversation_id": conv_id, "action": act_obj},
+                actor=actor,
+            )
+
+        fail_msg = f"Esecuzione fallita per l'azione '{action['summary']}': {', '.join(exec_res.reasons)}."
+        msg_id = ctx.office.db.append_bridge_message(
+            conversation_id=conv_id,
+            author="bridge",
+            kind="error",
+            text=fail_msg,
+            ts=now_iso,
+        )
+        if ctx.event_log:
+            ctx.event_log.append(
+                "bridge.message",
+                f"bridge_conv:{conv_id}",
+                {
+                    "conversation_id": conv_id,
+                    "message": {
+                        "id": msg_id,
+                        "conversation_id": conv_id,
+                        "author": "bridge",
+                        "kind": "error",
+                        "text": fail_msg,
+                        "ts": now_iso,
+                        "context": None,
+                        "refs": [],
+                        "action": None,
+                    },
+                },
+                actor="bridge",
+            )
+        if getattr(ctx.runtime, "bridge_runner", None):
+            ctx.runtime.bridge_runner.enqueue_turn(conv_id)
+
+        return CommandResult(
+            ok=False,
+            data={"action_id": cmd.action_id, "status": "failed"},
+            reasons=exec_res.reasons,
+        )
+
+
+def handle_mark_briefing_seen(
+    ctx: RuntimeContext, cmd: MarkBriefingSeen, actor: str
+) -> CommandResult:
+    seen_ts = ctx.office.db.set_briefing_seen(cmd.ts)
+    if ctx.event_log:
+        ctx.event_log.append(
+            "briefing.updated",
+            f"briefing:{seen_ts}",
+            {"since": seen_ts},
+            actor=actor,
+        )
+    return CommandResult(ok=True, data={"since": seen_ts})
+

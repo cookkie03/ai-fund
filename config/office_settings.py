@@ -22,17 +22,20 @@ class AgentConfig(BaseModel):
     effort: EffortLevel = "medium"
     api_key_env: str | None = "OMNIROUTE_API_KEY"
     system_prompt_path: str | None = None
+    daily_budget: float | None = None
 
 
 def default_agents() -> dict[str, AgentConfig]:
     """Default agent configuration per MVP spec:
 
     - Portfolio Manager: effort high
+    - Bridge: effort high, daily budget
     - Specialists (Market, Sentiment, Technical, Fundamental, Risk): effort medium
     - Subagent: effort low
     """
     return {
         "portfolio_manager": AgentConfig(effort="high", api_key_env="OMNIROUTE_API_KEY"),
+        "bridge": AgentConfig(effort="high", api_key_env="OMNIROUTE_API_KEY", daily_budget=10.0),
         "ticker_agent": AgentConfig(effort="medium", api_key_env="OMNIROUTE_API_KEY"),
         "market_analyst": AgentConfig(effort="medium", api_key_env="OMNIROUTE_API_KEY"),
         "sentiment_analyst": AgentConfig(effort="medium", api_key_env="OMNIROUTE_API_KEY"),
@@ -98,6 +101,7 @@ _AGENT_ALIASES: dict[str, str] = {
     "fundamental_analyst": "fundamental_analyst",
     "risk": "risk_analyst",
     "risk_analyst": "risk_analyst",
+    "bridge": "bridge",
     "subagent": "subagent",
 }
 

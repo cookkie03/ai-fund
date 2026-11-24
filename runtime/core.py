@@ -13,44 +13,84 @@ from typing import TYPE_CHECKING, Any
 
 from runtime.commands import (
     AddDossierNote,
+    AddNewsSource,
     AddWatchlist,
     ApproveOrder,
+    BackupDB,
+    ClearSecret,
+    BridgeActionDecide,
+    BridgeArchiveConversation,
+    BridgeRenameConversation,
+    BridgeSay,
+    BridgeStop,
     ClosePosition,
     CommandResult,
     DecideProposal,
     EnqueueTask,
+    ForwardNews,
     Halt,
     IngestAlert,
+    MarkBriefingSeen,
     MarkInboxRead,
     ModifyExit,
     ReconcileBroker,
     RefreshData,
+    RefreshNews,
     RejectOrder,
+    RemoveNewsSource,
     RemoveWatchlist,
+    RestorePrompt,
+    RestoreSettings,
     Resume,
     Say,
+    SetSecret,
+    SetNewsSourceEnabled,
     StrikeAnnotation,
+    TestConnection,
+    UpdatePrompt,
     UpdateRiskLimits,
+    UpdateSettings,
     UpsertAnnotation,
+)
+from runtime.configurazioni_handlers import (
+    handle_backup_db,
+    handle_clear_secret,
+    handle_restore_prompt,
+    handle_restore_settings,
+    handle_set_secret,
+    handle_test_connection,
+    handle_update_prompt,
+    handle_update_settings,
 )
 from runtime.events import Event, EventBus, EventLog
 from runtime.handlers import (
     handle_add_dossier_note,
+    handle_add_news_source,
     handle_add_watchlist,
     handle_approve_order,
+    handle_bridge_action_decide,
+    handle_bridge_archive_conversation,
+    handle_bridge_rename_conversation,
+    handle_bridge_say,
+    handle_bridge_stop,
     handle_close_position,
     handle_decide_proposal,
     handle_enqueue_task,
+    handle_forward_news,
     handle_halt,
     handle_ingest_alert,
+    handle_mark_briefing_seen,
     handle_mark_inbox_read,
     handle_modify_exit,
     handle_reconcile_broker,
     handle_refresh_data,
+    handle_refresh_news,
     handle_reject_order,
+    handle_remove_news_source,
     handle_remove_watchlist,
     handle_resume,
     handle_say,
+    handle_set_news_source_enabled,
     handle_strike_annotation,
     handle_update_risk_limits,
     handle_upsert_annotation,
@@ -99,6 +139,25 @@ _HANDLER_MAP = {
     RefreshData: handle_refresh_data,
     MarkInboxRead: handle_mark_inbox_read,
     IngestAlert: handle_ingest_alert,
+    UpdateSettings: handle_update_settings,
+    RestoreSettings: handle_restore_settings,
+    UpdatePrompt: handle_update_prompt,
+    RestorePrompt: handle_restore_prompt,
+    SetSecret: handle_set_secret,
+    ClearSecret: handle_clear_secret,
+    TestConnection: handle_test_connection,
+    BackupDB: handle_backup_db,
+    ForwardNews: handle_forward_news,
+    AddNewsSource: handle_add_news_source,
+    SetNewsSourceEnabled: handle_set_news_source_enabled,
+    RemoveNewsSource: handle_remove_news_source,
+    RefreshNews: handle_refresh_news,
+    BridgeSay: handle_bridge_say,
+    BridgeRenameConversation: handle_bridge_rename_conversation,
+    BridgeArchiveConversation: handle_bridge_archive_conversation,
+    BridgeStop: handle_bridge_stop,
+    BridgeActionDecide: handle_bridge_action_decide,
+    MarkBriefingSeen: handle_mark_briefing_seen,
 }
 
 
@@ -180,7 +239,7 @@ class Runtime:
         )
 
         self._lock_file: Any = None
-        self._command_lock = threading.Lock()
+        self._command_lock = threading.RLock()
         self.broker_configured = broker_stream is not None
         self.broker_stream_connected = False
         self.broker_stream_error: str | None = None
@@ -193,6 +252,11 @@ class Runtime:
         self.scheduler.register_job(ExpirePendingOrdersJob(self))
         self.scheduler.register_job(ReleaseQueuedOrdersJob(self))
         self.scheduler.bind_events()
+
+        from runtime.bridge_runner import BridgeRunner
+
+        self.bridge_runner = BridgeRunner(runtime=self)
+        self.office.db.on_bridge_relay = self.bridge_runner.enqueue_turn
 
     def reconcile_broker(self) -> None:
         """Run broker reconciliation: sync orders and refresh portfolio."""
@@ -298,7 +362,7 @@ class Runtime:
             # own split transactions to avoid holding SQLite lock during network calls.
             # Purely local commands run in a single atomic transaction with command.accepted.
             is_network_cmd = isinstance(
-                cmd, (ApproveOrder, Halt, ReconcileBroker, RefreshData, ClosePosition, ModifyExit)
+                cmd, (ApproveOrder, Halt, ReconcileBroker, RefreshData, ClosePosition, ModifyExit, BridgeActionDecide)
             ) or (
                 isinstance(cmd, DecideProposal) and cmd.action == "accept"
             )

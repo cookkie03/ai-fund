@@ -19,10 +19,15 @@ import { Freshness, HaltBanner, SummaryBand } from "./summary";
 type Tab = "positions" | "operations" | "performance" | "risk";
 const TAB_KEY = "cockpit.portafoglio.tab";
 
+const isTab = (t: string | null): t is Tab => t === "positions" || t === "operations" || t === "performance" || t === "risk";
+
 function loadTab(): Tab {
+  // A link can open a tab directly (Configurazioni → Limiti di rischio: /portafoglio?tab=risk).
+  const fromUrl = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tab");
+  if (isTab(fromUrl)) return fromUrl;
   try {
     const t = localStorage.getItem(TAB_KEY);
-    if (t === "positions" || t === "operations" || t === "performance" || t === "risk") return t;
+    if (isTab(t)) return t;
   } catch {
     /* storage unavailable */
   }
@@ -109,7 +114,7 @@ export function PortafoglioPage() {
         <PerformancePanel period={period} onPeriod={setPeriod} mobile={!wide} />
       </PanelTabContent>
       <PanelTabContent value="risk" className="tab-in">
-        <RiskPanel q={risk} mobile={!wide} before={!wide ? <AllocationTile className="mx-1.5 mb-2 bg-[oklch(0_0_0/0.14)]" /> : undefined} />
+        <RiskPanel q={risk} mobile={!wide} before={!wide ? <AllocationTile className="mx-1.5 mb-2 border border-border/50 bg-card" /> : undefined} />
       </PanelTabContent>
     </PanelTabs>
   );

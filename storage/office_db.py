@@ -443,6 +443,187 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         );
         """,
     ),
+    (
+        9,
+        "009_configurazioni_backend",
+        """
+        CREATE TABLE IF NOT EXISTS settings_versions (
+            version INTEGER PRIMARY KEY,
+            ts TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            before_json TEXT NOT NULL,
+            after_json TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS prompt_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            ts TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            text TEXT NOT NULL,
+            chars INTEGER NOT NULL,
+            UNIQUE(agent, version)
+        );
+        CREATE TABLE IF NOT EXISTS backup_records (
+            name TEXT PRIMARY KEY,
+            ts TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL
+        );
+        """,
+    ),
+    (
+        10,
+        "010_notizie_backend",
+        """
+        CREATE TABLE IF NOT EXISTS news_sources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider TEXT NOT NULL,
+            name TEXT NOT NULL,
+            url TEXT,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'ok',
+            last_fetch_ts TEXT,
+            last_error TEXT
+        );
+
+        ALTER TABLE news ADD COLUMN url TEXT;
+        ALTER TABLE news ADD COLUMN source_id INTEGER;
+        ALTER TABLE news ADD COLUMN provider TEXT NOT NULL DEFAULT 'alpaca';
+        ALTER TABLE news ADD COLUMN published_ts TEXT;
+        ALTER TABLE news ADD COLUMN fetched_ts TEXT;
+        ALTER TABLE news ADD COLUMN tickers_json TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE news ADD COLUMN themes_json TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE news ADD COLUMN image_url TEXT;
+        ALTER TABLE news ADD COLUMN has_full_text INTEGER NOT NULL DEFAULT 0;
+
+        CREATE TABLE IF NOT EXISTS news_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            news_id INTEGER NOT NULL,
+            agent TEXT,
+            kind TEXT NOT NULL CHECK (kind IN ('read', 'cited', 'forwarded')),
+            ts TEXT NOT NULL,
+            cycle_id INTEGER,
+            chat_id INTEGER,
+            tool_call_id INTEGER,
+            topic TEXT,
+            note TEXT,
+            FOREIGN KEY (news_id) REFERENCES news(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_news_usage_news ON news_usage(news_id);
+
+        CREATE TABLE IF NOT EXISTS calendar_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind TEXT NOT NULL CHECK (kind IN ('macro', 'earnings')),
+            ts TEXT NOT NULL,
+            title TEXT NOT NULL,
+            country TEXT,
+            ticker TEXT,
+            importance TEXT CHECK (importance IN ('low', 'medium', 'high')),
+            actual REAL,
+            forecast REAL,
+            previous REAL,
+            source TEXT NOT NULL,
+            fetched_at TEXT NOT NULL,
+            UNIQUE(kind, ts, title, ticker)
+        );
+        CREATE INDEX IF NOT EXISTS idx_calendar_ts ON calendar_events(ts);
+        """,
+    ),
+    (
+        11,
+        "011_bridge_and_briefing",
+        """
+        CREATE TABLE IF NOT EXISTS bridge_conversations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            created_ts TEXT NOT NULL,
+            updated_ts TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'idle' CHECK(status IN ('idle', 'thinking')),
+            archived INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_bridge_conversations_updated ON bridge_conversations(updated_ts DESC);
+        CREATE INDEX IF NOT EXISTS idx_bridge_conversations_archived ON bridge_conversations(archived);
+
+        CREATE TABLE IF NOT EXISTS bridge_actions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id INTEGER NOT NULL REFERENCES bridge_conversations(id) ON DELETE CASCADE,
+            command TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            capital INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'confirmed', 'dismissed', 'executed', 'failed')),
+            preview_json TEXT,
+            result_reasons_json TEXT NOT NULL DEFAULT '[]',
+            decided_ts TEXT,
+            decided_by TEXT,
+            created_ts TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_bridge_actions_conv ON bridge_actions(conversation_id, status);
+        CREATE INDEX IF NOT EXISTS idx_bridge_actions_status ON bridge_actions(status);
+
+        CREATE TABLE IF NOT EXISTS bridge_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id INTEGER NOT NULL REFERENCES bridge_conversations(id) ON DELETE CASCADE,
+            author TEXT NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('text', 'agent_relay', 'action', 'error')),
+            text TEXT NOT NULL,
+            ts TEXT NOT NULL,
+            context_json TEXT,
+            refs_json TEXT,
+            action_id INTEGER REFERENCES bridge_actions(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_bridge_messages_conv ON bridge_messages(conversation_id, id ASC);
+
+        CREATE TABLE IF NOT EXISTS bridge_relay_subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent TEXT NOT NULL,
+            topic TEXT NOT NULL,
+            conversation_id INTEGER NOT NULL REFERENCES bridge_conversations(id) ON DELETE CASCADE,
+            created_ts TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_bridge_relay ON bridge_relay_subscriptions(agent, topic);
+
+        CREATE TABLE IF NOT EXISTS briefing_state (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_ts TEXT NOT NULL
+        );
+        """,
+    ),
+    (
+        # Le tre 009 (Configurazioni, Notizie, Bridge) furono rinumerate all'unificazione. I DB di sviluppo che avevano
+        # gia la vecchia 009_bridge_and_briefing saltano la 009 di Configurazioni: qui si ricreano le sue tabelle.
+        12,
+        "012_configurazioni_repair",
+        """
+        CREATE TABLE IF NOT EXISTS settings_versions (
+            version INTEGER PRIMARY KEY,
+            ts TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            before_json TEXT NOT NULL,
+            after_json TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS prompt_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            ts TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            text TEXT NOT NULL,
+            chars INTEGER NOT NULL,
+            UNIQUE(agent, version)
+        );
+        CREATE TABLE IF NOT EXISTS backup_records (
+            name TEXT PRIMARY KEY,
+            ts TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL
+        );
+        """,
+    ),
 ]
 
 
@@ -457,6 +638,7 @@ class OfficeDB:
         self._on_commit_callbacks: list[Callable[[], None]] | None = None
         self._tx_depth = 0
         self.event_log: Any = None
+        self.on_bridge_relay: Callable[[int], None] | None = None
         self._connection = sqlite3.connect(
             str(self.path), isolation_level=None, check_same_thread=False
         )
@@ -491,7 +673,18 @@ class OfficeDB:
             if version not in applied:
                 self._connection.execute("BEGIN IMMEDIATE")
                 try:
-                    self._connection.executescript(sql)
+                    for statement in sql.split(";"):
+                        stmt = statement.strip()
+                        if not stmt:
+                            continue
+                        try:
+                            self._connection.execute(stmt)
+                        except sqlite3.OperationalError as oe:
+                            msg = str(oe).lower()
+                            if "duplicate column name" in msg or "already exists" in msg:
+                                pass
+                            else:
+                                raise
                     self._connection.execute(
                         "INSERT INTO schema_version (version, name, applied_at) VALUES (?, ?, ?)",
                         (version, name, utc_now_iso()),
@@ -607,20 +800,24 @@ class OfficeDB:
         self, name: str, role: str, config: dict | str = "{}", prompt_hash: str | None = None
     ) -> None:
         config_json = config if isinstance(config, str) else json.dumps(config)
-        self._connection.execute(
-            """
-            INSERT INTO agents (name, role, config_json, prompt_hash)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(name) DO UPDATE SET
-                role = excluded.role,
-                config_json = excluded.config_json,
-                prompt_hash = excluded.prompt_hash
-            """,
-            (name, role, config_json, prompt_hash),
-        )
+        with self._lock:
+            self._connection.execute(
+                """
+                INSERT INTO agents (name, role, config_json, prompt_hash)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(name) DO UPDATE SET
+                    role = excluded.role,
+                    config_json = excluded.config_json,
+                    prompt_hash = excluded.prompt_hash
+                """,
+                (name, role, config_json, prompt_hash),
+            )
 
     def set_agent_status(
-        self, agent: str, status: str, current_task: dict | None = None,
+        self,
+        agent: str,
+        status: str,
+        current_task: dict | None = None,
         ts: str | None = None,
     ) -> None:
         if status not in ("working", "waiting", "idle"):
@@ -636,7 +833,8 @@ class OfficeDB:
             )
             if self.event_log:
                 self.event_log.append(
-                    "agent.status", f"agent:{agent}",
+                    "agent.status",
+                    f"agent:{agent}",
                     {"agent": agent, "status": status, "current_task": current_task, "ts": ts},
                     actor=agent,
                 )
@@ -655,7 +853,8 @@ class OfficeDB:
             )
             self._connection.execute(
                 "INSERT INTO chats (agent, topic, created_at) VALUES (?, ?, ?) "
-                "ON CONFLICT(agent, topic) DO NOTHING", (agent, topic, utc_now_iso()),
+                "ON CONFLICT(agent, topic) DO NOTHING",
+                (agent, topic, utc_now_iso()),
             )
             row = self._connection.execute(
                 "SELECT id FROM chats WHERE agent = ? AND topic = ?", (agent, topic)
@@ -699,15 +898,73 @@ class OfficeDB:
                 (chat_id, author, ts, text, kind, cycle_id),
             )
             message_id = int(cursor.lastrowid)
+            chat = self.get_chat(chat_id)
             if self.event_log:
-                chat = self.get_chat(chat_id)
                 self.event_log.append(
-                    "chat.message", f"chat:{chat_id}",
-                    {"chat_id": chat_id, "message_id": message_id,
-                     "agent": chat["agent"], "topic": chat["topic"], "author": author,
-                     "text": text, "kind": kind, "cycle_id": cycle_id, "ts": ts},
+                    "chat.message",
+                    f"chat:{chat_id}",
+                    {
+                        "chat_id": chat_id,
+                        "message_id": message_id,
+                        "agent": chat["agent"] if chat else None,
+                        "topic": chat["topic"] if chat else None,
+                        "author": author,
+                        "text": text,
+                        "kind": kind,
+                        "cycle_id": cycle_id,
+                        "ts": ts,
+                    },
                     actor=author,
                 )
+
+            # Check for bridge relay subscriptions
+            if chat and author not in ("bridge", "system", "user", "luca"):
+                agent_name = str(chat["agent"])
+                topic_name = str(chat["topic"])
+                conv_ids = self.list_bridge_relay_subscriptions(agent_name, topic_name)
+                if conv_ids:
+                    ctx = {
+                        "page": "ufficio",
+                        "ticker": topic_name,
+                        "ref": {"type": "agent", "id": author},
+                    }
+                    for conv_id in conv_ids:
+                        b_msg_id = self.append_bridge_message(
+                            conversation_id=conv_id,
+                            author=author,
+                            kind="agent_relay",
+                            text=text,
+                            ts=ts,
+                            context=ctx,
+                        )
+                        if self.event_log:
+                            b_msg = self.get_bridge_message(b_msg_id)
+                            if b_msg:
+                                payload_msg = {
+                                    "id": b_msg["id"],
+                                    "conversation_id": conv_id,
+                                    "author": author,
+                                    "kind": "agent_relay",
+                                    "text": text,
+                                    "ts": ts,
+                                    "context": ctx,
+                                    "refs": [],
+                                    "action": None,
+                                }
+                                self.event_log.append(
+                                    "bridge.message",
+                                    f"bridge_conv:{conv_id}",
+                                    {"conversation_id": conv_id, "message": payload_msg},
+                                    actor=author,
+                                )
+                        if self.on_bridge_relay:
+                            self.add_on_commit(
+                                lambda cid=conv_id, callback=self.on_bridge_relay: callback(cid)
+                            )
+                    self._connection.execute(
+                        "DELETE FROM bridge_relay_subscriptions WHERE agent = ? AND topic = ?",
+                        (agent_name, topic_name),
+                    )
             return message_id
 
     def list_messages(
@@ -854,7 +1111,9 @@ class OfficeDB:
         with self._lock:
             closed_ts = closed_ts or utc_now_iso()
             if budget_used is not None:
-                budget_json = budget_used if isinstance(budget_used, str) else json.dumps(budget_used)
+                budget_json = (
+                    budget_used if isinstance(budget_used, str) else json.dumps(budget_used)
+                )
                 self._connection.execute(
                     """
                     UPDATE cycles
@@ -903,12 +1162,13 @@ class OfficeDB:
         )
 
     def get_ticker_state(self, ticker: str) -> dict | None:
-        row = self._connection.execute(
-            "SELECT * FROM ticker_state WHERE ticker = ?", (ticker,)
-        ).fetchone()
-        if not row:
-            return None
-        return dict(row)
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM ticker_state WHERE ticker = ?", (ticker,)
+            ).fetchone()
+            if not row:
+                return None
+            return dict(row)
 
     def write_dossier_section(
         self, ticker: str, section: str, value: Any, author: str, ts: str
@@ -917,12 +1177,19 @@ class OfficeDB:
         with self.transaction():
             row = self._connection.execute(
                 "SELECT version, document_json FROM dossier_versions "
-                "WHERE ticker = ? ORDER BY version DESC LIMIT 1", (ticker,)
+                "WHERE ticker = ? ORDER BY version DESC LIMIT 1",
+                (ticker,),
             ).fetchone()
             document = json.loads(row["document_json"]) if row else {"ticker": ticker, "desks": []}
             if isinstance(value, dict):
-                value = {"author": author, "ts": ts, "reference_date": ts[:10], "confidence": None,
-                         "status": "active", **value}
+                value = {
+                    "author": author,
+                    "ts": ts,
+                    "reference_date": ts[:10],
+                    "confidence": None,
+                    "status": "active",
+                    **value,
+                }
             if section in ("notes", "lessons", "decisions"):
                 document.setdefault(section, []).append(value)
             elif section == "desks":
@@ -937,9 +1204,16 @@ class OfficeDB:
                 (ticker, version, ts, author, json.dumps([section]), json.dumps(document)),
             )
             if self.event_log is not None:
-                self.event_log.append("dossier.updated", ticker, {
-                    "ticker": ticker, "version": version, "sections": [section],
-                }, author)
+                self.event_log.append(
+                    "dossier.updated",
+                    ticker,
+                    {
+                        "ticker": ticker,
+                        "version": version,
+                        "sections": [section],
+                    },
+                    author,
+                )
             return version
 
     # --- Watchlist ---
@@ -1162,8 +1436,8 @@ class OfficeDB:
         self, trade_id: int, qty: float, pnl: float, events: list | str | None = None
     ) -> None:
         """Registra una chiusura parziale: quantità chiusa e PnL realizzato cumulati."""
-        events_json = None if events is None else (
-            events if isinstance(events, str) else json.dumps(events)
+        events_json = (
+            None if events is None else (events if isinstance(events, str) else json.dumps(events))
         )
         self._connection.execute(
             """
@@ -1247,9 +1521,147 @@ class OfficeDB:
         )
         return version
 
+    # --- News and Calendar Queries for Agent Tools ---
+
+    def query_news(
+        self,
+        ticker: str | None = None,
+        theme: str | None = None,
+        q: str | None = None,
+        since: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        query = "SELECT * FROM news WHERE 1=1"
+        params: list[Any] = []
+        if ticker:
+            query += " AND (tickers_json LIKE ? OR headline LIKE ?)"
+            params.extend([f'%"{ticker.upper()}"%', f'%{ticker}%'])
+        if since:
+            query += " AND published_ts >= ?"
+            params.append(since)
+        if q:
+            query += " AND (headline LIKE ? OR summary LIKE ?)"
+            params.extend([f'%{q}%', f'%{q}%'])
+        query += " ORDER BY published_ts DESC, id DESC LIMIT ?"
+        params.append(limit)
+        rows = self._connection.execute(query, params).fetchall()
+        items = []
+        for r in rows:
+            themes = json.loads(r["themes_json"] or "[]")
+            if theme and theme.lower() not in [th.lower() for th in themes]:
+                continue
+            item = dict(r)
+            item["tickers"] = json.loads(item.pop("tickers_json") or "[]")
+            item["themes"] = themes
+            item["has_full_text"] = bool(item["has_full_text"])
+            items.append(item)
+        return items
+
+    def query_calendar(
+        self,
+        kind: str,
+        from_ts: str | None = None,
+        to_ts: str | None = None,
+        tickers: list[str] | None = None,
+    ) -> list[dict]:
+        query = "SELECT * FROM calendar_events WHERE kind = ?"
+        params: list[Any] = [kind]
+        if from_ts:
+            query += " AND ts >= ?"
+            params.append(from_ts)
+        if to_ts:
+            query += " AND ts <= ?"
+            params.append(to_ts)
+        if tickers:
+            placeholders = ",".join(["?"] * len(tickers))
+            query += f" AND ticker IN ({placeholders})"
+            params.extend([t.upper() for t in tickers])
+        query += " ORDER BY ts ASC, id ASC"
+        rows = self._connection.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
+
+
     def list_risk_limits_versions(self, limit: int = 50) -> list[dict]:
         rows = self._connection.execute(
             "SELECT * FROM risk_limits_versions ORDER BY version DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Settings versions ---
+
+    def insert_settings_version(
+        self, actor: str, reason: str, before: dict, after: dict, ts: str | None = None
+    ) -> int:
+        ts = ts or utc_now_iso()
+        row = self._connection.execute(
+            "SELECT COALESCE(MAX(version), 0) + 1 FROM settings_versions"
+        ).fetchone()
+        version = int(row[0])
+        self._connection.execute(
+            """
+            INSERT INTO settings_versions (version, ts, actor, reason, before_json, after_json)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (version, ts, actor, reason, json.dumps(before), json.dumps(after)),
+        )
+        return version
+
+    def latest_settings_version(self) -> dict | None:
+        row = self._connection.execute(
+            "SELECT * FROM settings_versions ORDER BY version DESC LIMIT 1"
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list_settings_versions(self, limit: int = 50) -> list[dict]:
+        rows = self._connection.execute(
+            "SELECT * FROM settings_versions ORDER BY version DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Prompt versions ---
+
+    def insert_prompt_version(
+        self, agent: str, actor: str, reason: str, text: str, ts: str | None = None
+    ) -> tuple[int, int]:
+        ts = ts or utc_now_iso()
+        row = self._connection.execute(
+            "SELECT COALESCE(MAX(version), 0) + 1 FROM prompt_versions WHERE agent = ?", (agent,)
+        ).fetchone()
+        version = int(row[0])
+        chars = len(text)
+        self._connection.execute(
+            """
+            INSERT INTO prompt_versions (agent, version, ts, actor, reason, text, chars)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (agent, version, ts, actor, reason, text, chars),
+        )
+        return version, chars
+
+    def latest_prompt_version(self, agent: str) -> dict | None:
+        row = self._connection.execute(
+            "SELECT * FROM prompt_versions WHERE agent = ? ORDER BY version DESC LIMIT 1", (agent,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list_prompt_versions(self, agent: str, limit: int = 50) -> list[dict]:
+        rows = self._connection.execute(
+            "SELECT * FROM prompt_versions WHERE agent = ? ORDER BY version DESC LIMIT ?", (agent, limit)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Backup records ---
+
+    def insert_backup_record(self, name: str, size_bytes: int, ts: str | None = None) -> None:
+        ts = ts or utc_now_iso()
+        self._connection.execute(
+            "INSERT OR REPLACE INTO backup_records (name, ts, size_bytes) VALUES (?, ?, ?)",
+            (name, ts, size_bytes),
+        )
+
+    def list_backup_records(self, limit: int = 50) -> list[dict]:
+        rows = self._connection.execute(
+            "SELECT * FROM backup_records ORDER BY ts DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -1368,18 +1780,38 @@ class OfficeDB:
                     duration_ms, cycle_id, compacted
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (ts, agent, chat_id, tool, params_json, result_json, error,
-                 duration_ms, cycle_id, int(compacted)),
+                (
+                    ts,
+                    agent,
+                    chat_id,
+                    tool,
+                    params_json,
+                    result_json,
+                    error,
+                    duration_ms,
+                    cycle_id,
+                    int(compacted),
+                ),
             )
             call_id = int(cursor.lastrowid)
             if self.event_log:
                 chat = self.get_chat(chat_id) if chat_id is not None else None
                 self.event_log.append(
-                    "tool.called", f"tool:{call_id}",
-                    {"id": call_id, "agent": agent, "tool": tool, "chat_id": chat_id,
-                     "topic": chat["topic"] if chat else None, "cycle_id": cycle_id,
-                     "duration_ms": duration_ms, "success": error is None,
-                     "error": error, "ts": ts, "compacted": compacted},
+                    "tool.called",
+                    f"tool:{call_id}",
+                    {
+                        "id": call_id,
+                        "agent": agent,
+                        "tool": tool,
+                        "chat_id": chat_id,
+                        "topic": chat["topic"] if chat else None,
+                        "cycle_id": cycle_id,
+                        "duration_ms": duration_ms,
+                        "success": error is None,
+                        "error": error,
+                        "ts": ts,
+                        "compacted": compacted,
+                    },
                     actor=agent,
                 )
             return call_id
@@ -1395,3 +1827,511 @@ class OfficeDB:
             (ts, command, args_json),
         )
         return int(cursor.lastrowid)
+
+    def add_news_source(self, provider: str, name: str, url: str | None = None, enabled: int = 1) -> int:
+        cursor = self._connection.execute(
+            "INSERT INTO news_sources (provider, name, url, enabled, status) VALUES (?, ?, ?, ?, 'ok')",
+            (provider, name, url, enabled),
+        )
+        return int(cursor.lastrowid)
+
+    def list_news_sources(self) -> list[dict[str, Any]]:
+        rows = self._connection.execute(
+            """
+            SELECT s.*, 
+                   (SELECT COUNT(*) FROM news n WHERE n.source_id = s.id AND julianday(n.published_ts) >= julianday('now', '-1 day')) AS items_24h
+            FROM news_sources s
+            ORDER BY s.id
+            """
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def set_news_source_enabled(self, source_id: int, enabled: int) -> bool:
+        cursor = self._connection.execute(
+            "UPDATE news_sources SET enabled = ? WHERE id = ?", (enabled, source_id)
+        )
+        return cursor.rowcount > 0
+
+    def remove_news_source(self, source_id: int) -> bool:
+        cursor = self._connection.execute("DELETE FROM news_sources WHERE id = ?", (source_id,))
+        return cursor.rowcount > 0
+
+    def update_news_source_status(self, source_id: int, status: str, last_error: str | None = None, last_fetch_ts: str | None = None) -> None:
+        self._connection.execute(
+            "UPDATE news_sources SET status = ?, last_error = ?, last_fetch_ts = COALESCE(?, last_fetch_ts) WHERE id = ?",
+            (status, last_error, last_fetch_ts, source_id),
+        )
+
+    def insert_news(
+        self,
+        headline: str,
+        summary: str | None,
+        full_text: str | None,
+        url: str | None,
+        source_id: int | None,
+        source: str,
+        provider: str,
+        published_ts: str,
+        tickers: list[str] | str = "[]",
+        themes: list[str] | str = "[]",
+        image_url: str | None = None,
+        has_full_text: int = 0,
+        fetched_ts: str | None = None,
+    ) -> int:
+        fetched_ts = fetched_ts or utc_now_iso()
+        tickers_json = tickers if isinstance(tickers, str) else json.dumps(tickers)
+        themes_json = themes if isinstance(themes, str) else json.dumps(themes)
+        with self.transaction():
+            if url:
+                existing = self._connection.execute("SELECT id FROM news WHERE url = ?", (url,)).fetchone()
+                if existing:
+                    self._connection.execute(
+                        "UPDATE news SET headline = ?, summary = COALESCE(?, summary), full_text = COALESCE(?, full_text), has_full_text = MAX(?, has_full_text) WHERE id = ?",
+                        (headline, summary, full_text, has_full_text, existing[0])
+                    )
+                    return int(existing[0])
+            cursor = self._connection.execute(
+                """
+                INSERT INTO news (headline, summary, full_text, url, source_id, source, provider, published_ts, fetched_ts, tickers_json, themes_json, image_url, has_full_text, published_at, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (headline, summary, full_text, url, source_id, source, provider, published_ts, fetched_ts, tickers_json, themes_json, image_url, has_full_text, published_ts, fetched_ts),
+            )
+            return int(cursor.lastrowid)
+
+    def log_news_usage(
+        self,
+        news_id: int | None = None,
+        agent: str | None = None,
+        kind: str = "read",
+        cycle_id: int | None = None,
+        chat_id: int | None = None,
+        tool_call_id: int | None = None,
+        topic: str | None = None,
+        note: str | None = None,
+        ts: str | None = None,
+        news_ids: list[int] | None = None,
+    ) -> list[int]:
+        ts = ts or utc_now_iso()
+        ids = news_ids if news_ids is not None else ([news_id] if news_id is not None else [])
+        usage_ids = []
+        with self.transaction():
+            for nid in ids:
+                cursor = self._connection.execute(
+                    """
+                    INSERT INTO news_usage (news_id, agent, kind, ts, cycle_id, chat_id, tool_call_id, topic, note)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (nid, agent, kind, ts, cycle_id, chat_id, tool_call_id, topic, note),
+                )
+                usage_ids.append(int(cursor.lastrowid))
+                if self.event_log:
+                    self.event_log.append(
+                        "news.used", f"news:{nid}",
+                        {"news_id": nid, "agent": agent, "kind": kind, "ts": ts},
+                        actor=agent or "system",
+                    )
+        return usage_ids
+
+    def insert_calendar_event(
+        self,
+        kind: str,
+        ts: str,
+        title: str,
+        country: str | None = None,
+        ticker: str | None = None,
+        importance: str | None = None,
+        actual: float | None = None,
+        forecast: float | None = None,
+        previous: float | None = None,
+        source: str = "openbb",
+        fetched_at: str | None = None,
+    ) -> int:
+        fetched_at = fetched_at or utc_now_iso()
+        cursor = self._connection.execute(
+            """
+            INSERT INTO calendar_events (kind, ts, title, country, ticker, importance, actual, forecast, previous, source, fetched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(kind, ts, title, ticker) DO UPDATE SET
+                actual = COALESCE(excluded.actual, actual),
+                forecast = COALESCE(excluded.forecast, forecast),
+                previous = COALESCE(excluded.previous, previous),
+                importance = COALESCE(excluded.importance, importance)
+            """,
+            (kind, ts, title, country, ticker, importance, actual, forecast, previous, source, fetched_at),
+        )
+        11,
+    # --- Bridge & Briefing Persistence ---
+
+    def create_bridge_conversation(
+        self,
+        title: str,
+        created_ts: str | None = None,
+        status: str = "idle",
+        archived: bool = False,
+    ) -> int:
+        ts = created_ts or utc_now_iso()
+        with self.transaction():
+            cursor = self._connection.execute(
+                """
+                INSERT INTO bridge_conversations (title, created_ts, updated_ts, status, archived)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (title, ts, ts, status, int(archived)),
+            )
+            conv_id = int(cursor.lastrowid)
+            if self.event_log:
+                conv = self.get_bridge_conversation(conv_id)
+                self.event_log.append(
+                    "bridge.conversation",
+                    f"bridge_conv:{conv_id}",
+                    {"conversation": conv},
+                    actor="bridge",
+                )
+            return conv_id
+
+    def get_bridge_conversation(self, conversation_id: int) -> dict | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM bridge_conversations WHERE id = ?", (conversation_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def list_bridge_conversations(
+        self,
+        limit: int = 50,
+        q: str | None = None,
+        archived: bool | None = False,
+    ) -> list[dict]:
+        query = "SELECT * FROM bridge_conversations WHERE 1=1"
+        params: list[Any] = []
+        if archived is not None:
+            query += " AND archived = ?"
+            params.append(int(archived))
+        if q and q.strip():
+            query += """ AND (
+                title LIKE ? OR id IN (
+                    SELECT conversation_id FROM bridge_messages WHERE text LIKE ?
+                )
+            )"""
+            pattern = f"%{q.strip()}%"
+            params.extend([pattern, pattern])
+        query += " ORDER BY updated_ts DESC, id DESC LIMIT ?"
+        params.append(limit)
+        with self._lock:
+            rows = self._connection.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+
+    def update_bridge_conversation(
+        self,
+        conversation_id: int,
+        title: str | None = None,
+        status: str | None = None,
+        archived: bool | None = None,
+        updated_ts: str | None = None,
+    ) -> None:
+        sets: list[str] = []
+        params: list[Any] = []
+        if title is not None:
+            sets.append("title = ?")
+            params.append(title)
+        if status is not None:
+            if status not in ("idle", "thinking"):
+                raise ValueError(f"Invalid bridge conversation status: {status}")
+            sets.append("status = ?")
+            params.append(status)
+        if archived is not None:
+            sets.append("archived = ?")
+            params.append(int(archived))
+        if updated_ts is not None:
+            sets.append("updated_ts = ?")
+            params.append(updated_ts)
+        else:
+            sets.append("updated_ts = ?")
+            params.append(utc_now_iso())
+
+        if not sets:
+            return
+
+        params.append(conversation_id)
+        with self.transaction():
+            self._connection.execute(
+                f"UPDATE bridge_conversations SET {', '.join(sets)} WHERE id = ?",
+                params,
+            )
+            if self.event_log:
+                conv = self.get_bridge_conversation(conversation_id)
+                if conv:
+                    self.event_log.append(
+                        "bridge.conversation",
+                        f"bridge_conv:{conversation_id}",
+                        {"conversation": conv},
+                        actor="bridge",
+                    )
+
+    def append_bridge_message(
+        self,
+        conversation_id: int,
+        author: str,
+        kind: str,
+        text: str,
+        ts: str | None = None,
+        context: dict | None = None,
+        refs: list | None = None,
+        action_id: int | None = None,
+    ) -> int:
+        if kind not in ("text", "agent_relay", "action", "error"):
+            raise ValueError(f"Invalid bridge message kind: {kind}")
+        ts = ts or utc_now_iso()
+        context_json = json.dumps(context) if context is not None else None
+        refs_json = json.dumps(refs) if refs is not None else None
+        with self.transaction():
+            cursor = self._connection.execute(
+                """
+                INSERT INTO bridge_messages (
+                    conversation_id, author, kind, text, ts, context_json, refs_json, action_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (conversation_id, author, kind, text, ts, context_json, refs_json, action_id),
+            )
+            msg_id = int(cursor.lastrowid)
+            self._connection.execute(
+                "UPDATE bridge_conversations SET updated_ts = ? WHERE id = ?",
+                (ts, conversation_id),
+            )
+            if self.event_log:
+                action = self.get_bridge_action(action_id) if action_id else None
+                self.event_log.append(
+                    "bridge.message",
+                    f"bridge_conv:{conversation_id}",
+                    {
+                        "conversation_id": conversation_id,
+                        "message": {
+                            "id": msg_id,
+                            "conversation_id": conversation_id,
+                            "author": author,
+                            "kind": kind,
+                            "text": text,
+                            "ts": ts,
+                            "context": context,
+                            "refs": refs or [],
+                            "action": action,
+                        },
+                    },
+                    actor=author,
+                )
+            return msg_id
+
+    def list_bridge_messages(
+        self,
+        conversation_id: int,
+        limit: int = 100,
+        before: int | None = None,
+    ) -> list[dict]:
+        with self._lock:
+            if before is not None:
+                rows = self._connection.execute(
+                    """
+                    SELECT * FROM bridge_messages
+                    WHERE conversation_id = ? AND id < ?
+                    ORDER BY id DESC LIMIT ?
+                    """,
+                    (conversation_id, before, limit),
+                ).fetchall()
+                messages = [dict(r) for r in reversed(rows)]
+            else:
+                rows = self._connection.execute(
+                    """
+                    SELECT * FROM bridge_messages
+                    WHERE conversation_id = ?
+                    ORDER BY id DESC LIMIT ?
+                    """,
+                    (conversation_id, limit),
+                ).fetchall()
+                messages = [dict(r) for r in reversed(rows)]
+            return messages
+
+    def get_bridge_message(self, message_id: int) -> dict | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM bridge_messages WHERE id = ?", (message_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def create_bridge_action(
+        self,
+        conversation_id: int,
+        command: str,
+        payload: dict | str,
+        summary: str,
+        capital: bool = True,
+        status: str = "pending",
+        preview: dict | None = None,
+        result_reasons: list[str] | None = None,
+        created_ts: str | None = None,
+    ) -> int:
+        ts = created_ts or utc_now_iso()
+        payload_json = payload if isinstance(payload, str) else json.dumps(payload)
+        preview_json = json.dumps(preview) if preview is not None else None
+        result_reasons_json = json.dumps(result_reasons or [])
+        with self.transaction():
+            cursor = self._connection.execute(
+                """
+                INSERT INTO bridge_actions (
+                    conversation_id, command, payload_json, summary, capital, status,
+                    preview_json, result_reasons_json, created_ts
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    conversation_id,
+                    command,
+                    payload_json,
+                    summary,
+                    int(capital),
+                    status,
+                    preview_json,
+                    result_reasons_json,
+                    ts,
+                ),
+            )
+            action_id = int(cursor.lastrowid)
+            if self.event_log:
+                act = self.get_bridge_action(action_id)
+                self.event_log.append(
+                    "bridge.action",
+                    f"bridge_action:{action_id}",
+                    {"conversation_id": conversation_id, "action": act},
+                    actor="bridge",
+                )
+            return action_id
+
+    def get_bridge_action(self, action_id: int) -> dict | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM bridge_actions WHERE id = ?", (action_id,)
+            ).fetchone()
+            if not row:
+                return None
+            a = dict(row)
+            if "payload_json" in a:
+                a["payload"] = json.loads(a["payload_json"]) if a.get("payload_json") else {}
+            if "preview_json" in a:
+                a["preview"] = json.loads(a["preview_json"]) if a.get("preview_json") else None
+            if "result_reasons_json" in a:
+                a["result_reasons"] = (
+                    json.loads(a["result_reasons_json"]) if a.get("result_reasons_json") else []
+                )
+            a["capital"] = bool(a["capital"])
+            return a
+
+    def list_bridge_actions(
+        self,
+        status: str | None = None,
+        conversation_id: int | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        query = "SELECT * FROM bridge_actions WHERE 1=1"
+        params: list[Any] = []
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        if conversation_id is not None:
+            query += " AND conversation_id = ?"
+            params.append(conversation_id)
+        query += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+        with self._lock:
+            rows = self._connection.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+
+    def update_bridge_action(
+        self,
+        action_id: int,
+        status: str,
+        result_reasons: list[str] | None = None,
+        decided_ts: str | None = None,
+        decided_by: str | None = None,
+        preview: dict | None = None,
+    ) -> None:
+        sets = ["status = ?"]
+        params: list[Any] = [status]
+        if result_reasons is not None:
+            sets.append("result_reasons_json = ?")
+            params.append(json.dumps(result_reasons))
+        if decided_ts is not None:
+            sets.append("decided_ts = ?")
+            params.append(decided_ts)
+        if decided_by is not None:
+            sets.append("decided_by = ?")
+            params.append(decided_by)
+        if preview is not None:
+            sets.append("preview_json = ?")
+            params.append(json.dumps(preview))
+        params.append(action_id)
+
+        with self.transaction():
+            self._connection.execute(
+                f"UPDATE bridge_actions SET {', '.join(sets)} WHERE id = ?",
+                params,
+            )
+            if self.event_log:
+                act = self.get_bridge_action(action_id)
+                if act:
+                    self.event_log.append(
+                        "bridge.action",
+                        f"bridge_action:{action_id}",
+                        {"conversation_id": act["conversation_id"], "action": act},
+                        actor=decided_by or "system",
+                    )
+
+    def subscribe_bridge_relay(
+        self,
+        agent: str,
+        topic: str,
+        conversation_id: int,
+        ts: str | None = None,
+    ) -> None:
+        ts = ts or utc_now_iso()
+        with self.transaction():
+            self._connection.execute(
+                """
+                INSERT INTO bridge_relay_subscriptions (agent, topic, conversation_id, created_ts)
+                VALUES (?, ?, ?, ?)
+                """,
+                (agent, topic, conversation_id, ts),
+            )
+
+    def list_bridge_relay_subscriptions(self, agent: str, topic: str) -> list[int]:
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT DISTINCT conversation_id FROM bridge_relay_subscriptions
+                WHERE agent = ? AND topic = ?
+                """,
+                (agent, topic),
+            ).fetchall()
+            return [int(r["conversation_id"]) for r in rows]
+
+    def set_briefing_seen(self, ts: str | None = None) -> str:
+        ts = ts or utc_now_iso()
+        with self.transaction():
+            self._connection.execute(
+                """
+                INSERT INTO briefing_state (key, value, updated_ts)
+                VALUES ('last_seen_ts', ?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_ts = excluded.updated_ts
+                """,
+                (ts, ts),
+            )
+            if self.event_log:
+                self.event_log.append(
+                    "briefing.updated", f"briefing:{ts}", {"since": ts}, actor="system"
+                )
+        return ts
+
+    def get_briefing_seen(self) -> str | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT value FROM briefing_state WHERE key = 'last_seen_ts'"
+            ).fetchone()
+            return str(row["value"]) if row else None

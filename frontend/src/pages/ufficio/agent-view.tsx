@@ -1,11 +1,12 @@
-import { ArrowUpRight, Check, ChevronDown, ChevronLeft, FileText, ListPlus } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, ChevronLeft, FileText, ListPlus, UsersRound, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AuthorChip } from "@/components/author-chip";
+import { CollapsedRail } from "@/components/collapsed-rail";
 import { Gutter } from "@/components/gutter";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { COCKPIT_TOPIC, topicTitle } from "@/features/office/api";
 import { useChatTopics, useOfficeAgents, useToolCalls } from "@/features/office/hooks";
 import type { ChatTopic } from "@/features/office/types";
@@ -13,7 +14,7 @@ import { AGENTS, author, tickerOf } from "@/lib/authors";
 import { fmtWhen } from "@/lib/format";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
-import { PANEL_LIMITS, useShell } from "@/shell/shell-state";
+import { PANEL_LIMITS, PANEL_SHORTCUT, useShell } from "@/shell/shell-state";
 import { AssignTask } from "./assign-task";
 import { Conversation, TopicIcon } from "./conversation";
 import { ROLE, StatusMark } from "./parts";
@@ -56,11 +57,13 @@ function ConversationHeader({ agent, topic, topics }: { agent: string; topic: st
       <div className="ml-auto flex shrink-0 items-center gap-1">
         {ticker && !tickerOf(agent) && (
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Link to={`/ticker/${ticker}`} aria-label={`Apri la scheda di ${ticker}`} className="inline-flex h-7 items-center gap-1.5 rounded-control px-2 text-xs font-medium text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/60">
-                <FileText className="size-3.5" strokeWidth={1.75} aria-hidden /> <span className="hidden xl:inline">Scheda</span>
-              </Link>
-            </TooltipTrigger>
+            <TooltipTrigger
+              render={
+                <Link to={`/ticker/${ticker}`} aria-label={`Apri la scheda di ${ticker}`} className="inline-flex h-7 items-center gap-1.5 rounded-control px-2 text-xs font-medium text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/60">
+                  <FileText className="size-3.5" strokeWidth={1.75} aria-hidden /> <span className="hidden xl:inline">Scheda</span>
+                </Link>
+              }
+            />
             <TooltipContent>Scheda di {ticker}</TooltipContent>
           </Tooltip>
         )}
@@ -86,7 +89,7 @@ function DossierStrip({ ticker }: { ticker: string }) {
   return (
     <Link
       to={`/ticker/${ticker}`}
-      className="group mx-1.5 mb-1 flex min-h-9 shrink-0 items-center gap-2.5 rounded-control bg-[oklch(0_0_0/0.22)] px-3 py-1.5 text-xs outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/60"
+      className="group mx-1.5 mb-1 flex min-h-9 shrink-0 items-center gap-2.5 rounded-control border border-border/50 bg-muted/50 px-3 py-1.5 text-xs outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/60"
     >
       <FileText className="size-3.5 shrink-0 text-fg-subtle" strokeWidth={1.75} aria-hidden />
       {q.isPending ? (
@@ -159,6 +162,7 @@ function DesktopAgentView({ agent }: { agent: string }) {
           />
         </>
       )}
+      {!open.left && <CollapsedRail side="left" label="Agenti e chat" icon={UsersRound} shortcut={PANEL_SHORTCUT.left} onOpen={() => setPanelOpen("left", true)} className="mr-2.5" />}
       {topic ? (
         <Conversation
           agent={agent}
@@ -196,6 +200,7 @@ function DesktopAgentView({ agent }: { agent: string }) {
           )}
         </>
       )}
+      {!open.right && <CollapsedRail side="right" label={agent === "portfolio_manager" ? "Coda e tool" : "Tool"} icon={Wrench} shortcut={PANEL_SHORTCUT.right} onOpen={() => setPanelOpen("right", true)} className="ml-2.5" />}
     </div>
   );
 }
@@ -253,21 +258,23 @@ function MobileAgentView({ agent }: { agent: string }) {
             <ChevronDown className="size-4 shrink-0 text-fg-subtle" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-[min(340px,calc(100vw-16px))]">
-            <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">Chat di {author(agent).short}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {options.map((t) => (
-              <DropdownMenuItem key={t.topic} onSelect={() => navigate(`/ufficio/${agent}?chat=${encodeURIComponent(t.topic)}`, { replace: true })} className="items-start gap-2 py-2">
-                <TopicIcon topic={t.topic} className="mt-0.5 text-fg-subtle" />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className="truncate text-[13px] font-medium text-fg">{t.title}</span>
-                    <span className="num ml-auto text-2xs text-fg-subtle">{t.last_message ? fmtWhen(t.last_message.ts) : ""}</span>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="text-2xs font-normal text-fg-subtle">Chat di {author(agent).short}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {options.map((t) => (
+                <DropdownMenuItem key={t.topic} onClick={() => navigate(`/ufficio/${agent}?chat=${encodeURIComponent(t.topic)}`, { replace: true })} className="items-start gap-2 py-2">
+                  <TopicIcon topic={t.topic} className="mt-0.5 text-fg-subtle" />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="truncate text-[13px] font-medium text-fg">{t.title}</span>
+                      <span className="num ml-auto text-2xs text-fg-subtle">{t.last_message ? fmtWhen(t.last_message.ts) : ""}</span>
+                    </span>
+                    <span className="block truncate text-xs text-fg-subtle">{t.last_message?.text ?? "Nessun messaggio"}</span>
                   </span>
-                  <span className="block truncate text-xs text-fg-subtle">{t.last_message?.text ?? "Nessun messaggio"}</span>
-                </span>
-                <Check className={cn("mt-0.5 size-4", t.topic === topic ? "opacity-100" : "opacity-0")} />
-              </DropdownMenuItem>
-            ))}
+                  <Check className={cn("mt-0.5 size-4", t.topic === topic ? "opacity-100" : "opacity-0")} />
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

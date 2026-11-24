@@ -3,6 +3,7 @@ import { useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { AuthorChip } from "@/components/author-chip";
 import { IconButton } from "@/components/tile";
+import { Input } from "@/components/ui/input";
 import { useChatTopics, useOfficeAgents } from "@/features/office/hooks";
 import type { ChatTopic, OfficeAgent } from "@/features/office/types";
 import { AGENT_IDS, author, tickerOf } from "@/lib/authors";
@@ -131,13 +132,13 @@ export function SideList({ agent, topic, onHide, className, style }: { agent: st
             {showTickers && tickerAgents.length > 8 && (
               <label className="relative mx-1 mb-1 flex items-center">
                 <Search className="pointer-events-none absolute left-2 size-3.5 text-fg-subtle" aria-hidden />
-                <input
+                <Input
                   value={needle}
                   onChange={(e) => setNeedle(e.target.value)}
                   placeholder="Filtra ticker"
                   aria-label="Filtra gli agenti del ticker"
                   spellCheck={false}
-                  className="num h-7 w-full rounded-control border border-line-strong bg-ground pl-7 pr-2 text-xs uppercase text-fg outline-none placeholder:normal-case placeholder:text-fg-subtle focus:border-accent-c/70"
+                  className="num h-7 w-full rounded-control border-line-strong bg-ground pl-7 pr-2 text-xs uppercase text-fg outline-none placeholder:normal-case placeholder:text-fg-subtle focus-visible:border-accent-c/70"
                 />
               </label>
             )}

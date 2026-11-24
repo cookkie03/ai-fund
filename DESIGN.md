@@ -29,6 +29,7 @@ colors:
   author-risk: "oklch(0.74 0.1 276)"
   author-system: "oklch(0.7 0.01 255)"
   author-ticker: "oklch(0.87 0.022 240)"
+  author-bridge: "oklch(0.85 0.085 168)"
 typography:
   price:
     fontFamily: "Inter Variable, ui-sans-serif, system-ui, sans-serif"
@@ -163,7 +164,7 @@ The page is a near-black desk carrying rounded graphite tiles: watchlist, chart,
 - **Halt** (`halt`, `halt-ground`): the top bar and a banner tile while trading is halted.
 
 ### Authors
-- **Luca** amber, **Portfolio Manager** violet, **Tecnico** cyan, **Mercato** lime, **Sentiment** pink, **Fondamentali** sand, **Rischio** indigo, **Sistema** grey. Each author colour appears only on that author's marks: avatar, chart drawings and their labels. **Agenti del ticker** (`ticker:<SYM>`) share one porcelain colour (`author-ticker`): they are many and alike, so the monogram is the ticker itself (full symbol on 36 px seats) and colour stays the core team's identity.
+- **Luca** amber, **Portfolio Manager** violet, **Tecnico** cyan, **Mercato** lime, **Sentiment** pink, **Fondamentali** sand, **Rischio** indigo, **Sistema** grey, **Bridge** mint (`author-bridge`). Each author colour appears only on that author's marks: avatar, chart drawings and their labels. **Agenti del ticker** (`ticker:<SYM>`) share one porcelain colour (`author-ticker`): they are many and alike, so the monogram is the ticker itself (full symbol on 36 px seats) and colour stays the core team's identity.
 
 ### Named Rules
 **The Meaning-Only Rule.** Every saturated pixel means something: direction, selection, warning, Halt or author. A colour that only decorates is removed.
@@ -193,10 +194,10 @@ Desktop (1440 x 900): a 56 px icon rail and a 48 px top bar on the desk, then th
 - **Chart** (fills the centre): a 68 px header with symbol, price and day change, then timeframe, indicators and drawing tools as segmented groups.
 - **Secondary side bar** (activity, 312 px, 264 to 460): right of the chart, tabs Agenti and Disegni.
 - **Panel** (orders, 240 px, 132 to 520): under chart and activity.
-- **Bridge** (340 px): a tile on the far right from 1280 px, a sheet below that; it starts open from 1600 px.
+- **Bridge** (340 px): the mini Bridge, a tile on the far right from 1280 px, a sheet below that; it starts open from 1600 px. Not shown on the Assistente, which is the Bridge at full size.
 
 ### Named Rules
-**The VS Code Rule.** Every tile around the chart can be hidden and resized. Toggles live in the top bar (solid icon while the tile is shown, dashed while hidden) and as a close button in each tile header, with the VS Code shortcuts: Ctrl/⌘ B watchlist, Ctrl/⌘ Alt B activity, Ctrl/⌘ J orders. Dragging a gap resizes the tile next to it, arrow keys step 16 px (48 with Shift), double click restores the default. Sizes and visibility persist per browser (`cockpit.layout`). When the orders tile is hidden and orders wait for approval, the toggle carries a warn count. Below 1280 px the activity tile starts hidden unless a saved layout says otherwise.
+**The VS Code Rule.** Every tile around the chart can be hidden and resized. Toggles live in the top bar (solid icon while the tile is shown, dashed while hidden) and as a close button in each tile header, with the VS Code shortcuts: Ctrl/⌘ B watchlist, Ctrl/⌘ Alt B activity, Ctrl/⌘ J orders. Dragging a gap resizes the tile next to it, arrow keys step 16 px (48 with Shift), double click restores the default. Sizes and visibility persist per browser (`cockpit.layout`). When the orders tile is hidden and orders wait for approval, the toggle carries a warn count. Below 1280 px the activity tile starts hidden unless a saved layout says otherwise. A hidden side or bottom tile leaves a **collapsed rail** in its place (see Components), so it can be reopened with the pointer as well as the shortcut, on every page that uses the shell layout (Terminale, Ufficio agent view, Assistente).
 
 Phone (under 768 px): compact top bar, chart at 56 vh, an approval strip when orders wait, then a segmented control (Watchlist, Attività, Ordini) over one tile, and a bottom nav for the six pages. Drawing tools are hidden on phones.
 
@@ -205,6 +206,11 @@ Spacing is a 4 px grid with two insets that drive the radius scale: 2 px inside 
 **Ufficio** (`/ufficio`, `/ufficio/:agent`): the agents' office.
 - **Overview** (desktop): a grid of seat tiles (auto-fill, 296 px minimum), the Costi e token tile under it, and Conversazioni recenti as a 340 px tile on the right from 1024 px. On phones the seats become one list tile with cost on the right.
 - **Agent view** (desktop, from 1024 px): side list (agents, then that agent's chats) left, conversation in the centre, tool calls right. It reuses the shell layout, so Ctrl/⌘ B and Ctrl/⌘ Alt B hide the two side tiles and the gaps resize them. On phones: back link and avatar, a chat selector menu, then Chat and Tool tabs over one tile.
+
+**Assistente** (`/` and `/assistente`, the cockpit's home): Luca's conversation with the Bridge.
+- **Desktop** (from 1024 px): Conversazioni as the left tile (272 px), the conversation in the centre, Stato vivo as the right tile (312 px). It reuses the shell layout like the Ufficio agent view: Ctrl/⌘ B and Ctrl/⌘ Alt B hide the side tiles, the gaps resize them, and the top bar's two toggles read Conversazioni and Stato vivo here.
+- **Centre tile**: 44 px header (title or Nuova conversazione, "iniziata …"), the briefing, the thread anchored to the bottom, the composer. On a new conversation the briefing is the full masthead at the top of the thread; once a conversation is open it shrinks to one compact row that expands in place.
+- **Phone** (under 1024 px): the conversation full screen with the compact briefing row on top; the list opens as a left sheet from the header, Stato vivo as a right sheet (its button carries the count of actions waiting for confirmation).
 
 ## Elevation & Depth
 
@@ -314,6 +320,66 @@ Horizontal rows by sector or position (segmented control), each a threshold-tick
 
 ### Capital dialogs
 Close or reduce, and stop/target edits, run a debounced dry run as the user types and show the Runtime's preview (quantity, price, value, realized PnL or new risk and R:R) and the Risk Gate's answer before the primary unlocks. A refusal shows the Gate's reasons verbatim in the dialog. Editing limits takes two steps: values (fractions typed as %, bounds checked) plus a required reason, then **Rivedi** shows before → after on the threshold tick with the status change, then **Conferma e applica**. History lists version, author, reason and each change. While the Runtime is unreachable or Halt is active every capital action is disabled and says why.
+
+### Settings ledger (Configurazioni)
+`/configurazioni` is an index tile (232 px, sticky) beside the section column (max 1120 px). The index lists five sections with one line of state each (warn near, down for refusal or breach, `fg-subtle` otherwise) and an accent count of draft edits, then **Altrove**: two-line links to what is configured on other pages (Limiti di rischio in Portafoglio, opened on its tab via `?tab=risk`; Fonti delle notizie; Watchlist; Costi e token). On a phone the index is the page and each section is its own page with a back link. Each setting is a ledger row: label and description on the left, the control in a 17.5 rem column on the right (segmented control for bool and up to three short options, select for longer enums, time field, number with unit), and under it "ora X → Y" when drafted, Modificata or Default, the range written once ("7–3650 giorni"). Tags: **Al riavvio**, **In attesa di riavvio** (warn), **Capitale** (a shield: the change needs an explicit confirmation).
+
+### Draft bar and review sheet
+Edits stay in a draft until reviewed: a raised bar sticks to the bottom of the section column (above the bottom nav on a phone) with "N modifiche · Rivedi", Scarta and the count of values to fix. **Rivedi** opens a sheet (right, 520 px; bottom on a phone) that runs the Runtime's dry run and lists each change as accepted or refused, with refusals and warnings verbatim; a required reason (it stays in the history); a checkbox for capital settings; then the one primary **Conferma e applica**. Settings that apply on restart raise a warn banner afterwards. The history lists version, author, reason and changes, filtered to the section, with Ripristina (a dialog showing the diff back to that version).
+
+### Prompt editor
+Inside the agent's detail: a mono textarea with characters, lines and +/− counts; **Rivedi le differenze** shows the diff, side by side from 1180 px or unified (toggle), unchanged runs folded, with the reason and **Conferma la versione N+1**. The note says it applies from the next cycle. On a phone the editor opens full screen. Versions list author, reason and age with Ripristina.
+
+### Write-only keys
+Keys are never read back: a row shows the source (Store, Ambiente, Mancante), `•••• last4`, the last update and the last connection test. The field is a password input that is never prefilled, never in React state or the query cache, and is emptied before the request resolves. Broker keys require a confirmation checkbox; keys from the environment cannot be removed from the cockpit. Each provider has **Prova connessione**.
+
+### Runtime health
+Meters (uptime, SSE clients, database, failing jobs, broker, LLM) with a "Dal vivo" dot in `fg-muted` (warn when stale), then jobs and recent errors. Database size is drawn on the threshold tick against the alert setting; the agents' daily budgets use the same bar.
+
+### Notizie layout
+`/notizie` is the agents' own news archive, open to Luca. On the desk: a page header (Notizie, "Lo stesso archivio che leggono gli agenti", the Dati di esempio tag in dev, a freshness line "Dal vivo · Ultima notizia X fa", and a ghost **Fonti** trigger with a warn count of failing sources), then the **Flusso** tile (search, scope segmented Tutte / Portafoglio / Watchlist, filter menus Ticker, Tema, Fonte, Provider, each active one removable in place, Azzera) and the **Lettore** tile behind a gutter (420–860 px, default 580, remembered) with tabs Notizia | Calendario; the Calendario tab counts portfolio and watchlist events in the next 48 h. The reader always shows something: the newest item until Luca picks one. On the phone: Flusso / Calendario tabs, search plus a **Filtri** bottom sheet with chip groups, and the reader as a pushed page with a back control. `?ticker=SYM` opens the wire filtered; the ticker page header and the Terminale chart header link there (newspaper icon).
+
+### Wire row
+Time in tabular `fg-subtle`, headline in body weight (two lines max), then source · provider, ticker tags (holdings in `fg`, others muted) and the usage marks. Day headers stick (Oggi, Ieri, weekday and date). ↑/↓ and j/k move the selection. The list pages on scroll; newer items never push what Luca is reading: they wait behind a floating **N nuove notizie** button that reveals them at the top.
+
+### Usage mark
+Who used an item, as counts: book (letture), quote (citazioni), forward (inoltri) icons with a number, drawn only when non-zero; forwards take Luca's author colour because only Luca forwards. A live `news.used` event updates the counts in place.
+
+### Usage trace
+In the reader under the body: "Uso da parte degli agenti" with a counts line (letture, citazioni, inoltri, agenti, Italian plurals), then one row per use, newest first: author avatar, "X l'ha letta / citata / inoltrata a Y", age, and a link line to where it happened ("Ciclo N · chat #SYM" or "chat con Luca"). Forward rows carry Luca's note in quotes. Never used: "Nessun agente l'ha ancora letta".
+
+### Forward menu and news attachment
+**Inoltra** is the reader's one primary. It opens a popover: Agenti del ticker first (a ticker without its agent reads "SYM · al PM" and goes to the Portfolio Manager), then Ufficio. Choosing opens that agent's chat in Ufficio with the item attached to the composer: a chip with headline, source and time, and an X to drop it. The note is the message and is required; Invia sends `forward_news`. A refusal shows verbatim above the composer; a Runtime without the command says so and names `POST /v1/commands/forward_news`.
+
+### Body honesty
+Full text when the source gives it, otherwise the summary with "La fonte fornisce solo il sommario", or only the headline with "La fonte fornisce solo il titolo"; always a ghost "Apri su host" link (http and https only).
+
+### Calendar row
+Macro and earnings for the next 7 days, kind segmented Tutti / Macro / Trimestrali, grouped by day. A row: time, three 3×10 px importance bars (filled `fg-muted`, empty `hover`), event and country or ticker, and Attuale / Atteso / Prec. figures that wrap under the name on narrow tiles (container query). Events on holdings or the watchlist are lifted to `fg` with a briefcase or eye icon that has a title; past events recede.
+
+### Sources sheet
+A right sheet (bottom on the phone): one row per source with name, provider, a status word (Attiva, Errore with the error verbatim in warn, Disattivata, Non disponibile), last fetch age and item count; a Switch (item radius, never a pill), Aggiorna, and a two-step Rimuovi for RSS. **Aggiorna tutte** in the header. An add form for RSS/Atom (name + http(s) URL, checked before sending). Every command answers inline on its row.
+
+### Collapsed rail
+What a hidden tile leaves behind: a 32 px strip on the desk, ground-coloured with the tile radius, holding the tile's icon and its name set vertically (horizontal for the bottom panel), and a count tag when the hidden tile has something waiting (orders to approve). The whole strip is the reopen button; its tooltip shows the shortcut. It is the only control in the strip.
+
+### Briefing (Assistente masthead)
+"Cosa è successo dalle HH:MM": the Bridge's summary in 15 px body text (no summary when the Bridge's budget is spent or nothing happened), the portfolio change as value plus a tag on its up/down tint, the counts as one line (zeros left out, numbers in warn when they wait for Luca), then up to six items newest first, each a time, a title and a one-line detail with a severity dot: critical in `halt`, attention in warn, info as a hollow ring. Hover or focus reveals **Chiedi al Bridge** on an item (always shown under a coarse pointer), which sends the item to the Bridge with its reference as context. **Segna come letto** (ghost) moves the "since" mark. Quiet state: one line "Niente di nuovo dalle …" with the portfolio change. Compact form: one 32 px row (severity dot of the worst item, Briefing, since, the summary truncated) that opens in place (`.expand`, scrolls inside after half the viewport).
+
+### Bridge thread
+The conversation and composer pattern, with the Bridge as an author: mint avatar (BR), name Bridge. Luca's messages sent from another page carry "da Terminale · AAPL" under them. An agent's answer relayed by the Bridge is signed by that agent with "risposta inoltrata dal Bridge" beside the name. References are quiet 20 px tags with an icon (ticker, position, order, proposal, agent, cycle) that link to the page that holds them. An error from the Bridge (budget spent, a failed turn) is a warn-soft block with a warn icon and the reason verbatim. While a turn runs, a line at the bottom shows a mint breathing dot and "Il Bridge sta pensando…" or "Il Bridge usa `tool`" in mono; the composer's Invia becomes a Stop button while the field is empty. A message being sent shows "Invio…"; a refused one keeps the text with the Runtime's reason, **Riprova** and **Scarta**.
+
+### Action card
+A capital action the Bridge proposes, never executed without Luca. `raised` surface, control radius, inside the Bridge's message: the command in words as title ("Riduci AAPL di 20 azioni"), the Bridge's one-line summary, then the payload as a label/value list beside the Runtime's preview (a sunken box: "Anteprima del Runtime · Risk Gate: passa / la rifiuterebbe", the Gate's reasons verbatim, the preview figures). A status tag on the right: Da confermare (warn), In esecuzione, Eseguita (up), Rifiutata (down), Annullata (neutral). Pending cards end with the one primary, labelled with the action (Conferma riduzione, Conferma chiusura), a ghost Annulla, and a line saying the Runtime rechecks Halt, Risk Gate and the current state. Confirm is disabled, with the reason inline and in its tooltip, while the Runtime is unreachable, while Halt is active for order commands, or when the preview says the Gate would refuse. Decided cards show the result in place: who decided and when, and the Runtime's reasons verbatim (an executed order's broker line, or the Gate's refusal on the down tint). It sends `bridge_action_decide` with `confirm: true`; nothing else in the UI can run it.
+
+### Conversation list (Assistente)
+Nuova conversazione and the tile's hide button in the header, a search field (titles and messages), then two-line rows: title and time, then the last line with its author's short name; a mint breathing dot while a turn runs, a warn "n da confermare" tag when actions wait. A row's menu renames in place or archives. **Archiviate** at the foot switches the list to archived conversations (Torna alle conversazioni).
+
+### Stato vivo
+The right tile of the Assistente, sections separated by spacing: **Portafoglio** (equity with the day change tag, unrealized P&L, cash with its share, positions; Apri), **Azioni del Bridge da confermare** (each opens its conversation), **Ufficio** (working agents with what they are doing, how many wait, then the PM's queue), **Sistema** (the Halt line or Trading attivo, Runtime freshness, account, broker stream). Every section says "Runtime irraggiungibile" or names the missing endpoint instead of a skeleton that never resolves.
+
+### Mini Bridge
+The shell's Bridge tile on every page but the Assistente: the same conversations, smaller. Header: Bridge avatar, the current conversation's title as a menu (Nuova conversazione, the eight most recent with live dot and pending count), Apri nell'Assistente, close. The composer shows the page's context as a removable tag ("Contesto Terminale · AAPL"): the open ticker, the selected position on Portafoglio, the agent on its Ufficio view; it travels with every message until Luca removes it. While the Runtime does not expose the Bridge, the tile says which endpoint is missing and falls back to writing an agent directly with `@agent`.
 
 ## Do's and Don'ts
 

@@ -1,4 +1,5 @@
 import { BellDot, Bell, CheckCheck, CircleAlert, Info, ShieldAlert } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -29,14 +30,16 @@ function Row({ item, onRead, disabled }: { item: InboxItem; onRead: () => void; 
         <p className="mt-0.5 text-xs leading-snug text-fg">{item.text}</p>
       </div>
       {!item.read && (
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="xs"
           onClick={onRead}
           disabled={disabled}
-          className="mt-0.5 h-6 shrink-0 self-start rounded-item px-1.5 text-2xs text-fg-subtle transition-colors hover:bg-hover hover:text-fg disabled:opacity-40"
+          className="mt-0.5 h-6 shrink-0 self-start rounded-item px-1.5 text-2xs text-fg-subtle"
         >
           Letto
-        </button>
+        </Button>
       )}
     </li>
   );
@@ -52,22 +55,24 @@ export function InboxButton({ variant = "rail" }: { variant?: "rail" | "bar" }) 
   return (
     <Popover>
       <Tooltip>
-        <TooltipTrigger asChild>
-          <PopoverTrigger
-            className={cn(
-              "relative grid place-items-center rounded-control text-fg-subtle transition-colors hover:bg-hover hover:text-fg",
-              variant === "rail" ? "size-9" : "size-8",
-            )}
-            aria-label={`Inbox, ${unread.length} non letti`}
-          >
-            {unread.length ? <BellDot className="size-[18px]" /> : <Bell className="size-[18px]" />}
-            {unread.length > 0 && (
-              <span className="num absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-warn px-1 text-[10px] font-semibold leading-none text-ground">
-                {unread.length}
-              </span>
-            )}
-          </PopoverTrigger>
-        </TooltipTrigger>
+        <TooltipTrigger
+          render={
+            <PopoverTrigger
+              className={cn(
+                "relative grid place-items-center rounded-control text-fg-subtle transition-colors hover:bg-hover hover:text-fg",
+                variant === "rail" ? "size-9" : "size-8",
+              )}
+              aria-label={`Inbox, ${unread.length} non letti`}
+            >
+              {unread.length ? <BellDot className="size-[18px]" /> : <Bell className="size-[18px]" />}
+              {unread.length > 0 && (
+                <span className="num absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-warn px-1 text-[10px] font-semibold leading-none text-ground">
+                  {unread.length}
+                </span>
+              )}
+            </PopoverTrigger>
+          }
+        />
         <TooltipContent side={variant === "rail" ? "right" : "bottom"}>Inbox</TooltipContent>
       </Tooltip>
       <PopoverContent side={variant === "rail" ? "right" : "bottom"} align={variant === "rail" ? "end" : "end"} className="w-[360px] border-line-strong bg-raised p-0">

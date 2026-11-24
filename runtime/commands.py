@@ -164,3 +164,115 @@ class IngestAlert(BaseModel):
     source: str
     reason: str
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+class UpdateSettings(BaseModel):
+    changes: dict[str, Any]
+    reason: str = Field(min_length=1, max_length=1000)
+    confirm: bool = False
+    dry_run: bool = False
+
+
+class RestoreSettings(BaseModel):
+    version: int = Field(ge=1)
+    reason: str = Field(min_length=1, max_length=1000)
+    confirm: bool = False
+
+
+class UpdatePrompt(BaseModel):
+    agent: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=100000)
+    reason: str = Field(min_length=1, max_length=1000)
+    dry_run: bool = False
+
+
+class RestorePrompt(BaseModel):
+    agent: str = Field(min_length=1)
+    version: int = Field(ge=1)
+    reason: str = Field(min_length=1, max_length=1000)
+
+
+class SetSecret(BaseModel):
+    name: str = Field(min_length=1)
+    value: str = Field(min_length=1)
+    reason: str = Field(min_length=1, max_length=1000)
+    confirm: bool = False
+
+
+class ClearSecret(BaseModel):
+    name: str = Field(min_length=1)
+    reason: str = Field(min_length=1, max_length=1000)
+    confirm: bool = False
+
+
+class TestConnection(BaseModel):
+    target: Literal["omniroute", "alpaca", "openbb"]
+
+
+class BackupDB(BaseModel):
+    pass
+
+
+class ForwardNews(BaseModel):
+    news_id: int = Field(gt=0)
+    to: dict[str, str]
+    note: str = ""
+
+
+class AddNewsSource(BaseModel):
+    provider: str = "rss"
+    name: str
+    url: str
+
+
+class SetNewsSourceEnabled(BaseModel):
+    source_id: int = Field(gt=0)
+    enabled: int = Field(ge=0, le=1)
+
+
+class RemoveNewsSource(BaseModel):
+    source_id: int = Field(gt=0)
+
+
+class RefreshNews(BaseModel):
+    source_id: int | None = None
+
+
+# --- Bridge & Briefing Commands ---
+
+
+class BridgeSay(BaseModel):
+    conversation_id: int | None = None
+    text: str = Field(min_length=1)
+    context: dict[str, Any] | None = None
+
+
+class BridgeRenameConversation(BaseModel):
+    conversation_id: int = Field(gt=0)
+    title: str = Field(min_length=1, max_length=200)
+
+
+class BridgeArchiveConversation(BaseModel):
+    conversation_id: int = Field(gt=0)
+    archived: bool = True
+
+
+class BridgeStop(BaseModel):
+    conversation_id: int = Field(gt=0)
+
+
+class BridgeActionDecide(BaseModel):
+    action_id: int = Field(gt=0)
+    decision: Literal["confirm", "dismiss"]
+    confirm: bool = False
+
+    @model_validator(mode="after")
+    def _validate_confirm(self) -> BridgeActionDecide:
+        if self.decision == "confirm" and not self.confirm:
+            raise ValueError("bridge_action_decide requires confirm: true for decision: 'confirm'")
+        return self
+
+
+class MarkBriefingSeen(BaseModel):
+    ts: str | None = None
+

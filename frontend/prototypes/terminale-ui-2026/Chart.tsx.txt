@@ -1,0 +1,45 @@
+import { useEffect, useRef } from 'react'
+import { CandlestickSeries, ColorType, createChart, HistogramSeries, LineSeries, type UTCTimestamp } from 'lightweight-charts'
+import type { Bar } from './runtime'
+
+export type Indicators = { series: number[]; indicators: Record<string, (number | null)[]> }
+export type Annotation = { id: string; author: string; timeframe: string | null; drawing: { type: string; points: { time: number; price: number }[] } }
+export type ChartState = { symbol: string; timeframe: string; bars: Bar[]; indicators: Indicators | null; drawings: Annotation[]; notes: string[] }
+
+export function Chart({ state }: { state: ChartState }) {
+  const container = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!container.current || !state.bars.length) return
+    const chart = createChart(container.current, {
+      autoSize: true, layout: { background: { type: ColorType.Solid, color: '#11151b' }, textColor: '#aab6c3', attributionLogo: true },
+      grid: { vertLines: { color: '#202934' }, horzLines: { color: '#202934' } },
+      timeScale: { timeVisible: true, borderColor: '#303b47' }, rightPriceScale: { borderColor: '#303b47' },
+    })
+    const candle = chart.addSeries(CandlestickSeries, { upColor: '#40bd99', downColor: '#ef7a80', borderVisible: false, wickUpColor: '#40bd99', wickDownColor: '#ef7a80' })
+    const volume = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceScaleId: '' })
+    volume.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } })
+    candle.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.28 } })
+    candle.setData(state.bars.map(b => ({ ...b, time: b.time as UTCTimestamp })))
+    volume.setData(state.bars.map(b => ({ time: b.time as UTCTimestamp, value: b.volume, color: b.close >= b.open ? '#40bd9966' : '#ef7a8066' })))
+    for (const name of ['ema20', 'rsi14', 'atr14']) {
+      const values = state.indicators?.indicators[name]
+      if (!values || !state.indicators) continue
+      const line = chart.addSeries(LineSeries, { color: name === 'ema20' ? '#e8c677' : name === 'rsi14' ? '#aab9eb' : '#cf9eb8', lineWidth: 2, title: name.toUpperCase(), priceLineVisible: false }, name === 'ema20' ? 0 : name === 'rsi14' ? 1 : 2)
+      line.setData(values.flatMap((value, i) => value == null ? [] : [{ time: state.indicators!.series[i] as UTCTimestamp, value }]))
+    }
+    for (const drawing of state.drawings) {
+      if (drawing.timeframe && drawing.timeframe !== state.timeframe) continue
+      const points = drawing.drawing.points
+      if (!points.length) continue
+      if (points.length === 1 || drawing.drawing.type === 'horizontal_line') {
+        candle.createPriceLine({ price: points[0].price, color: '#dcbf81', lineWidth: 1, title: drawing.author, axisLabelVisible: true })
+      } else {
+        const line = chart.addSeries(LineSeries, { color: drawing.author === 'user' || drawing.author === 'cockpit' ? '#80c8f0' : '#dd9ad1', lineWidth: 2, title: drawing.author, priceLineVisible: false, lastValueVisible: false })
+        line.setData([...points].sort((a, b) => a.time - b.time).filter((point, index, list) => index === 0 || point.time !== list[index - 1].time).map(point => ({ time: point.time as UTCTimestamp, value: point.price })))
+      }
+    }
+    chart.timeScale().fitContent()
+    return () => chart.remove()
+  }, [state.bars, state.indicators, state.drawings, state.timeframe])
+  return <div className="chart" ref={container} role="img" aria-label={`Grafico ${state.symbol}, intervallo ${state.timeframe}. Ultima chiusura ${state.bars.at(-1)?.close ?? 'non disponibile'}.`} />
+}

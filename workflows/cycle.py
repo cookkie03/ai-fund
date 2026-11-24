@@ -173,7 +173,7 @@ class CycleRunner:
                 try:
                     from prompts.loader import load_prompt
 
-                    prompt, prompt_hash = load_prompt(agent_name)
+                    prompt, prompt_hash = load_prompt(agent_name, db=self.db)
                 except (FileNotFoundError, KeyError, ValueError):
                     pass
         except KeyError:

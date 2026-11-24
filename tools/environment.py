@@ -239,15 +239,63 @@ class AgentEnvironment:
         """Wrap a tool function with logging and error tracking."""
         def wrapped(**kwargs: Any) -> Any:
             started = time.monotonic()
+            if getattr(self.db, "event_log", None):
+                self.db.event_log.append(
+                    "tool.started",
+                    f"tool:{agent_name}:{name}",
+                    {
+                        "agent": agent_name,
+                        "tool": name,
+                        "chat_id": chat_id,
+                        "cycle_id": cycle_id,
+                        "params": _serialize(kwargs),
+                        "ts": self._now_iso(),
+                    },
+                    actor=agent_name,
+                )
             try:
                 res = handler(**kwargs)
+                dur = int((time.monotonic() - started) * 1000)
                 self._log_tool_call(agent_name, chat_id, name, kwargs, res, None,
-                                    int((time.monotonic() - started) * 1000), cycle_id)
+                                    dur, cycle_id)
+                if getattr(self.db, "event_log", None):
+                    self.db.event_log.append(
+                        "tool.finished",
+                        f"tool:{agent_name}:{name}",
+                        {
+                            "agent": agent_name,
+                            "tool": name,
+                            "chat_id": chat_id,
+                            "cycle_id": cycle_id,
+                            "duration_ms": dur,
+                            "success": True,
+                            "error": None,
+                            "ts": self._now_iso(),
+                        },
+                        actor=agent_name,
+                    )
                 return res
             except Exception as exc:
                 err_msg = str(exc)
+                dur = int((time.monotonic() - started) * 1000)
                 self._log_tool_call(agent_name, chat_id, name, kwargs, None, err_msg,
-                                    int((time.monotonic() - started) * 1000), cycle_id)
+                                    dur, cycle_id)
+                if getattr(self.db, "event_log", None):
+                    self.db.event_log.append(
+                        "tool.finished",
+                        f"tool:{agent_name}:{name}",
+                        {
+                            "agent": agent_name,
+                            "tool": name,
+                            "chat_id": chat_id,
+                            "cycle_id": cycle_id,
+                            "duration_ms": dur,
+                            "success": False,
+                            "error": err_msg,
+                            "ts": self._now_iso(),
+                        },
+                        actor=agent_name,
+                    )
                 raise
 
         return ToolSpec(
@@ -587,6 +635,81 @@ class AgentEnvironment:
                 "ORDER BY version DESC LIMIT 1", (ticker.upper().strip(),)
             ).fetchone()
             return json.loads(row["document_json"]) if row else {}
+
+        def handle_news_search(q: str | None = None, ticker: str | None = None, since: str | None = None, limit: int = 50) -> Any:
+            items = self.db.query_news(ticker=ticker, q=q, since=since, limit=limit)
+            for it in items:
+                try:
+                    self.db.log_news_usage(news_id=it["id"], agent=agent_name, kind="read", cycle_id=cycle_id, chat_id=chat_id)
+                except Exception:
+                    pass
+            return _serialize(items)
+
+        def handle_economic_calendar(from_ts: str | None = None, to_ts: str | None = None) -> Any:
+            return _serialize(self.db.query_calendar(kind="macro", from_ts=from_ts, to_ts=to_ts))
+
+        def handle_earnings_calendar(from_ts: str | None = None, to_ts: str | None = None, tickers: list[str] | None = None) -> Any:
+            return _serialize(self.db.query_calendar(kind="earnings", from_ts=from_ts, to_ts=to_ts, tickers=tickers))
+
+        def handle_news_by_ticker_db(ticker: str, limit: int = 10) -> Any:
+            items = self.db.query_news(ticker=ticker, limit=limit)
+            if not items and self.market_data:
+                try:
+                    return _serialize(self.market_data.news(symbol=ticker.upper().strip(), limit=limit))
+                except Exception:
+                    return []
+            for it in items:
+                try:
+                    self.db.log_news_usage(news_id=it["id"], agent=agent_name, kind="read", cycle_id=cycle_id, chat_id=chat_id)
+                except Exception:
+                    pass
+            return _serialize(items)
+
+        def handle_news_by_theme_db(theme: str, limit: int = 10) -> Any:
+            items = self.db.query_news(theme=theme, limit=limit)
+            if not items and self.market_data:
+                try:
+                    return _serialize(self.market_data.news(theme=theme.strip(), limit=limit))
+                except Exception:
+                    return []
+            for it in items:
+                try:
+                    self.db.log_news_usage(news_id=it["id"], agent=agent_name, kind="read", cycle_id=cycle_id, chat_id=chat_id)
+                except Exception:
+                    pass
+            return _serialize(items)
+
+        # Universal news search and calendar tools for analysts and PM
+        tools.append(
+            make_tool(
+                name="news_search",
+                description="Search news archive by query, ticker, or timestamp.",
+                input_model=schemas.NewsSearchInput,
+                handler=handle_news_search,
+                agent_name=agent_name,
+                chat_id=chat_id,
+            )
+        )
+        tools.append(
+            make_tool(
+                name="economic_calendar",
+                description="Fetch economic calendar events.",
+                input_model=schemas.EconomicCalendarInput,
+                handler=handle_economic_calendar,
+                agent_name=agent_name,
+                chat_id=chat_id,
+            )
+        )
+        tools.append(
+            make_tool(
+                name="earnings_calendar",
+                description="Fetch earnings calendar events.",
+                input_model=schemas.EarningsCalendarInput,
+                handler=handle_earnings_calendar,
+                agent_name=agent_name,
+                chat_id=chat_id,
+            )
+        )
 
         tools.append(make_tool(
             name="read_dossier", description="Read the ticker dossier and senior colleague notes.",
@@ -953,7 +1076,7 @@ class AgentEnvironment:
             )
 
             def handle_news_by_theme(theme: str, limit: int = 10) -> Any:
-                return _serialize(self.market_data.news(theme=theme.strip(), limit=limit))
+                return handle_news_by_theme_db(theme=theme, limit=limit)
 
             tools.append(
                 make_tool(
@@ -1097,7 +1220,7 @@ class AgentEnvironment:
         # ---------------------------------------------------------------------
         if role == "sentiment_analyst":
             def handle_news_by_ticker(ticker: str, limit: int = 10) -> Any:
-                return _serialize(self.market_data.news(symbol=ticker.upper().strip(), limit=limit))
+                return handle_news_by_ticker_db(ticker=ticker, limit=limit)
 
             tools.append(
                 make_tool(

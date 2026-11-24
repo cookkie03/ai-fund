@@ -1,5 +1,8 @@
+import { motion } from "motion/react";
 import type { ReactNode } from "react";
 import { AuthorChip } from "@/components/author-chip";
+import { barTransition } from "@/lib/motion";
+import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAttribution, usePerformance } from "@/features/portfolio/hooks";
 import { PERIOD_LABEL, PERIODS, type Performance, type Period } from "@/features/portfolio/types";
@@ -68,19 +71,24 @@ function Contribution({ rows, empty }: { rows: { key: string; label: ReactNode; 
         const tip = `${fmtMoney(r.pnl, { sign: true })} · ${fmtFrac(r.frac, { sign: true })} del rendimento${r.extra ? ` · ${r.extra}` : ""}`;
         return (
           <Tooltip key={r.key}>
-            <TooltipTrigger asChild>
-              <li tabIndex={0} className="grid grid-cols-[7rem_1fr_4.5rem] items-center gap-2.5 rounded-item px-2 py-1.5 outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/60">
-                <span className="min-w-0 truncate text-xs text-fg">{r.label}</span>
-                <span className="relative h-2" role="img" aria-label={tip}>
-                  <span aria-hidden className="absolute inset-y-[-3px] left-1/2 w-px bg-line-strong" />
-                  <span
-                    className={cn("bar-grow absolute inset-y-0 rounded-tag", r.pnl >= 0 ? "bg-up" : "bg-down")}
-                    style={r.pnl >= 0 ? { left: "50%", width: `${w}%` } : { right: "50%", width: `${w}%`, transformOrigin: "right" }}
-                  />
-                </span>
-                <span className={cn("num text-right text-xs", tone(r.pnl))}>{fmtMoney(r.pnl, { sign: true, decimals: 0 })}</span>
-              </li>
-            </TooltipTrigger>
+            <TooltipTrigger
+              render={
+                <li tabIndex={0} className="grid grid-cols-[7rem_1fr_4.5rem] items-center gap-2.5 rounded-item px-2 py-1.5 outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/60">
+                  <span className="min-w-0 truncate text-xs text-fg">{r.label}</span>
+                  <span className="relative h-2" role="img" aria-label={tip}>
+                    <span aria-hidden className="absolute inset-y-[-3px] left-1/2 w-px bg-line-strong" />
+                    <motion.span
+                      initial={{ scaleX: 0 }}
+                      animate={{ scaleX: 1 }}
+                      transition={barTransition}
+                      className={cn("absolute inset-y-0 rounded-tag", r.pnl >= 0 ? "bg-up" : "bg-down")}
+                      style={r.pnl >= 0 ? { left: "50%", width: `${w}%`, transformOrigin: "left" } : { right: "50%", width: `${w}%`, transformOrigin: "right" }}
+                    />
+                  </span>
+                  <span className={cn("num text-right text-xs", tone(r.pnl))}>{fmtMoney(r.pnl, { sign: true, decimals: 0 })}</span>
+                </li>
+              }
+            />
             <TooltipContent side="left">{tip}</TooltipContent>
           </Tooltip>
         );
@@ -98,7 +106,7 @@ function Attribution({ period }: { period: Period }) {
     </Unavailable>
   );
   return (
-    <section aria-label="Attribuzione" className="px-4 pb-4 pt-2">
+    <Card aria-label="Attribuzione" className="m-4 rounded-tile border-line-strong/60 bg-ground p-4 shadow-sm">
       <h3 className="text-xs font-semibold text-fg">Attribuzione del rendimento</h3>
       <p className="mt-0.5 text-2xs text-fg-subtle">Contributo al rendimento del periodo, realizzato e aperto.</p>
       {q.isPending ? (
@@ -135,7 +143,7 @@ function Attribution({ period }: { period: Period }) {
         </div>
       ) : null}
       <SourceNote sourced={q.data} className="mt-3" />
-    </section>
+    </Card>
   );
 }
 

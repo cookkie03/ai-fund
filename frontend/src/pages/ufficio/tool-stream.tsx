@@ -1,6 +1,9 @@
 import { AlertTriangle, Archive, Check, ChevronRight, Copy, Loader2, PanelRightClose, Wrench } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { rowArriveVariants, rowTransition, SETTLE_EASE } from "@/lib/motion";
 import { IconButton } from "@/components/tile";
+import { Button } from "@/components/ui/button";
 import { useToolCalls } from "@/features/office/hooks";
 import type { ToolCall } from "@/features/office/types";
 import { author } from "@/lib/authors";
@@ -50,29 +53,31 @@ function Payload({ label, value, compacted, compactedAt }: { label: string; valu
       <div className="mb-1 flex h-5 items-center gap-2">
         <h4 className="text-2xs text-fg-subtle">{label}</h4>
         {!compacted && !empty && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="xs"
             onClick={() => {
               void navigator.clipboard?.writeText(text).then(() => {
                 setCopied(true);
                 setTimeout(() => setCopied(false), 1200);
               });
             }}
-            className="ml-auto inline-flex h-5 items-center gap-1 rounded-tag px-1 text-2xs text-fg-subtle transition-colors hover:bg-hover hover:text-fg"
+            className="ml-auto h-5 gap-1 rounded-tag px-1 text-2xs text-fg-subtle"
           >
             {copied ? <Check className="size-3" /> : <Copy className="size-3" />} {copied ? "Copiato" : "Copia"}
-          </button>
+          </Button>
         )}
       </div>
       {compacted ? (
-        <p className="flex items-start gap-1.5 rounded-item bg-[oklch(0_0_0/0.22)] px-2.5 py-2 text-xs leading-4 text-fg-muted">
+        <p className="flex items-start gap-1.5 rounded-item border border-border/50 bg-muted/50 px-2.5 py-2 text-xs leading-4 text-fg-muted">
           <Archive className="mt-px size-3.5 shrink-0 text-fg-subtle" aria-hidden />
           <span>Compattato dalla retention{compactedAt ? ` il ${fmtDateTime(compactedAt)}` : ""}: il contenuto completo non è più nel database.</span>
         </p>
       ) : empty ? (
         <p className="px-0.5 text-xs text-fg-subtle">Vuoto</p>
       ) : (
-        <pre className="max-h-64 overflow-auto rounded-item bg-[oklch(0_0_0/0.22)] px-2.5 py-2 font-mono text-[11px] leading-4 text-fg-muted">{text}</pre>
+        <pre className="max-h-64 overflow-auto rounded-item border border-border/50 bg-muted/50 px-2.5 py-2 font-mono text-[11px] leading-4 text-fg-muted">{text}</pre>
       )}
     </section>
   );
@@ -94,7 +99,13 @@ function ToolBlock({ call, fresh }: { call: ToolCall; fresh: boolean }) {
   const id = `tool-${call.id}`;
 
   return (
-    <li className={cn("rounded-item transition-colors duration-150", open ? "bg-hover" : "hover:bg-hover", fresh && "row-arrive")}>
+    <motion.li
+      initial={fresh ? "initial" : false}
+      animate="animate"
+      variants={rowArriveVariants}
+      transition={rowTransition}
+      className={cn("rounded-item transition-colors duration-150", open ? "bg-hover" : "hover:bg-hover")}
+    >
       <button
         type="button"
         aria-expanded={open}
@@ -119,9 +130,18 @@ function ToolBlock({ call, fresh }: { call: ToolCall; fresh: boolean }) {
         </span>
         <ChevronRight className={cn("mt-0.5 size-3.5 shrink-0 text-fg-subtle transition-transform duration-200", open && "rotate-90")} aria-hidden />
       </button>
-      <div id={id} className="expand" data-open={open} role="region" aria-label={`Dettagli di ${call.tool}`}>
-        <div>
-          {open && (
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            id={id}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: SETTLE_EASE }}
+            className="overflow-hidden"
+            role="region"
+            aria-label={`Dettagli di ${call.tool}`}
+          >
             <div className="px-2.5 pb-2.5 pl-8">
               {(call.topic || call.cycle_id !== null) && (
                 <p className="mb-2 text-2xs text-fg-subtle">
@@ -143,10 +163,10 @@ function ToolBlock({ call, fresh }: { call: ToolCall; fresh: boolean }) {
                 <Payload label="Output" value={call.result} compacted={call.compacted.result} compactedAt={call.compacted.at} />
               )}
             </div>
-          )}
-        </div>
-      </div>
-    </li>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.li>
   );
 }
 

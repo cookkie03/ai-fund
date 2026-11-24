@@ -299,3 +299,137 @@ class ScheduleNextCheckInput(BaseModel):
     ticker: str = Field(description="Ticker symbol")
     when: str = Field(description="Target UTC datetime in ISO 8601 format")
     note: str = Field(default="", description="Reason or note for next check")
+
+class NewsSearchInput(BaseModel):
+    q: str | None = Field(default=None, description="Search query string")
+    ticker: str | None = Field(default=None, description="Filter by ticker")
+    since: str | None = Field(default=None, description="ISO timestamp lower bound")
+    limit: int = Field(default=50, ge=1, le=100, description="Maximum number of items")
+
+
+class EconomicCalendarInput(BaseModel):
+    from_ts: str | None = Field(default=None, alias="from", description="Start timestamp ISO")
+    to_ts: str | None = Field(default=None, alias="to", description="End timestamp ISO")
+
+
+class EarningsCalendarInput(BaseModel):
+    from_ts: str | None = Field(default=None, alias="from", description="Start timestamp ISO")
+    to_ts: str | None = Field(default=None, alias="to", description="End timestamp ISO")
+    tickers: list[str] | None = Field(default=None, description="Optional list of tickers")
+
+
+
+# --- Bridge Tools Schemas ---
+
+
+class MessageAgentInput(BaseModel):
+    agent: str = Field(description="Target agent name (e.g. portfolio_manager, technical_analyst)")
+    topic: str = Field(description="Chat topic or ticker (e.g. NVDA, semiconductors, cockpit)")
+    text: str = Field(description="Message body to send on behalf of Luca")
+
+
+class ProposeActionInput(BaseModel):
+    command: Literal[
+        "approve_order",
+        "reject_order",
+        "close_position",
+        "modify_exit",
+        "decide_proposal",
+        "halt",
+        "resume",
+        "update_risk_limits",
+    ] = Field(description="Capital-affecting command to propose")
+    payload: dict = Field(description="Parameters for the command")
+    summary: str = Field(description="Brief human-readable summary of the proposed action")
+
+
+class AddWatchlistInput(BaseModel):
+    ticker: str = Field(description="Ticker symbol to add to watchlist")
+    note: str | None = Field(default=None, description="Optional note")
+
+
+class RemoveWatchlistInput(BaseModel):
+    ticker: str = Field(description="Ticker symbol to remove from watchlist")
+
+
+class AddDossierNoteInput(BaseModel):
+    ticker: str = Field(description="Ticker symbol")
+    text: str = Field(description="Note content to append to dossier")
+
+
+class EnqueueTaskInput(BaseModel):
+    agent: str = Field(description="Agent to assign the task to")
+    ticker: str = Field(description="Ticker or chat topic")
+    reason: str = Field(description="Reason / prompt for the task")
+    when_ts: str | None = Field(default=None, description="Scheduled ISO 8601 UTC timestamp")
+
+
+class RefreshDataInput(BaseModel):
+    kinds: list[str] | None = Field(default=None, description="Kinds of data to refresh (e.g. ['prices', 'portfolio'])")
+    force: bool = Field(default=False, description="Whether to force cache invalidation")
+
+
+class UpsertAnnotationInput(BaseModel):
+    id: str = Field(description="Annotation ID")
+    ticker: str = Field(description="Ticker symbol")
+    drawing: dict = Field(description="Drawing data structure")
+    timeframe: str | None = Field(default=None, description="Chart timeframe")
+    status: Literal["active", "struck"] = Field(default="active")
+
+
+class StrikeAnnotationInput(BaseModel):
+    id: str = Field(description="Annotation ID")
+    ticker: str = Field(description="Ticker symbol")
+
+
+class MarkInboxReadInput(BaseModel):
+    item_id: int = Field(gt=0, description="Inbox item ID to mark as read")
+
+
+class ReadOrdersInput(BaseModel):
+    status: str | None = Field(default=None, description="Filter by status (e.g. pending_approval, open, filled)")
+    limit: int = Field(default=50, ge=1, le=200)
+
+
+class ReadTradesInput(BaseModel):
+    status: str | None = Field(default=None, description="Filter by status (e.g. open, closed)")
+    ticker: str | None = Field(default=None, description="Filter by ticker symbol")
+    limit: int = Field(default=50, ge=1, le=200)
+
+
+class ReadAgentChatInput(BaseModel):
+    agent: str = Field(description="Agent name")
+    topic: str = Field(description="Chat topic")
+    limit: int = Field(default=50, ge=1, le=200)
+
+
+class ReadToolCallsInput(BaseModel):
+    agent: str | None = Field(default=None, description="Filter by agent")
+    cycle_id: int | None = Field(default=None, description="Filter by cycle ID")
+    limit: int = Field(default=50, ge=1, le=200)
+
+
+class ReadUsageInput(BaseModel):
+    agent: str | None = Field(default=None, description="Filter by agent")
+    from_ts: str | None = Field(default=None, description="Start UTC ISO timestamp")
+    to_ts: str | None = Field(default=None, description="End UTC ISO timestamp")
+
+
+class ReadAnnotationsInput(BaseModel):
+    ticker: str = Field(description="Ticker symbol")
+    include_struck: bool = Field(default=False)
+
+
+class ReadEventsInput(BaseModel):
+    limit: int = Field(default=50, ge=1, le=200)
+    since_id: int | None = Field(default=None)
+
+
+class ReadBriefingInput(BaseModel):
+    since: str | None = Field(default=None, description="UTC ISO timestamp since when to fetch briefing items")
+
+
+class EmptyBridgeInput(BaseModel):
+    """Empty input for parameterless read tools."""
+    pass
+

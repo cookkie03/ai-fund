@@ -1,7 +1,8 @@
-import { CandlestickChart, MessagesSquare, OctagonPause, RotateCw, WalletCards } from "lucide-react";
+import { CandlestickChart, MessagesSquare, Newspaper, OctagonPause, RotateCw, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { AuthorChip } from "@/components/author-chip";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { useDossier, useDossierHistory } from "@/features/dossier/hooks";
 import { DOSSIER_STATUS, fmtFraction } from "@/features/dossier/labels";
@@ -122,6 +123,7 @@ function Header({ symbol, d, agent, agentKnown, mobile }: { symbol: string; d: D
     <nav aria-label={`Collegamenti per ${symbol}`} className="flex flex-wrap gap-1">
       <HeaderLink to={`/terminale?t=${symbol}`} icon={<CandlestickChart />} label="Grafico" />
       {(agent || !agentKnown) && <HeaderLink to={`/ufficio/${agentId}`} icon={<MessagesSquare />} label="Chat dell'agente" />}
+      <HeaderLink to={`/notizie?ticker=${symbol}`} icon={<Newspaper />} label={`Notizie su ${symbol}`} />
       <HeaderLink to="/portafoglio" icon={<WalletCards />} label="Portafoglio" />
     </nav>
   );
@@ -130,6 +132,17 @@ function Header({ symbol, d, agent, agentKnown, mobile }: { symbol: string; d: D
     <header className="mx-2 mb-2.5 rounded-tile bg-ground px-4 py-3.5 md:mx-0 md:px-5 md:py-4">
       <div className="flex flex-wrap items-start gap-x-8 gap-y-4">
         <div className="min-w-0">
+          <Breadcrumb className="mb-2">
+            <BreadcrumbList className="text-2xs">
+              <BreadcrumbItem>
+                <BreadcrumbLink render={<Link to="/terminale">Terminale</Link>} />
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{symbol}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
           <div className="flex items-center gap-2 text-[13px] text-fg-muted">
             <h1 className="font-semibold tracking-[0.02em] text-fg">{symbol}</h1>
             {id?.name && <span className="truncate">{id.name}</span>}
