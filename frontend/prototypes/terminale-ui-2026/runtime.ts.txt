@@ -1,0 +1,22 @@
+export type Health = { account_label: string; halted: boolean; broker_stream_connected: boolean; broker_configured: boolean; last_event_id: number }
+export type WatchItem = { ticker: string; added_by: string; added_ts: string; note: string | null }
+export type Bar = { time: number; open: number; high: number; low: number; close: number; volume: number }
+export type Order = { id: number; ticker: string; side: string; qty: number; status: string; approval_status: string; created_ts: string }
+export type Portfolio = { ts: string; equity: number; cash: number } | null
+export type Result = { ok: boolean; reasons: string[] }
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`/v1/${path}`, init)
+  const data: unknown = await response.json().catch(() => null)
+  if (!response.ok) {
+    const detail = data && typeof data === 'object' && 'detail' in data ? (data as { detail: unknown }).detail : null
+    const reasons = data && typeof data === 'object' && 'reasons' in data ? (data as { reasons: unknown }).reasons : null
+    throw new Error(Array.isArray(reasons) ? reasons.join(', ') : typeof detail === 'string' ? detail : `Runtime: HTTP ${response.status}`)
+  }
+  return data as T
+}
+export const read = <T>(name: string, query = '') => request<T>(`read/${name}${query}`)
+export const health = () => request<Health>('health')
+export const command = (name: string, body: object) => request<Result>(`commands/${name}`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID(), 'X-Actor': 'cockpit' }, body: JSON.stringify(body),
+})

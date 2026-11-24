@@ -1,0 +1,218 @@
+---
+name: Trading Office Cockpit
+description: Single dark professional finance workspace where Luca and the agents work on the same charts, watchlist and orders.
+colors:
+  canvas: "#0b0f14"
+  chrome: "#10151b"
+  panel: "#11171e"
+  bridge-surface: "#151d25"
+  field: "#0d1319"
+  raised: "#1b242e"
+  hairline: "#29323c"
+  hairline-soft: "#252f39"
+  hairline-strong: "#40505f"
+  selected-row: "#1d3041"
+  selected-nav: "#253444"
+  selected-tab: "#293b4d"
+  action-fill: "#26394b"
+  text: "#e2e9f0"
+  text-muted: "#aab8c5"
+  text-dim: "#788591"
+  focus-blue: "#8cbaff"
+  link-blue: "#9ec9ff"
+  up: "#63c7a5"
+  up-chart: "#40bd99"
+  down: "#ef7a80"
+  caution: "#e1b965"
+  banner-caution-bg: "#43341c"
+  banner-caution-text: "#ffe6ad"
+  banner-danger-bg: "#522b31"
+  banner-danger-text: "#ffe4e6"
+typography:
+  title:
+    fontFamily: "system-ui, -apple-system, sans-serif"
+    fontSize: "23px"
+    fontWeight: 650
+  panel-heading:
+    fontFamily: "system-ui, -apple-system, sans-serif"
+    fontSize: "14px"
+    fontWeight: 650
+  body:
+    fontFamily: "system-ui, -apple-system, sans-serif"
+    fontSize: "12px"
+    fontWeight: 400
+  label:
+    fontFamily: "system-ui, -apple-system, sans-serif"
+    fontSize: "11px"
+    fontWeight: 400
+rounded:
+  sm: "4px"
+  md: "5px"
+  dot: "50%"
+spacing:
+  xs: "4px"
+  sm: "8px"
+  md: "12px"
+  lg: "16px"
+  xl: "24px"
+components:
+  nav-item:
+    backgroundColor: "transparent"
+    textColor: "#b5c0cb"
+    rounded: "{rounded.md}"
+    padding: "11px 10px"
+  nav-item-active:
+    backgroundColor: "{colors.selected-nav}"
+    textColor: "#eff6ff"
+  button-outline:
+    backgroundColor: "{colors.raised}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "8px 12px"
+  button-add:
+    backgroundColor: "{colors.action-fill}"
+    textColor: "#eef5fc"
+    rounded: "{rounded.sm}"
+    padding: "5px 10px"
+  segment:
+    backgroundColor: "transparent"
+    textColor: "#aebdca"
+    rounded: "{rounded.sm}"
+    padding: "7px 10px"
+  segment-selected:
+    backgroundColor: "{colors.selected-tab}"
+    textColor: "#eff6ff"
+  input:
+    backgroundColor: "{colors.field}"
+    textColor: "#e4ecf4"
+    rounded: "{rounded.sm}"
+    padding: "9px"
+  panel:
+    backgroundColor: "{colors.panel}"
+    textColor: "{colors.text}"
+    padding: "16px"
+  watch-row-selected:
+    backgroundColor: "{colors.selected-row}"
+    textColor: "{colors.text}"
+    padding: "12px 15px"
+---
+
+# Design System: Trading Office Cockpit
+
+## Overview
+
+**Creative North Star: "The Shared Workbench"**
+
+The system is the convention of professional finance software executed cleanly: one dark theme, hairline-divided panels, dense tabular data, and a dominant chart. It describes itself as a technical workspace that Luca and the agents inhabit together, not a summary dashboard and not an approval queue. No metaphor or theme is imposed on top; the category standard (TradingView, IBKR TWS) is the look.
+
+Density is high and calm at rest. Surfaces are flat, separated by 1px hairlines rather than shadows or gaps. Colour is functional: green and red carry market and connection meaning, amber carries uncertainty, and a single soft blue carries focus and links. Motion is reserved for state changes; the built stylesheet contains no transitions or animations.
+
+**Key Characteristics:**
+- One dark theme, three near-black surface tiers (canvas, chrome, panel).
+- Panels tiled in a 1px-gap grid that exposes the hairline colour as the divider.
+- Tabular numerals applied globally on the root.
+- Financial colour semantics: green up, red down, amber caution.
+- Persistent shell: sidebar navigation, top bar with account, Runtime, broker and equity state.
+
+## Colors
+
+A restrained, cool blue-black palette with one blue accent and three semantic status hues.
+
+### Primary
+- **Focus Blue** (#8cbaff): keyboard focus ring (2px, 2px offset) and the brand mark. **Link Blue** (#9ec9ff) is the underlined inline-action colour in tables and banners.
+
+### Secondary
+- **Up Green** (#63c7a5) for healthy status dots; **Chart Green** (#40bd99) for up candles and volume (volume at 40% alpha).
+- **Down Red** (#ef7a80) for failed status and down candles.
+- **Caution Amber** (#e1b965) for degraded, disconnected or pending-connection states.
+
+### Neutral
+- **Canvas** (#0b0f14): page background. **Chrome** (#10151b): sidebar and top bar. **Panel** (#11171e): terminal panels. **Field** (#0d1319): inputs. **Raised** (#1b242e): outline buttons. **Bridge Surface** (#151d25): the slide-over drawer.
+- **Hairline** (#29323c): all dividers and the grid gap; **Hairline Soft** (#252f39) between watchlist rows; **Hairline Strong** (#40505f) on outline buttons.
+- **Selected Row** (#1d3041), **Selected Nav** (#253444), **Selected Tab** (#293b4d): the three selection fills, all blue-leaning.
+- **Text** (#e2e9f0), **Text Muted** (#aab8c5), **Text Dim** (#788591, disabled only).
+- Banners: caution (#43341c on #ffe6ad text) and danger (#522b31 on #ffe4e6 text).
+
+### Named Rules
+**The Meaning-Only Colour Rule.** Green, red and amber appear only for market direction and system state. Blue marks selection and focus. Nothing is coloured for decoration.
+
+## Typography
+
+**Body Font:** the platform UI sans stack (system-ui, -apple-system, sans-serif); no webfont is loaded.
+
+**Character:** neutral and compact; hierarchy comes from size and weight (650 for headings, 400-500 elsewhere), not from a second family.
+
+### Hierarchy
+- **Title** (650, 23px): the page heading ("Terminale").
+- **Panel Heading** (650, 14px): panel and instrument names.
+- **Body** (400, 12px): table cells, form text, activity content; base UI size.
+- **Label** (400, 10-11px): captions, counts, timestamps, footers, in Text Muted.
+
+### Named Rules
+**The Tabular Rule.** `font-variant-numeric: tabular-nums` is set on the root; every price, quantity and timestamp inherits it. Keep it.
+
+## Layout
+
+A fixed 210px sidebar beside a flexible workspace. The workspace holds a 64px top bar, optional full-width banners, then padded content (26px 24px). The terminal is a three-column grid, watchlist (205-245px), chart (flexible, dominant), activity (190-235px), with the orders panel spanning the full row beneath. Spacing steps observed: 4, 8, 12, 16, 24px, with 15px as the recurring panel gutter.
+
+Responsive: at 1050px the grid becomes two columns (watchlist, chart) with activity full-width and the broker status hidden. At 700px the sidebar becomes an off-canvas drawer behind a menu button, equity and connection status leave the top bar, and the grid stacks with the chart first, then watchlist, activity and orders. Chart height is 390px, 320px on phone. Order tables scroll horizontally inside a 650px minimum.
+
+## Elevation & Depth
+
+Flat. Depth is tonal (canvas, chrome, panel) plus 1px hairlines. The only shadows belong to overlays that float above content: the Bridge drawer (`box-shadow: -8px 0 24px #0007`) and the mobile sidebar (`8px 0 25px #0009`). Both are soft, blurred edge shadows.
+
+### Named Rules
+**The Flat-Until-Floating Rule.** Panels carry no shadow. A shadow is allowed only on a surface that overlays the workspace.
+
+## Shapes
+
+Modest, utilitarian corners: 4px on inputs, segmented buttons and the add control; 5px on nav items and outline buttons; fully round 7px dots for status. Panels themselves are square and meet at hairlines. The add form fuses input and button into one 4px-radius unit.
+
+## Components
+
+### Navigation
+Sidebar items are 13px, icon plus label, 11px 10px padding, 5px radius. Active uses Selected Nav fill and near-white text; unavailable pages are disabled in Text Dim with a small "Presto" tag. A hamburger toggles the off-canvas sidebar on phone. Lucide line icons at 15-20px.
+
+### Buttons
+- **Outline** (Bridge toggle): Raised fill, Hairline Strong border, 5px radius, 8px 12px padding, icon plus label.
+- **Add**: Action Fill (#26394b) with a #405269 border, fused to the input.
+- **Inline action**: transparent, Link Blue, underlined (table Approva and Rifiuta, banner Riprova).
+- **Icon**: borderless, muted, 8px padding (remove, close, menu).
+- **Focus**: 2px Focus Blue outline, 2px offset, on every button and field.
+
+### Segmented controls
+Timeframe (15m, 1h, 1d) and order tabs: borderless, 4px radius, 12px text; selected gets Selected Tab fill and near-white text.
+
+### Inputs / Fields
+Field fill, 1px #354352 border, 4px radius, 12px text, 9px padding. Labels sit above in 11px Text Muted.
+
+### Panels and tables
+Panel fill with a 54px heading row (14px title left, 11px muted meta right) over a hairline. Tables: 12px, collapsed borders, 12px 15px cell padding, muted weight-500 headers, no row striping.
+
+### Watchlist row
+Two-line selectable row (ticker bold, "added by" muted right; note and date beneath, ellipsised) with a trash icon; selected row takes Selected Row fill. Authorship is shown on every entry.
+
+### Status indicators
+7px dot plus 12px text in the top bar and page heading: green connected, amber disconnected or waiting, red unreachable. Banners above content report halt (danger) and read errors (caution) with a retry.
+
+### Chart
+Lightweight-charts candlesticks plus volume histogram in the lower 20% of the pane. Background #11151b, grid #202934, scale borders #303b47, text #aab6c3, candles Chart Green and Down Red without borders. Footer line states bar count and last-data time.
+
+### Bridge drawer
+Right slide-over, min(360px, 100%) wide, below the top bar, Bridge Surface fill, 1px #3b4b59 left border, soft left shadow; message field pinned at the bottom.
+
+## Do's and Don'ts
+
+### Do:
+- **Do** keep one dark theme and separate regions with 1px Hairline (#29323c), not shadows.
+- **Do** keep tabular numerals on every number and show absent values as an em dash, with explicit empty, loading and error text.
+- **Do** reserve green, red and amber for direction and state; use Focus Blue only for selection, focus and links.
+- **Do** keep the 2px Focus Blue focus ring on all interactive elements.
+- **Do** keep the chart the dominant area, first on phone.
+- **Do** show who made a mark (watchlist "added by"); extend that to annotations.
+
+### Don't:
+- **Don't** add a second theme, gradients, glows or decorative colour.
+- **Don't** put shadows on in-flow panels.
+- **Don't** invent data for the UI; unavailable values stay visibly unavailable.
+- **Don't** introduce a new accent hue; extend the existing semantic set.
