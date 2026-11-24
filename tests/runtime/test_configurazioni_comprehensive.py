@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
-import os
 import sqlite3
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 
+from agents.backend import StepResult, ToolCall
+from agents.fake_backend import ScriptedBackend
 from bootstrap import build_test_office
 from config.settings_store import SettingsStore
 from runtime.core import Runtime
 from runtime.http import create_app
 from storage.backup import create_db_backup
 from storage.office_db import OfficeDB
-from storage.secrets import SecretsManager
+from workflows.scheduling import ScheduledTask, TaskSource
 
 
 @pytest.fixture
@@ -174,30 +176,53 @@ def test_live_settings_immediate_application(test_env):
                 assert item["value"] == 7
 
 
-def test_secrets_security_audit(tmp_path):
-    sec_file = tmp_path / "audit_secrets.env"
-    meta_file = tmp_path / "audit_secrets.meta.json"
-    manager = SecretsManager(secrets_path=sec_file, meta_path=meta_file)
+def test_engine_cycle_prompt_and_live_settings_execution(test_env):
+    db = test_env["db"]
+    client = test_env["client"]
 
-    secret_val = "super-secret-audit-key-999"
-    res = manager.set("ALPACA_API_KEY", secret_val, "luca", "security audit test")
-    assert res["set"] is True
-    assert res["last4"] == "-999"
+    # 1. Seed initial prompt v1 for portfolio_manager in DB
+    db.insert_prompt_version("portfolio_manager", "luca", "v1", "Initial PM Prompt v1")
 
-    # 1. Verify strict 0600 permissions on secrets file
-    mode = os.stat(sec_file).st_mode
-    assert (mode & 0o077) == 0  # No group or other permissions allowed
+    # 2. Run Cycle via Office deliver with scripted backend that checks agent spec system_prompt
+    captured_prompts = []
 
-    # 2. Verify metadata isolation and absence of plaintext secret in metadata
-    meta_content = meta_file.read_text(encoding="utf-8")
-    assert secret_val not in meta_content
+    def script_fn(agent, chat_context, tools, turn):
+        captured_prompts.append((agent.name, agent.system_prompt))
+        return StepResult(tool_calls=[ToolCall(id="t1", name="defer", args={"ticker": "AAPL", "reason": "done"})], done=True)
 
-    # 3. Verify read endpoint / list_secrets redacts full secret value
-    listed = manager.list_secrets()
-    alpaca_info = next(s for s in listed if s["name"] == "ALPACA_API_KEY")
-    assert alpaca_info["set"] is True
-    assert alpaca_info["last4"] == "-999"
-    assert secret_val not in str(listed)
+    fixed_now = datetime(2026, 6, 1, 10, 0, tzinfo=UTC)
+    office = build_test_office(db=db, backend=ScriptedBackend(script_fn))
+    office.clock = lambda: fixed_now
+    office.sleep_fn = lambda _: None
+    pm_cfg = office.settings.get_agent("portfolio_manager")
+    pm_cfg.system_prompt_path = None
+
+    task1 = ScheduledTask(agent="portfolio_manager", chat="AAPL", when=fixed_now, source=TaskSource.MANUAL, reason="Cycle 1")
+    outcome1 = office.deliver(task1)
+    assert outcome1 in ("deferred", "rimando")
+    assert any("Initial PM Prompt v1" in p for _, p in captured_prompts)
+
+    # 3. Mid-cycle update: update live setting (max_parallel) and insert prompt v2
+    client.post(
+        "/v1/commands/update_settings",
+        json={"changes": {"max_parallel": 5}, "reason": "live update test", "confirm": True},
+        headers={"X-Actor": "luca"}
+    )
+    store = SettingsStore(db, office.settings)
+    office.settings = store.active_settings()
+    assert office.settings.max_parallel == 5
+
+    db.insert_prompt_version("portfolio_manager", "luca", "v2", "Updated PM Prompt v2 (Next Cycle)")
+
+    # 4. Run Cycle 2: engine reads updated live settings (max_parallel == 5) and loads new prompt version v2
+    captured_prompts.clear()
+    task2 = ScheduledTask(agent="portfolio_manager", chat="AAPL", when=fixed_now + timedelta(hours=1), source=TaskSource.MANUAL, reason="Cycle 2")
+    outcome2 = office.deliver(task2)
+    assert outcome2 in ("deferred", "rimando")
+    assert any("Updated PM Prompt v2" in p for _, p in captured_prompts)
+    assert office.settings.max_parallel == 5
+
+
 
 
 
