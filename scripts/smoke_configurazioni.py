@@ -1,4 +1,4 @@
-"""Smoke test script for Cockpit Configurazioni backend on port 8778 (reads, writes, commands, SSE)."""
+"""Smoke test script for Cockpit Configurazioni backend on port 8778 (reads, writes, idempotency, live vs restart, SSE)."""
 
 from __future__ import annotations
 
@@ -42,31 +42,65 @@ def main():
                 data = json.loads(resp.read().decode("utf-8"))
                 print(f"OK: {ep} -> received {type(data)}")
 
-        # Test command update_settings
+        # 1. Test update_settings (live setting: max_parallel from current to 2)
         req_data = json.dumps({
-            "changes": {"max_parallel": 4},
-            "reason": "smoke test update",
+            "changes": {"max_parallel": 2},
+            "reason": "smoke test update live setting",
             "confirm": True
         }).encode("utf-8")
         req = urllib.request.Request(
             f"{base}/v1/commands/update_settings",
             data=req_data,
-            headers={"Content-Type": "application/json", "Idempotency-Key": "smoke-1", "X-Actor": "luca"},
+            headers={"Content-Type": "application/json", "Idempotency-Key": "smoke-idemp-1", "X-Actor": "luca"},
             method="POST",
         )
         with urllib.request.urlopen(req) as resp:
             assert resp.status == 200
-            print(f"OK: POST update_settings -> {resp.read().decode('utf-8')}")
+            res = json.loads(resp.read().decode("utf-8"))
+            print(f"OK: POST update_settings live -> {res}")
+            assert res["ok"] is True
 
-        # Test SSE events endpoint
+        # Test idempotency (same Idempotency-Key)
+        with urllib.request.urlopen(req) as resp:
+            assert resp.status == 200
+            res_idemp = json.loads(resp.read().decode("utf-8"))
+            print(f"OK: POST update_settings idempotency -> {res_idemp}")
+            assert res_idemp["ok"] is True
+
+        # 2. Test update_settings (restart setting: market.bar_timeframe to 5m)
+        req_data_restart = json.dumps({
+            "changes": {"market.bar_timeframe": "5m"},
+            "reason": "smoke test update restart setting",
+            "confirm": True
+        }).encode("utf-8")
+        req_restart = urllib.request.Request(
+            f"{base}/v1/commands/update_settings",
+            data=req_data_restart,
+            headers={"Content-Type": "application/json", "Idempotency-Key": "smoke-idemp-2", "X-Actor": "luca"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req_restart) as resp:
+            assert resp.status == 200
+            res_rest = json.loads(resp.read().decode("utf-8"))
+            print(f"OK: POST update_settings restart -> {res_rest}")
+            assert res_rest["ok"] is True
+
+        # Verify pending_restart in /v1/read/settings
+        with urllib.request.urlopen(f"{base}/v1/read/settings") as resp:
+            set_data = json.loads(resp.read().decode("utf-8"))
+            print(f"OK: settings pending_restart -> {set_data.get('pending_restart')}")
+            assert "market.bar_timeframe" in set_data.get("pending_restart", [])
+
+        # 3. Test SSE events stream
         req_sse = urllib.request.Request(f"{base}/v1/events")
         try:
-            with urllib.request.urlopen(req_sse, timeout=1.0) as resp:
-                pass
-        except Exception:
-            pass
+            with urllib.request.urlopen(req_sse, timeout=1.5) as resp:
+                chunk = resp.readline()
+                print(f"OK: SSE stream sample -> {chunk}")
+        except Exception as exc:
+            print(f"SSE stream read completed/timeout as expected: {exc}")
 
-        print("Smoke test on port 8778 (reads, writes, commands, SSE) completed successfully!")
+        print("Smoke test on port 8778 (reads, live writes, idempotency, restart flags, SSE) completed successfully!")
     finally:
         p.terminate()
         p.join()
