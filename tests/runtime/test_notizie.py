@@ -250,15 +250,29 @@ def test_news_commands_and_forwarding(tmp_path):
     )
     assert fwd.status_code == 200
     assert fwd.json()["ok"] is True
+    chat_id = fwd.json()["data"]["chat_id"]
+    msgs = db.list_messages(chat_id)
+    assert len(msgs) == 1
+    assert "AI Breakthrough" in msgs[0]["text"]
+    assert "Guarda questo" in msgs[0]["text"]
 
-    # Disable source
-    dis = client.post(
-        "/v1/commands/set_news_source_enabled",
-        json={"source_id": source_id, "enabled": 0},
-        headers={"Idempotency-Key": "k3", "X-Actor": "Luca"},
+    # Refresh news command
+    ref = client.post(
+        "/v1/commands/refresh_news",
+        json={},
+        headers={"Idempotency-Key": "k4", "X-Actor": "Luca"},
     )
-    assert dis.status_code == 200
-    assert dis.json()["ok"] is True
+    assert ref.status_code == 200
+    assert ref.json()["ok"] is True
+
+    # Remove news source command
+    rem = client.post(
+        "/v1/commands/remove_news_source",
+        json={"source_id": source_id},
+        headers={"Idempotency-Key": "k5", "X-Actor": "Luca"},
+    )
+    assert rem.status_code == 200
+    assert rem.json()["ok"] is True
 
 
 def test_agent_news_tools_and_calendars(tmp_path):
