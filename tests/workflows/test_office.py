@@ -469,8 +469,10 @@ def test_ticker_agent_receives_specialist_reply_before_proposing(db, env, order_
     assert any(m["text"] == "Technical view" for m in db.list_messages(chat_id))
 
 
-def test_parallel_ticker_cycles_keep_their_proposals_separate(db, env, order_flow, fixed_now):
+def test_parallel_ticker_cycles_keep_their_proposals_separate(tmp_path, env, order_flow, fixed_now):
     from concurrent.futures import ThreadPoolExecutor
+
+    from bootstrap import build_test_office
 
     class Backend:
         def step(self, agent, context, tools):
@@ -480,8 +482,12 @@ def test_parallel_ticker_cycles_keep_their_proposals_separate(db, env, order_flo
                     "ticker": ticker, "direction": "buy", "conviction": 0.5, "reason": ticker})], done=True)
             return StepResult(done=True)
 
-    office = Office(db=db, backend=Backend(), env_factory=env, order_flow=order_flow,
-                    clock=lambda: fixed_now, sleep_fn=lambda _: None)
+    db_path = tmp_path / "parallel.db"
+    db = OfficeDB(db_path)
+    office = build_test_office(db=db)
+    office.backend = Backend()
+    office.clock = lambda: fixed_now
+    office.sleep_fn = lambda _: None
     tasks = [ScheduledTask(agent="portfolio_manager", chat=sym, when=fixed_now,
              source=TaskSource.AGENT, reason="Analyze") for sym in ("AAPL", "MSFT")]
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -491,6 +497,8 @@ def test_parallel_ticker_cycles_keep_their_proposals_separate(db, env, order_flo
         chat_id = db.get_or_create_chat(f"ticker:{ticker}", ticker)
         messages = db.list_messages(chat_id)
         assert not any(("MSFT" if ticker == "AAPL" else "AAPL") in m["text"] for m in messages)
+
+
 
 
 def test_accepted_proposal_goes_through_risk_gate(db, broker, env, order_flow, fixed_now):
