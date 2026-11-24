@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, ChevronRight, SlidersHorizontal, SquareMinus } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { AuthorChip } from "@/components/author-chip";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { PortfolioPosition, RiskLimitsRead, Sourced } from "@/features/portfolio/types";
@@ -102,7 +103,7 @@ function PositionsTable({ rows, limits, onAction }: { rows: PortfolioPosition[];
             <tr key={p.ticker} className="group hover:[&>td]:bg-hover">
               <Td className="font-semibold text-fg">
                 {p.ticker}
-                {p.side === "short" && <span className="ml-1.5 text-2xs font-medium text-down">short</span>}
+                {p.side === "short" && <Badge variant="destructive" className="ml-1.5 h-4 px-1 text-[10px] leading-none uppercase">short</Badge>}
               </Td>
               <Td className="text-fg-muted">{p.sector ?? <span className="text-fg-subtle">—</span>}</Td>
               <Td right>{fmtQty(p.qty)}</Td>

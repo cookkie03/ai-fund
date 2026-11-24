@@ -78,6 +78,16 @@
   --border: var(--line);
   --input: var(--line-strong);
   --ring: var(--accent-c);
+
+  /* shadcn sidebar tokens */
+  --sidebar: var(--desk);
+  --sidebar-foreground: var(--fg);
+  --sidebar-primary: var(--accent-strong);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: var(--hover);
+  --sidebar-accent-foreground: var(--fg);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--accent-c);
 }
 
 @theme inline {
@@ -98,6 +108,14 @@
   --color-panel: var(--panel);
   --color-raised: var(--raised);
   --color-hover: var(--hover);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
   --color-selected: var(--selected);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);

@@ -3,7 +3,9 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { AuthorChip } from "@/components/author-chip";
 import { PanelTab, PanelTabContent, PanelTabs, PanelTabsList } from "@/components/panel-tabs";
 import { IconButton } from "@/components/tile";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AGENTS, AGENT_IDS, author } from "@/lib/authors";
@@ -34,21 +36,32 @@ const COEFF_LABEL: Record<string, string> = {
 
 function Section({ title, children, end }: { title: string; children: ReactNode; end?: ReactNode }) {
   return (
-    <section className="mx-1.5 rounded-control px-2.5 py-3 [&+&]:border-t [&+&]:border-line/70">
+    <Card size="sm" className="mx-2 mb-2 rounded-control border-line-strong/60 bg-ground/80 p-3 shadow-none">
       <div className="mb-2 flex items-center gap-2">
-        <h3 className="text-2xs font-medium text-fg-subtle">{title}</h3>
+        <h3 className="text-2xs font-semibold uppercase tracking-wider text-fg-subtle">{title}</h3>
         {end && <div className="ml-auto">{end}</div>}
       </div>
       {children}
-    </section>
+    </Card>
   );
 }
 
 function Conviction({ s }: { s: Suggestion }) {
   const d = DIRECTION[s.direction] ?? { label: s.direction, tone: "text-fg-muted" };
+  const badgeTone =
+    s.direction === "buy"
+      ? "bg-up-soft text-up border-transparent"
+      : s.direction === "sell"
+        ? "bg-down-soft text-down border-transparent"
+        : s.direction === "defer"
+          ? "bg-warn-soft text-warn border-transparent"
+          : "bg-hover text-fg-muted border-transparent";
+
   return (
     <span className="flex items-center gap-2">
-      <span className={cn("w-14 text-xs font-medium", d.tone)}>{d.label}</span>
+      <Badge variant="outline" className={cn("h-4.5 px-1.5 text-2xs font-medium rounded-tag", badgeTone)}>
+        {d.label}
+      </Badge>
       <span className="num w-7 text-right text-xs text-fg-muted">{s.conviction.toFixed(2).replace(".", ",")}</span>
     </span>
   );
