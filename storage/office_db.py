@@ -1317,6 +1317,66 @@ class OfficeDB:
         )
         return version
 
+    # --- News and Calendar Queries for Agent Tools ---
+
+    def query_news(
+        self,
+        ticker: str | None = None,
+        theme: str | None = None,
+        q: str | None = None,
+        since: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        query = "SELECT * FROM news WHERE 1=1"
+        params: list[Any] = []
+        if ticker:
+            query += " AND (tickers_json LIKE ? OR headline LIKE ?)"
+            params.extend([f'%"{ticker.upper()}"%', f'%{ticker}%'])
+        if since:
+            query += " AND published_ts >= ?"
+            params.append(since)
+        if q:
+            query += " AND (headline LIKE ? OR summary LIKE ?)"
+            params.extend([f'%{q}%', f'%{q}%'])
+        query += " ORDER BY published_ts DESC, id DESC LIMIT ?"
+        params.append(limit)
+        rows = self._connection.execute(query, params).fetchall()
+        items = []
+        for r in rows:
+            themes = json.loads(r["themes_json"] or "[]")
+            if theme and theme.lower() not in [th.lower() for th in themes]:
+                continue
+            item = dict(r)
+            item["tickers"] = json.loads(item.pop("tickers_json") or "[]")
+            item["themes"] = themes
+            item["has_full_text"] = bool(item["has_full_text"])
+            items.append(item)
+        return items
+
+    def query_calendar(
+        self,
+        kind: str,
+        from_ts: str | None = None,
+        to_ts: str | None = None,
+        tickers: list[str] | None = None,
+    ) -> list[dict]:
+        query = "SELECT * FROM calendar_events WHERE kind = ?"
+        params: list[Any] = [kind]
+        if from_ts:
+            query += " AND ts >= ?"
+            params.append(from_ts)
+        if to_ts:
+            query += " AND ts <= ?"
+            params.append(to_ts)
+        if tickers:
+            placeholders = ",".join(["?"] * len(tickers))
+            query += f" AND ticker IN ({placeholders})"
+            params.extend([t.upper() for t in tickers])
+        query += " ORDER BY ts ASC, id ASC"
+        rows = self._connection.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
+
+
     def list_risk_limits_versions(self, limit: int = 50) -> list[dict]:
         rows = self._connection.execute(
             "SELECT * FROM risk_limits_versions ORDER BY version DESC LIMIT ?", (limit,)

@@ -259,3 +259,72 @@ def test_news_commands_and_forwarding(tmp_path):
     )
     assert dis.status_code == 200
     assert dis.json()["ok"] is True
+
+
+def test_agent_news_tools_and_calendars(tmp_path):
+    db_path = tmp_path / "tools.db"
+    db = OfficeDB(db_path)
+    office = build_test_office(db=db)
+
+    # Insert test news & calendar events
+    sid = db.add_news_source("rss", "Test", "https://example.com/rss")
+    db.insert_news(
+        headline="Semiconductor demand doubles",
+        summary="AI chip demand surges.",
+        full_text="Detailed text",
+        url="https://example.com/chips",
+        source_id=sid,
+        source="Test",
+        provider="rss",
+        published_ts="2026-11-24T10:00:00Z",
+        tickers=["NVDA"],
+        themes=["technology"],
+    )
+    db.insert_calendar_event(
+        kind="macro",
+        ts="2026-11-25T14:30:00Z",
+        title="Fed Rate Decision",
+        country="US",
+        importance="high",
+        source="openbb",
+    )
+    db.insert_calendar_event(
+        kind="earnings",
+        ts="2026-11-26T20:00:00Z",
+        title="Earnings: NVDA",
+        ticker="NVDA",
+        importance="high",
+        source="openbb",
+    )
+
+    env = office.get_env()
+    sa_tools = {t.name: t for t in env.tools_for("sentiment_analyst")}
+    assert "news_search" in sa_tools
+    assert "news_by_ticker" in sa_tools
+
+    ma_tools = {t.name: t for t in env.tools_for("market_analyst")}
+    assert "news_by_theme" in ma_tools
+    assert "economic_calendar" in ma_tools
+
+    fa_tools = {t.name: t for t in env.tools_for("fundamental_analyst")}
+    assert "earnings_calendar" in fa_tools
+
+    # Test execution
+    res_search = sa_tools["news_search"].fn(q="Semiconductor", ticker="NVDA")
+    assert len(res_search) == 1
+    assert res_search[0]["headline"] == "Semiconductor demand doubles"
+
+    res_ticker = sa_tools["news_by_ticker"].fn(ticker="NVDA")
+    assert len(res_ticker) == 1
+
+    res_theme = ma_tools["news_by_theme"].fn(theme="technology")
+    assert len(res_theme) == 1
+
+    res_econ = ma_tools["economic_calendar"].fn()
+    assert len(res_econ) == 1
+    assert res_econ[0]["title"] == "Fed Rate Decision"
+
+    res_earn = fa_tools["earnings_calendar"].fn(tickers=["NVDA"])
+    assert len(res_earn) == 1
+    assert res_earn[0]["ticker"] == "NVDA"
+
