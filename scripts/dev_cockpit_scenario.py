@@ -548,7 +548,7 @@ def seed_scenario(rt: Any, market: ScenarioMarketData) -> None:
             ts=_iso(now - timedelta(hours=3, minutes=1)),
         )
         # Notizie, fonti, traccia d'uso e calendario
-        s1 = db.add_news_source("alpaca", "Alpaca News", "https://api.alpaca.markets/news")
+        _s1 = db.add_news_source("alpaca", "Alpaca News", "https://api.alpaca.markets/news")
         s2 = db.add_news_source("rss", "Reuters Tech", "https://feeds.reuters.com/reuters/technologyNews")
         s3 = db.add_news_source("rss", "Bloomberg Markets", "https://feeds.bloomberg.com/markets/news.rss")
         s4 = db.add_news_source("rss", "Broken Feed", "https://example.com/broken-feed.xml")

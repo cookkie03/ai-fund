@@ -66,3 +66,9 @@ Il comando usa OpenBB con `yfinance` come provider predefinito. `source`, `colle
 SQLite è adeguato al perimetro MVP: un singolo host e un writer coordinato, senza avviare un servizio separato. Non è una promessa per più writer concorrenti, ingestione ad alto volume o retention time-series di produzione. Se il workload supera queste soglie, il passo successivo è un adapter PostgreSQL con migrazioni SQL revisionate; TimescaleDB potrà aggiungere hypertable e policy time-series sul lato PostgreSQL. Non basta cambiare una URL e SQLite non implementa TimescaleDB.
 
 Il package non contiene chiamate vendor, cache, logica LLM o order execution. Il modello `Observation` è volutamente neutro e non sostituisce i contratti finanziari che verranno allineati con la chat vendor.
+
+## Nuove tabelle Notizie e Calendario (Migrazione 009)
+- `news_sources`: gestisce le fonti esterne (provider `alpaca`, `rss`, `openbb`), URL, stato (`ok`, `error`, `unavailable`), `last_error` e `last_fetch_ts`.
+- `news`: memorizza gli articoli di notizie con headline, summary, full_text, `url` (univoco), `source_id`, `provider`, `published_ts`, `tickers_json`, `themes_json`, `image_url` e `has_full_text`.
+- `news_usage`: registra la traccia d'uso delle notizie da parte degli agenti o di Luca (`read`, `cited`, `forwarded`), con `cycle_id`, `chat_id`, `tool_call_id` e `note`.
+- `calendar_events`: calendario unificato per eventi macro ed earnings (`kind`), con timestamp, titolo, paese, ticker, importanza, actual, forecast, previous e source.

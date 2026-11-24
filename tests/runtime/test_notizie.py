@@ -2,10 +2,11 @@
 
 from datetime import UTC, datetime
 
+import pytest
 from fastapi.testclient import TestClient
 
 from bootstrap import build_test_office
-from data.providers.rss_news import RSSItem
+from data.providers.rss_news import RSSItem, RSSNewsProvider
 from runtime.core import Runtime
 from runtime.http import create_app
 from storage.office_db import OfficeDB
@@ -21,6 +22,63 @@ def test_rss_parser_parses_feed(tmp_path):
     )
     assert item.headline == "Apple reports record earnings"
     assert item.url == "https://example.com/apple-earnings"
+
+
+def test_rss_provider_invalid_scheme():
+    prov = RSSNewsProvider(url="ftp://example.com/feed", name="FTP Feed")
+    with pytest.raises(ValueError, match="Invalid RSS URL scheme"):
+        prov.fetch_news()
+
+
+def test_news_deduplication(tmp_path):
+    db_path = tmp_path / "dedup.db"
+    db = OfficeDB(db_path)
+    id1 = db.insert_news(
+        headline="Same Headline",
+        summary="Sum",
+        full_text=None,
+        url="https://example.com/same",
+        source_id=None,
+        source="Src",
+        provider="rss",
+        published_ts="2026-11-24T10:00:00Z",
+    )
+    id2 = db.insert_news(
+        headline="Updated Headline",
+        summary="Sum 2",
+        full_text=None,
+        url="https://example.com/same",
+        source_id=None,
+        source="Src",
+        provider="rss",
+        published_ts="2026-11-24T10:00:00Z",
+    )
+    assert id1 == id2
+    item = db.connection.execute("SELECT headline FROM news WHERE id = ?", (id1,)).fetchone()
+    assert item["headline"] == "Updated Headline"
+
+
+def test_events_published_only_on_commit(tmp_path):
+    db = OfficeDB(tmp_path / "events.db")
+    rt = Runtime(office=build_test_office(db=db))
+    src_id = db.add_news_source("rss", "Test", "https://example.com/rss")
+    news_id = db.insert_news(
+        headline="Test Event",
+        summary=None,
+        full_text=None,
+        url="https://example.com/evt",
+        source_id=src_id,
+        source="Test",
+        provider="rss",
+        published_ts="2026-11-24T10:00:00Z",
+    )
+    received = []
+    rt.bus.add_listener(received.append)
+    with db.transaction():
+        db.log_news_usage(news_id=news_id, agent="sentiment_analyst", kind="read")
+        assert received == []
+    assert len(received) == 1
+    assert received[0].type == "news.used"
 
 
 def test_notizie_database_and_read_endpoints(tmp_path):
