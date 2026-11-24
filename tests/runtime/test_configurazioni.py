@@ -148,3 +148,27 @@ def test_prompt_and_secret_endpoints(client):
     r_backups = client.get("/v1/read/backups")
     assert r_backups.status_code == 200
     assert isinstance(r_backups.json(), list)
+
+
+def test_approval_mode_requires_confirmation(client):
+    r = client.post("/v1/commands/update_settings", json={
+        "changes": {"approval_mode": "manual"},
+        "reason": "change approval mode without confirm",
+        "confirm": False
+    }, headers={"X-Actor": "luca"})
+    assert r.status_code == 200
+    assert r.json()["ok"] is False
+    assert any("confirm" in reason.lower() for reason in r.json()["reasons"])
+
+
+def test_restart_setting_pending_flag(client):
+    client.post("/v1/commands/update_settings", json={
+        "changes": {"market.bar_timeframe": "15m"},
+        "reason": "change timeframe (restart required)",
+        "confirm": True
+    }, headers={"X-Actor": "luca"})
+
+    r = client.get("/v1/read/settings")
+    assert r.status_code == 200
+    data = r.json()
+    assert "market.bar_timeframe" in data["pending_restart"]

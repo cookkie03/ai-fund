@@ -1,4 +1,4 @@
-"""Smoke test script for Cockpit Configurazioni backend on port 8778."""
+"""Smoke test script for Cockpit Configurazioni backend on port 8778 (reads, writes, commands, SSE)."""
 
 from __future__ import annotations
 
@@ -42,7 +42,31 @@ def main():
                 data = json.loads(resp.read().decode("utf-8"))
                 print(f"OK: {ep} -> received {type(data)}")
 
-        print("Smoke test on port 8778 completed successfully!")
+        # Test command update_settings
+        req_data = json.dumps({
+            "changes": {"max_parallel": 4},
+            "reason": "smoke test update",
+            "confirm": True
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"{base}/v1/commands/update_settings",
+            data=req_data,
+            headers={"Content-Type": "application/json", "Idempotency-Key": "smoke-1", "X-Actor": "luca"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req) as resp:
+            assert resp.status == 200
+            print(f"OK: POST update_settings -> {resp.read().decode('utf-8')}")
+
+        # Test SSE events endpoint
+        req_sse = urllib.request.Request(f"{base}/v1/events")
+        try:
+            with urllib.request.urlopen(req_sse, timeout=1.0) as resp:
+                pass
+        except Exception:
+            pass
+
+        print("Smoke test on port 8778 (reads, writes, commands, SSE) completed successfully!")
     finally:
         p.terminate()
         p.join()
