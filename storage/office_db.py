@@ -1599,7 +1599,7 @@ class OfficeDB:
 
     def log_news_usage(
         self,
-        news_id: int,
+        news_id: int | None = None,
         agent: str | None = None,
         kind: str = "read",
         cycle_id: int | None = None,
@@ -1608,24 +1608,28 @@ class OfficeDB:
         topic: str | None = None,
         note: str | None = None,
         ts: str | None = None,
-    ) -> int:
+        news_ids: list[int] | None = None,
+    ) -> list[int]:
         ts = ts or utc_now_iso()
+        ids = news_ids if news_ids is not None else ([news_id] if news_id is not None else [])
+        usage_ids = []
         with self.transaction():
-            cursor = self._connection.execute(
-                """
-                INSERT INTO news_usage (news_id, agent, kind, ts, cycle_id, chat_id, tool_call_id, topic, note)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (news_id, agent, kind, ts, cycle_id, chat_id, tool_call_id, topic, note),
-            )
-            usage_id = int(cursor.lastrowid)
-            if self.event_log:
-                self.event_log.append(
-                    "news.used", f"news:{news_id}",
-                    {"news_id": news_id, "agent": agent, "kind": kind, "ts": ts},
-                    actor=agent or "system",
+            for nid in ids:
+                cursor = self._connection.execute(
+                    """
+                    INSERT INTO news_usage (news_id, agent, kind, ts, cycle_id, chat_id, tool_call_id, topic, note)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (nid, agent, kind, ts, cycle_id, chat_id, tool_call_id, topic, note),
                 )
-            return usage_id
+                usage_ids.append(int(cursor.lastrowid))
+                if self.event_log:
+                    self.event_log.append(
+                        "news.used", f"news:{nid}",
+                        {"news_id": nid, "agent": agent, "kind": kind, "ts": ts},
+                        actor=agent or "system",
+                    )
+        return usage_ids
 
     def insert_calendar_event(
         self,

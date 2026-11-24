@@ -441,4 +441,25 @@ def test_sse_events_ingested_and_source(tmp_path):
     assert events[1].type == "news.ingested"
 
 
+def test_news_batch_citation_news_ids(tmp_path):
+    db_path = tmp_path / "batch_usage.db"
+    db = OfficeDB(db_path)
+    sid = db.add_news_source("rss", "Test", "https://example.com/rss")
+    nid1 = db.insert_news(
+        headline="News 1", summary=None, full_text=None, url="https://example.com/n1",
+        source_id=sid, source="Test", provider="rss", published_ts="2026-11-24T10:00:00Z", tickers=["AAPL"]
+    )
+    nid2 = db.insert_news(
+        headline="News 2", summary=None, full_text=None, url="https://example.com/n2",
+        source_id=sid, source="Test", provider="rss", published_ts="2026-11-24T11:00:00Z", tickers=["AAPL"]
+    )
+    db.log_news_usage(news_ids=[nid1, nid2], agent="portfolio_manager", kind="cited", note="Multi citation")
+
+    from runtime.queries import ReadModel
+    rm = ReadModel(db_path=db_path)
+    assert rm.news_item_detail(nid1)["usage"]["citations"] == 1
+    assert rm.news_item_detail(nid2)["usage"]["citations"] == 1
+
+
+
 
