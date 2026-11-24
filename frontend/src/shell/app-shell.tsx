@@ -20,7 +20,7 @@ function UnreachableBanner() {
     <div
       role="alert"
       data-region="banner"
-      className="mx-2.5 mb-2.5 flex shrink-0 items-center gap-3 rounded-control border border-down/30 bg-[oklch(0.2_0.035_22)] px-3 py-2 text-xs shadow-xs md:ml-0"
+      className="mx-2.5 mb-2.5 flex shrink-0 items-center gap-3 rounded-control border border-border bg-card px-3 py-2 text-xs shadow-xs md:ml-0"
     >
       <Badge variant="destructive" className="h-5 px-1.5 gap-1">
         <CloudOff className="size-3" />
@@ -51,7 +51,7 @@ function HaltBanner() {
     <div
       role="status"
       data-region="banner"
-      className="mx-2.5 mb-2.5 flex shrink-0 items-center gap-3 rounded-control border border-[oklch(0.58_0.2_25/0.4)] bg-[oklch(0.205_0.045_22)] px-3 py-1.5 text-xs shadow-xs md:ml-0"
+      className="mx-2.5 mb-2.5 flex shrink-0 items-center gap-3 rounded-control border border-border bg-card px-3 py-1.5 text-xs shadow-xs md:ml-0"
     >
       <Badge variant="destructive" className="h-5 px-1.5 gap-1">
         <OctagonPause className="size-3" />

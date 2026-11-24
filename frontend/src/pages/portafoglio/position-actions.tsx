@@ -2,6 +2,7 @@ import { Check, MessageSquareText, MoreHorizontal, Plug, ShieldCheck, ShieldX, S
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AuthorChip } from "@/components/author-chip";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -80,16 +81,17 @@ const inputCls =
 function GateBox({ gate, refusal }: { gate: GateOutcome | null; refusal: string[] | null }) {
   if (refusal) {
     return (
-      <div role="alert" className="rounded-control border border-[oklch(0.67_0.195_20/0.4)] bg-down-soft px-3 py-2.5 text-xs">
-        <p className="flex items-center gap-1.5 font-medium text-down">
-          <ShieldX className="size-3.5" /> Rifiutato dal Runtime
-        </p>
-        <ul className="mt-1 list-disc space-y-0.5 pl-5 text-fg">
-          {(refusal.length ? refusal : ["Nessuna ragione indicata"]).map((r) => (
-            <li key={r}>{r}</li>
-          ))}
-        </ul>
-      </div>
+      <Alert variant="destructive">
+        <ShieldX className="size-4" />
+        <AlertTitle>Rifiutato dal Runtime</AlertTitle>
+        <AlertDescription>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-fg">
+            {(refusal.length ? refusal : ["Nessuna ragione indicata"]).map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+        </AlertDescription>
+      </Alert>
     );
   }
   if (!gate) return null;
@@ -98,25 +100,26 @@ function GateBox({ gate, refusal }: { gate: GateOutcome | null; refusal: string[
       <ShieldCheck className="size-3.5 text-up" /> Il Risk Gate accetta l'anteprima. Ricontrolla tutto all'invio.
     </p>
   ) : (
-    <div className="rounded-control border border-[oklch(0.67_0.195_20/0.4)] bg-down-soft px-3 py-2.5 text-xs">
-      <p className="flex items-center gap-1.5 font-medium text-down">
-        <ShieldX className="size-3.5" /> Il Risk Gate lo rifiuterebbe
-      </p>
-      <ul className="mt-1 list-disc space-y-0.5 pl-5 text-fg">
-        {(gate.reasons.length ? gate.reasons : ["Nessuna ragione indicata"]).map((r) => (
-          <li key={r}>{r}</li>
-        ))}
-      </ul>
-    </div>
+    <Alert variant="destructive">
+      <ShieldX className="size-4" />
+      <AlertTitle>Il Risk Gate lo rifiuterebbe</AlertTitle>
+      <AlertDescription>
+        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-fg">
+          {(gate.reasons.length ? gate.reasons : ["Nessuna ragione indicata"]).map((r) => (
+            <li key={r}>{r}</li>
+          ))}
+        </ul>
+      </AlertDescription>
+    </Alert>
   );
 }
 
 function Missing({ name }: { name: string }) {
   return (
-    <div className="flex items-start gap-2 rounded-control bg-[oklch(0_0_0/0.2)] px-3 py-2.5 text-xs leading-relaxed text-fg-muted">
-      <Plug className="mt-0.5 size-3.5 shrink-0 text-fg-subtle" aria-hidden />
+    <div className="flex items-start gap-2 rounded-control border border-border bg-muted/40 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+      <Plug className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
       <span>
-        Il Runtime non espone ancora <span className="num text-fg">{name}</span>: anteprima e invio arrivano con il backend del Portafoglio. Nel frattempo puoi chiedere al PM di farlo.
+        Il Runtime non espone ancora <span className="num text-foreground">{name}</span>: anteprima e invio arrivano con il backend del Portafoglio. Nel frattempo puoi chiedere al PM di farlo.
       </span>
     </div>
   );
@@ -124,11 +127,11 @@ function Missing({ name }: { name: string }) {
 
 function PreviewGrid({ items }: { items: [string, ReactNode, string?][] }) {
   return (
-    <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-control bg-line sm:grid-cols-4">
+    <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-control bg-border sm:grid-cols-4">
       {items.map(([k, v, cls]) => (
-        <div key={k} className="bg-[oklch(0.215_0.008_260)] px-3 py-2">
-          <dt className="text-2xs text-fg-subtle">{k}</dt>
-          <dd className={cn("num mt-0.5 text-[13px] text-fg", cls)}>{v}</dd>
+        <div key={k} className="bg-card px-3 py-2">
+          <dt className="text-2xs text-muted-foreground">{k}</dt>
+          <dd className={cn("num mt-0.5 text-[13px] text-foreground", cls)}>{v}</dd>
         </div>
       ))}
     </dl>

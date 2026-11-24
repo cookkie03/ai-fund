@@ -5,6 +5,7 @@ import { AuthorChip } from "@/components/author-chip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PERIOD_LABEL, useOfficeAgents, useRecentMessages, useUsage, type RecentMessage, type UsagePeriod } from "@/features/office/hooks";
 import type { OfficeAgent, UsageRow, UsageTotals } from "@/features/office/types";
 import { AGENT_IDS, author, tickerOf } from "@/lib/authors";
@@ -230,14 +231,14 @@ const PERIODS: UsagePeriod[] = ["today", "7d", "30d"];
 function UsageLine({ name, label, r, share, max, total, pending, nested = false, color }: { name: string; label?: ReactNode; r: UsageRow | undefined; share: number; max: number; total: number; pending: boolean; nested?: boolean; color?: string }) {
   const who = author(name);
   return (
-    <tr className="hover:[&>td]:bg-hover">
-      <td className={cn("h-8 px-2.5 transition-colors", nested && "pl-8")}>{label ?? (
+    <TableRow className="border-none hover:[&>td]:bg-hover">
+      <TableCell className={cn("h-8 px-2.5 transition-colors border-none", nested && "pl-8")}>{label ?? (
         <span className="flex items-center gap-2">
           <AuthorChip author={who} size="xs" />
           <span className="truncate text-fg">{who.name}</span>
         </span>
-      )}</td>
-      <td className="h-8 px-2.5 transition-colors">
+      )}</TableCell>
+      <TableCell className="h-8 px-2.5 transition-colors border-none">
         {pending ? (
           <span className="block h-1.5 w-full animate-pulse rounded-tag bg-hover" />
         ) : (
@@ -248,12 +249,12 @@ function UsageLine({ name, label, r, share, max, total, pending, nested = false,
             <span className="num w-9 text-right text-2xs text-fg-subtle">{total > 0 ? Math.round(share * 100) : 0}%</span>
           </span>
         )}
-      </td>
-      <td className="num h-8 px-2.5 text-right text-fg-muted transition-colors">{pending ? "…" : (r?.calls ?? 0)}</td>
-      <td className="num h-8 px-2.5 text-right text-fg-muted transition-colors">{pending ? "…" : fmtTokens(r?.tokens_in ?? 0)}</td>
-      <td className="num h-8 px-2.5 text-right text-fg-muted transition-colors">{pending ? "…" : fmtTokens(r?.tokens_out ?? 0)}</td>
-      <td className="num h-8 px-2.5 text-right text-fg transition-colors">{pending ? "…" : fmtCost(r?.cost ?? 0)}</td>
-    </tr>
+      </TableCell>
+      <TableCell className="num h-8 px-2.5 text-right text-fg-muted transition-colors border-none">{pending ? "…" : (r?.calls ?? 0)}</TableCell>
+      <TableCell className="num h-8 px-2.5 text-right text-fg-muted transition-colors border-none">{pending ? "…" : fmtTokens(r?.tokens_in ?? 0)}</TableCell>
+      <TableCell className="num h-8 px-2.5 text-right text-fg-muted transition-colors border-none">{pending ? "…" : fmtTokens(r?.tokens_out ?? 0)}</TableCell>
+      <TableCell className="num h-8 px-2.5 text-right text-fg transition-colors border-none">{pending ? "…" : fmtCost(r?.cost ?? 0)}</TableCell>
+    </TableRow>
   );
 }
 
@@ -290,75 +291,73 @@ function UsageTile({ order, className }: { order: string[]; className?: string }
       ) : q.isError ? (
         <p className="px-4 pb-4 pt-1 text-xs text-down">Lettura non riuscita: {q.error.message}</p>
       ) : (
-        <div className="overflow-x-auto px-1.5 pb-2">
-          <table className="tile-table w-full min-w-[520px] border-separate border-spacing-0 text-xs">
-            <thead>
-              <tr className="text-left text-2xs text-fg-subtle">
-                <th className="h-8 px-2.5 font-normal">Agente</th>
-                <th className="h-8 w-[28%] px-2.5 font-normal">Quota del costo</th>
-                <th className="h-8 px-2.5 text-right font-normal">Chiamate</th>
-                <th className="h-8 px-2.5 text-right font-normal">Token in</th>
-                <th className="h-8 px-2.5 text-right font-normal">Token out</th>
-                <th className="h-8 px-2.5 text-right font-normal">Costo</th>
-              </tr>
-            </thead>
-            <tbody aria-busy={q.isPending}>
-              {names.map((name) => {
-                const r = byAgent.get(name);
-                return <UsageLine key={name} name={name} r={r} share={r && total.cost > 0 ? r.cost / total.cost : 0} max={max} total={total.cost} pending={q.isPending} />;
-              })}
-              {tickerRows.length > 0 && (
+        <Table className="tile-table w-full min-w-[520px] border-separate border-spacing-0 text-xs" containerClassName="overflow-x-auto px-1.5 pb-2">
+          <TableHeader>
+            <TableRow className="border-none text-left text-2xs text-fg-subtle hover:bg-transparent">
+              <TableHead className="h-8 px-2.5 font-normal border-none">Agente</TableHead>
+              <TableHead className="h-8 w-[28%] px-2.5 font-normal border-none">Quota del costo</TableHead>
+              <TableHead className="h-8 px-2.5 text-right font-normal border-none">Chiamate</TableHead>
+              <TableHead className="h-8 px-2.5 text-right font-normal border-none">Token in</TableHead>
+              <TableHead className="h-8 px-2.5 text-right font-normal border-none">Token out</TableHead>
+              <TableHead className="h-8 px-2.5 text-right font-normal border-none">Costo</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody aria-busy={q.isPending}>
+            {names.map((name) => {
+              const r = byAgent.get(name);
+              return <UsageLine key={name} name={name} r={r} share={r && total.cost > 0 ? r.cost / total.cost : 0} max={max} total={total.cost} pending={q.isPending} />;
+            })}
+            {tickerRows.length > 0 && (
+              <UsageLine
+                name="ticker:*"
+                color="var(--author-ticker)"
+                r={tickerSum}
+                share={total.cost > 0 ? tickerSum.cost / total.cost : 0}
+                max={max}
+                total={total.cost}
+                pending={q.isPending}
+                label={
+                  <button type="button" aria-expanded={openTickers} onClick={() => setOpenTickers((o) => !o)} className="flex items-center gap-2 rounded-item text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/60">
+                    {openTickers ? <ChevronDown className="size-3.5 text-fg-subtle" /> : <ChevronRight className="size-3.5 text-fg-subtle" />}
+                    <span className="text-fg">Agenti del ticker</span>
+                    <span className="num rounded-tag bg-hover px-1 text-[10px] leading-4 text-fg-subtle">{tickerRows.length}</span>
+                  </button>
+                }
+              />
+            )}
+            {openTickers &&
+              tickerRows.map((r) => (
                 <UsageLine
-                  name="ticker:*"
-                  color="var(--author-ticker)"
-                  r={tickerSum}
-                  share={total.cost > 0 ? tickerSum.cost / total.cost : 0}
+                  key={r.agent}
+                  name={r.agent}
+                  nested
+                  r={r}
+                  share={total.cost > 0 ? r.cost / total.cost : 0}
                   max={max}
                   total={total.cost}
-                  pending={q.isPending}
+                  pending={false}
                   label={
-                    <button type="button" aria-expanded={openTickers} onClick={() => setOpenTickers((o) => !o)} className="flex items-center gap-2 rounded-item text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/60">
-                      {openTickers ? <ChevronDown className="size-3.5 text-fg-subtle" /> : <ChevronRight className="size-3.5 text-fg-subtle" />}
-                      <span className="text-fg">Agenti del ticker</span>
-                      <span className="num rounded-tag bg-hover px-1 text-[10px] leading-4 text-fg-subtle">{tickerRows.length}</span>
-                    </button>
+                    <Link to={`/ufficio/${r.agent}`} className="flex items-center gap-2 text-fg hover:underline">
+                      <AuthorChip actor={r.agent} size="xs" />
+                      {tickerOf(r.agent)}
+                    </Link>
                   }
                 />
-              )}
-              {openTickers &&
-                tickerRows.map((r) => (
-                  <UsageLine
-                    key={r.agent}
-                    name={r.agent}
-                    nested
-                    r={r}
-                    share={total.cost > 0 ? r.cost / total.cost : 0}
-                    max={max}
-                    total={total.cost}
-                    pending={false}
-                    label={
-                      <Link to={`/ufficio/${r.agent}`} className="flex items-center gap-2 text-fg hover:underline">
-                        <AuthorChip actor={r.agent} size="xs" />
-                        {tickerOf(r.agent)}
-                      </Link>
-                    }
-                  />
-                ))}
-            </tbody>
-            {!q.isPending && rows.length > 0 && (
-              <tfoot>
-                <tr className="text-fg">
-                  <td className="h-9 px-2.5 font-medium">Totale</td>
-                  <td />
-                  <td className="num h-9 px-2.5 text-right text-fg-muted">{total.calls}</td>
-                  <td className="num h-9 px-2.5 text-right text-fg-muted">{fmtTokens(total.tin)}</td>
-                  <td className="num h-9 px-2.5 text-right text-fg-muted">{fmtTokens(total.tout)}</td>
-                  <td className="num h-9 px-2.5 text-right font-medium">{fmtCost(total.cost)}</td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
+              ))}
+          </TableBody>
+          {!q.isPending && rows.length > 0 && (
+            <TableFooter className="bg-transparent border-none">
+              <TableRow className="border-none text-fg hover:bg-transparent">
+                <TableCell className="h-9 px-2.5 font-medium border-none">Totale</TableCell>
+                <TableCell className="border-none" />
+                <TableCell className="num h-9 px-2.5 text-right text-fg-muted border-none">{total.calls}</TableCell>
+                <TableCell className="num h-9 px-2.5 text-right text-fg-muted border-none">{fmtTokens(total.tin)}</TableCell>
+                <TableCell className="num h-9 px-2.5 text-right text-fg-muted border-none">{fmtTokens(total.tout)}</TableCell>
+                <TableCell className="num h-9 px-2.5 text-right font-medium border-none">{fmtCost(total.cost)}</TableCell>
+              </TableRow>
+            </TableFooter>
+          )}
+        </Table>
       )}
     </Card>
   );

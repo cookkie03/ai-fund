@@ -65,14 +65,14 @@ function Payload({ label, value, compacted, compactedAt }: { label: string; valu
         )}
       </div>
       {compacted ? (
-        <p className="flex items-start gap-1.5 rounded-item bg-[oklch(0_0_0/0.22)] px-2.5 py-2 text-xs leading-4 text-fg-muted">
+        <p className="flex items-start gap-1.5 rounded-item border border-border/50 bg-muted/50 px-2.5 py-2 text-xs leading-4 text-fg-muted">
           <Archive className="mt-px size-3.5 shrink-0 text-fg-subtle" aria-hidden />
           <span>Compattato dalla retention{compactedAt ? ` il ${fmtDateTime(compactedAt)}` : ""}: il contenuto completo non è più nel database.</span>
         </p>
       ) : empty ? (
         <p className="px-0.5 text-xs text-fg-subtle">Vuoto</p>
       ) : (
-        <pre className="max-h-64 overflow-auto rounded-item bg-[oklch(0_0_0/0.22)] px-2.5 py-2 font-mono text-[11px] leading-4 text-fg-muted">{text}</pre>
+        <pre className="max-h-64 overflow-auto rounded-item border border-border/50 bg-muted/50 px-2.5 py-2 font-mono text-[11px] leading-4 text-fg-muted">{text}</pre>
       )}
     </section>
   );

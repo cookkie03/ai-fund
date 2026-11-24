@@ -1,11 +1,13 @@
 import { Check, ChevronRight, CircleAlert, PanelBottomClose, ShieldCheck, ShieldX, X } from "lucide-react";
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { AuthorChip } from "@/components/author-chip";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PanelTab, PanelTabContent, PanelTabs, PanelTabsList } from "@/components/panel-tabs";
 import { IconButton } from "@/components/tile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { fmtMoney, fmtPrice, fmtQty, fmtWhen, toNum } from "@/lib/format";
 import { EXIT_LABEL, RISK_LIMITS, STATUS_LABEL, orderBucket, orderFigures } from "@/lib/orders";
@@ -41,14 +43,14 @@ export function Signature({ order }: { order: Order }) {
 
 function Th({ children, right, className }: { children?: ReactNode; right?: boolean; className?: string }) {
   return (
-    <th scope="col" className={cn("sticky top-0 z-[1] h-7 whitespace-nowrap bg-ground px-2.5 text-2xs font-medium text-fg-subtle", right ? "text-right" : "text-left", className)}>
+    <TableHead scope="col" className={cn("sticky top-0 z-[1] h-7 whitespace-nowrap bg-ground px-2.5 text-2xs font-medium text-fg-subtle border-none", right ? "text-right" : "text-left", className)}>
       {children}
-    </th>
+    </TableHead>
   );
 }
 
 function Td({ children, right, className }: { children?: ReactNode; right?: boolean; className?: string }) {
-  return <td className={cn("h-8 whitespace-nowrap px-2.5 text-xs", right && "num text-right", className)}>{children}</td>;
+  return <TableCell className={cn("h-8 whitespace-nowrap px-2.5 text-xs border-none", right && "num text-right", className)}>{children}</TableCell>;
 }
 
 export function Side({ side }: { side: string }) {
@@ -167,16 +169,17 @@ export function ApproveDialog({ order, onClose }: { order: Order; onClose: () =>
             </li>
           </ul>
           {refusal && (
-            <div role="alert" className="mt-3 rounded-control border border-[oklch(0.67_0.195_20/0.4)] bg-down-soft px-3 py-2.5 text-xs">
-              <p className="flex items-center gap-1.5 font-medium text-down">
-                <ShieldX className="size-3.5" /> Rifiutato dal Runtime
-              </p>
-              <ul className="mt-1 list-disc space-y-0.5 pl-5 text-fg">
-                {(refusal.length ? refusal : ["Nessuna ragione indicata"]).map((r) => (
-                  <li key={r}>{r}</li>
-                ))}
-              </ul>
-            </div>
+            <Alert variant="destructive" className="mt-3">
+              <ShieldX className="size-4" />
+              <AlertTitle>Rifiutato dal Runtime</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-fg">
+                  {(refusal.length ? refusal : ["Nessuna ragione indicata"]).map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
           )}
           {halted && <p className="mt-3 text-xs text-warn">Halt attivo: l'ordine non può partire finché non riprendi il trading.</p>}
         </div>
@@ -255,9 +258,9 @@ function OrdersTable({ orders, pending, onSelect, selected }: { orders: Order[];
   const [rejecting, setRejecting] = useState<Order | null>(null);
   return (
     <>
-      <table className="tile-table w-full border-separate border-spacing-0 px-1.5">
-        <thead>
-          <tr>
+      <Table className="tile-table w-full border-separate border-spacing-0 px-1.5" containerClassName="overflow-x-auto">
+        <TableHeader>
+          <TableRow className="border-none hover:bg-transparent">
             <Th>Ticker</Th>
             <Th>Lato</Th>
             <Th right>Qtà</Th>
@@ -271,17 +274,17 @@ function OrdersTable({ orders, pending, onSelect, selected }: { orders: Order[];
             <Th>Firma</Th>
             <Th right>Creato</Th>
             <Th right className="pr-3">{pending ? "Azioni" : "ID"}</Th>
-          </tr>
-        </thead>
-        <tbody>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {orders.map((o) => {
             const f = orderFigures(o);
             const lowRR = f.rr !== null && f.rr < RISK_LIMITS.minRR;
             return (
-              <tr
+              <TableRow
                 key={o.id}
                 onClick={() => onSelect(o.ticker)}
-                className={cn("cursor-pointer transition-colors duration-150", o.ticker === selected ? "bg-selected/60 hover:bg-selected" : "hover:bg-hover")}
+                className={cn("cursor-pointer transition-colors duration-150 border-none", o.ticker === selected ? "bg-selected/60 hover:bg-selected" : "hover:bg-hover")}
               >
                 <Td className="font-semibold text-fg">{o.ticker}</Td>
                 <Td>
@@ -315,11 +318,11 @@ function OrdersTable({ orders, pending, onSelect, selected }: { orders: Order[];
                     <span className="text-fg-subtle">#{o.id}</span>
                   )}
                 </Td>
-              </tr>
+              </TableRow>
             );
           })}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
       {approving && <ApproveDialog order={approving} onClose={() => setApproving(null)} />}
       {rejecting && <RejectDialog order={rejecting} onClose={() => setRejecting(null)} />}
     </>
@@ -328,9 +331,9 @@ function OrdersTable({ orders, pending, onSelect, selected }: { orders: Order[];
 
 function TradesTable({ trades, prices, onSelect, selected }: { trades: Trade[]; prices: Map<string, number>; onSelect: (t: string) => void; selected: string | null }) {
   return (
-    <table className="tile-table w-full border-separate border-spacing-0 px-1.5">
-      <thead>
-        <tr>
+    <Table className="tile-table w-full border-separate border-spacing-0 px-1.5" containerClassName="overflow-x-auto">
+      <TableHeader>
+        <TableRow className="border-none hover:bg-transparent">
           <Th>Ticker</Th>
           <Th>Stato</Th>
           <Th right>Qtà</Th>
@@ -341,19 +344,19 @@ function TradesTable({ trades, prices, onSelect, selected }: { trades: Trade[]; 
           <Th>Chiusura</Th>
           <Th right>Aperto</Th>
           <Th right className="pr-3">Chiuso</Th>
-        </tr>
-      </thead>
-      <tbody>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {trades.map((t) => {
           const open = !t.closed_ts;
           const exit = open ? (prices.get(t.ticker) ?? null) : t.exit_price;
           const pnl = exit !== null ? (exit - t.entry_price) * t.qty : null;
           const pct = exit !== null ? ((exit - t.entry_price) / t.entry_price) * 100 : null;
           return (
-            <tr
+            <TableRow
               key={t.id}
               onClick={() => onSelect(t.ticker)}
-              className={cn("cursor-pointer transition-colors duration-150", t.ticker === selected ? "bg-selected/60 hover:bg-selected" : "hover:bg-hover")}
+              className={cn("cursor-pointer transition-colors duration-150 border-none", t.ticker === selected ? "bg-selected/60 hover:bg-selected" : "hover:bg-hover")}
             >
               <Td className="font-semibold text-fg">{t.ticker}</Td>
               <Td>
@@ -367,11 +370,11 @@ function TradesTable({ trades, prices, onSelect, selected }: { trades: Trade[]; 
               <Td className="text-fg-muted">{t.exit_reason ? (EXIT_LABEL[t.exit_reason] ?? t.exit_reason) : open ? "—" : ""}</Td>
               <Td right className="text-fg-muted">{fmtWhen(t.opened_ts)}</Td>
               <Td right className="pr-3 text-fg-muted">{t.closed_ts ? fmtWhen(t.closed_ts) : "—"}</Td>
-            </tr>
+            </TableRow>
           );
         })}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }
 

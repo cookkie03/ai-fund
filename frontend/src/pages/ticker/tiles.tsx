@@ -2,6 +2,7 @@ import { ArrowUp, CalendarClock, Check, Gavel, Minus, Plus, ShieldAlert, ShieldC
 import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { AuthorChip } from "@/components/author-chip";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { DecideProposal } from "@/features/dossier/decide-proposal";
@@ -516,14 +517,16 @@ export function NotesTile({ d, className }: { d: Dossier; className?: string }) 
         </div>
       </div>
       {refusal && (
-        <div role="alert" className="mt-2 rounded-item bg-warn-soft px-2.5 py-2 text-xs leading-4">
-          <p className="font-medium text-fg">Il Runtime ha rifiutato la nota</p>
-          <ul className="mt-0.5 text-fg-muted">
-            {refusal.map((r) => (
-              <li key={r}>{r}</li>
-            ))}
-          </ul>
-        </div>
+        <Alert variant="warning" className="mt-2">
+          <AlertTitle>Il Runtime ha rifiutato la nota</AlertTitle>
+          <AlertDescription>
+            <ul className="mt-0.5">
+              {refusal.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
       )}
     </DossierTile>
   );

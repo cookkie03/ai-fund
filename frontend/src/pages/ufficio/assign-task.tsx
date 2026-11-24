@@ -2,6 +2,7 @@ import { ListPlus } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { AuthorChip } from "@/components/author-chip";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -139,14 +140,16 @@ export function AssignTask({ agent: initialAgent, ticker: initialTicker, trigger
           </label>
 
           {refusal && (
-            <div role="alert" className="mx-4 mb-1 mt-1 rounded-item bg-warn-soft px-2.5 py-2 text-xs leading-4">
-              <p className="font-medium text-fg">Il Runtime ha rifiutato il task</p>
-              <ul className="mt-0.5 text-fg-muted">
-                {refusal.map((r) => (
-                  <li key={r}>{r}</li>
-                ))}
-              </ul>
-            </div>
+            <Alert variant="warning" className="mx-4 mb-1 mt-1 w-auto">
+              <AlertTitle>Il Runtime ha rifiutato il task</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-0.5">
+                  {refusal.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
           )}
 
           <div className="flex items-center justify-end gap-1.5 px-4 pb-3.5 pt-2">

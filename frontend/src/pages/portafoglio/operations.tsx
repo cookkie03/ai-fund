@@ -3,6 +3,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { AuthorChip } from "@/components/author-chip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { usePortfolioTrades } from "@/features/portfolio/hooks";
 import type { PortfolioTrade, RiskLimitsRead } from "@/features/portfolio/types";
 import { fmtDateTime, fmtPrice, fmtQty, fmtWhen } from "@/lib/format";
@@ -29,11 +30,11 @@ function Section({ title, meta, end, children }: { title: string; meta?: ReactNo
 }
 
 function Th({ children, right, className }: { children?: ReactNode; right?: boolean; className?: string }) {
-  return <th scope="col" className={cn("h-7 whitespace-nowrap px-2.5 text-2xs font-medium text-fg-subtle", right ? "text-right" : "text-left", className)}>{children}</th>;
+  return <TableHead scope="col" className={cn("h-7 whitespace-nowrap px-2.5 text-2xs font-medium text-fg-subtle border-none", right ? "text-right" : "text-left", className)}>{children}</TableHead>;
 }
 
 function Td({ children, right, className }: { children?: ReactNode; right?: boolean; className?: string }) {
-  return <td className={cn("h-9 whitespace-nowrap px-2.5 text-xs transition-colors", right && "num text-right", className)}>{children}</td>;
+  return <TableCell className={cn("h-9 whitespace-nowrap px-2.5 text-xs transition-colors border-none", right && "num text-right", className)}>{children}</TableCell>;
 }
 
 /** The Risk Gate's limits in one quiet line, wherever orders can be approved. */
@@ -92,55 +93,53 @@ function OrderRows({ orders, pending, mobile }: { orders: Order[]; pending: bool
           })}
         </ul>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="tile-table w-full min-w-[920px] border-separate border-spacing-0 px-1.5">
-            <thead>
-              <tr>
-                <Th>Ticker</Th>
-                <Th>Lato</Th>
-                <Th right>Qtà</Th>
-                <Th right>Entry</Th>
-                <Th right>Stop</Th>
-                <Th right>Target</Th>
-                <Th right>R:R</Th>
-                <Th right>Rischio</Th>
-                <Th right>Nozionale</Th>
-                <Th>Stato</Th>
-                <Th>Firma</Th>
-                <Th right>Creato</Th>
-                <Th right className="pr-3">{pending ? "Azioni" : "ID"}</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((o) => {
-                const f = orderFigures(o);
-                return (
-                  <tr key={o.id} className="hover:[&>td]:bg-hover">
-                    <Td className="font-semibold text-fg">{o.ticker}</Td>
-                    <Td>
-                      <Side side={o.side} />
-                    </Td>
-                    <Td right>{fmtQty(f.qty)}</Td>
-                    <Td right>{fmtPrice(f.entry)}</Td>
-                    <Td right className="text-down/90">{fmtPrice(f.stop)}</Td>
-                    <Td right className="text-up/90">{fmtPrice(f.tp)}</Td>
-                    <Td right>{f.rr === null ? "—" : f.rr.toFixed(2).replace(".", ",")}</Td>
-                    <Td right>{fmtMoney(f.risk)}</Td>
-                    <Td right>{fmtMoney(f.notional, { decimals: 0 })}</Td>
-                    <Td>
-                      <StatusBadge order={o} />
-                    </Td>
-                    <Td>
-                      <Signature order={o} />
-                    </Td>
-                    <Td right className="text-fg-muted">{fmtWhen(o.created_ts)}</Td>
-                    <Td right className="pr-3">{pending ? actions(o) : <span className="text-fg-subtle">#{o.id}</span>}</Td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <Table className="tile-table w-full min-w-[920px] border-separate border-spacing-0 px-1.5" containerClassName="overflow-x-auto">
+          <TableHeader>
+            <TableRow className="border-none hover:bg-transparent">
+              <Th>Ticker</Th>
+              <Th>Lato</Th>
+              <Th right>Qtà</Th>
+              <Th right>Entry</Th>
+              <Th right>Stop</Th>
+              <Th right>Target</Th>
+              <Th right>R:R</Th>
+              <Th right>Rischio</Th>
+              <Th right>Nozionale</Th>
+              <Th>Stato</Th>
+              <Th>Firma</Th>
+              <Th right>Creato</Th>
+              <Th right className="pr-3">{pending ? "Azioni" : "ID"}</Th>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {orders.map((o) => {
+              const f = orderFigures(o);
+              return (
+                <TableRow key={o.id} className="border-none hover:[&>td]:bg-hover">
+                  <Td className="font-semibold text-fg">{o.ticker}</Td>
+                  <Td>
+                    <Side side={o.side} />
+                  </Td>
+                  <Td right>{fmtQty(f.qty)}</Td>
+                  <Td right>{fmtPrice(f.entry)}</Td>
+                  <Td right className="text-down/90">{fmtPrice(f.stop)}</Td>
+                  <Td right className="text-up/90">{fmtPrice(f.tp)}</Td>
+                  <Td right>{f.rr === null ? "—" : f.rr.toFixed(2).replace(".", ",")}</Td>
+                  <Td right>{fmtMoney(f.risk)}</Td>
+                  <Td right>{fmtMoney(f.notional, { decimals: 0 })}</Td>
+                  <Td>
+                    <StatusBadge order={o} />
+                  </Td>
+                  <Td>
+                    <Signature order={o} />
+                  </Td>
+                  <Td right className="text-fg-muted">{fmtWhen(o.created_ts)}</Td>
+                  <Td right className="pr-3">{pending ? actions(o) : <span className="text-fg-subtle">#{o.id}</span>}</Td>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       )}
       {approving && <ApproveDialog order={approving} onClose={() => setApproving(null)} />}
       {rejecting && <RejectDialog order={rejecting} onClose={() => setRejecting(null)} />}
@@ -198,44 +197,42 @@ function TradesHistory({ trades, mobile }: { trades: PortfolioTrade[]; mobile: b
           ))}
         </ul>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="tile-table w-full min-w-[920px] border-separate border-spacing-0 px-1.5 pb-2">
-            <thead>
-              <tr>
-                <Th>Ticker</Th>
-                <Th right>Qtà</Th>
-                <Th right>Entrata</Th>
-                <Th right>Uscita</Th>
-                <Th>Motivo</Th>
-                <Th right>PnL</Th>
-                <Th right>PnL %</Th>
-                <Th right>R</Th>
-                <Th right>Durata</Th>
-                <Th>Proposto da</Th>
-                <Th right className="pr-3">Chiuso</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((t) => (
-                <tr key={t.id} className="hover:[&>td]:bg-hover">
-                  <Td className="font-semibold text-fg">{t.ticker}</Td>
-                  <Td right>{fmtQty(t.qty)}</Td>
-                  <Td right className="text-fg-muted">{fmtPrice(t.entry_price)}</Td>
-                  <Td right>{fmtPrice(t.exit_price)}</Td>
-                  <Td className="text-fg-muted">{t.exit_reason ? (EXIT_LABEL[t.exit_reason] ?? t.exit_reason) : "—"}</Td>
-                  <Td right className={tone(t.pnl)}>{fmtMoney(t.pnl, { sign: true })}</Td>
-                  <Td right className={tone(t.pnl)}>{t.exit_price !== null && t.entry_price ? fmtFrac(t.exit_price / t.entry_price - 1, { sign: true }) : "—"}</Td>
-                  <Td right className={tone(t.r_multiple)}>{t.r_multiple === null ? "—" : fmtSignedRatio(t.r_multiple)}</Td>
-                  <Td right className="text-fg-muted">{fmtDuration(t.duration_s)}</Td>
-                  <Td>{t.proposed_by ? <AuthorChip actor={t.proposed_by} size="xs" label /> : <span className="text-fg-subtle">—</span>}</Td>
-                  <Td right className="pr-3 text-fg-muted" >
-                    <span title={fmtDateTime(t.closed_ts)}>{fmtWhen(t.closed_ts)}</span>
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table className="tile-table w-full min-w-[920px] border-separate border-spacing-0 px-1.5 pb-2" containerClassName="overflow-x-auto">
+          <TableHeader>
+            <TableRow className="border-none hover:bg-transparent">
+              <Th>Ticker</Th>
+              <Th right>Qtà</Th>
+              <Th right>Entrata</Th>
+              <Th right>Uscita</Th>
+              <Th>Motivo</Th>
+              <Th right>PnL</Th>
+              <Th right>PnL %</Th>
+              <Th right>R</Th>
+              <Th right>Durata</Th>
+              <Th>Proposto da</Th>
+              <Th right className="pr-3">Chiuso</Th>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((t) => (
+              <TableRow key={t.id} className="border-none hover:[&>td]:bg-hover">
+                <Td className="font-semibold text-fg">{t.ticker}</Td>
+                <Td right>{fmtQty(t.qty)}</Td>
+                <Td right className="text-fg-muted">{fmtPrice(t.entry_price)}</Td>
+                <Td right>{fmtPrice(t.exit_price)}</Td>
+                <Td className="text-fg-muted">{t.exit_reason ? (EXIT_LABEL[t.exit_reason] ?? t.exit_reason) : "—"}</Td>
+                <Td right className={tone(t.pnl)}>{fmtMoney(t.pnl, { sign: true })}</Td>
+                <Td right className={tone(t.pnl)}>{t.exit_price !== null && t.entry_price ? fmtFrac(t.exit_price / t.entry_price - 1, { sign: true }) : "—"}</Td>
+                <Td right className={tone(t.r_multiple)}>{t.r_multiple === null ? "—" : fmtSignedRatio(t.r_multiple)}</Td>
+                <Td right className="text-fg-muted">{fmtDuration(t.duration_s)}</Td>
+                <Td>{t.proposed_by ? <AuthorChip actor={t.proposed_by} size="xs" label /> : <span className="text-fg-subtle">—</span>}</Td>
+                <Td right className="pr-3 text-fg-muted">
+                  <span title={fmtDateTime(t.closed_ts)}>{fmtWhen(t.closed_ts)}</span>
+                </Td>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </Section>
   );

@@ -88,7 +88,7 @@ function DossierStrip({ ticker }: { ticker: string }) {
   return (
     <Link
       to={`/ticker/${ticker}`}
-      className="group mx-1.5 mb-1 flex min-h-9 shrink-0 items-center gap-2.5 rounded-control bg-[oklch(0_0_0/0.22)] px-3 py-1.5 text-xs outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/60"
+      className="group mx-1.5 mb-1 flex min-h-9 shrink-0 items-center gap-2.5 rounded-control border border-border/50 bg-muted/50 px-3 py-1.5 text-xs outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/60"
     >
       <FileText className="size-3.5 shrink-0 text-fg-subtle" strokeWidth={1.75} aria-hidden />
       {q.isPending ? (

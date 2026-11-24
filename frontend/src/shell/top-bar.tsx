@@ -2,6 +2,7 @@ import { Check, ChevronsUpDown, MessagesSquare, OctagonPause, PanelBottom, Panel
 import { useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { IconButton } from "@/components/tile";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -119,7 +120,7 @@ function HaltControl() {
           variant="outline"
           onClick={() => setOpen(true)}
           disabled={!writable}
-          className="border-[oklch(0.67_0.195_20/0.5)] text-down hover:border-down hover:bg-down-soft hover:text-down"
+          className="border-destructive/40 text-destructive hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
         >
           <OctagonPause className="size-3.5" /> Halt
         </Button>
@@ -147,7 +148,7 @@ function HaltControl() {
             <AlertDialogCancel>Annulla</AlertDialogCancel>
             <AlertDialogAction
               disabled={busy}
-              className={halted ? "" : "bg-[oklch(0.56_0.19_22)] text-white hover:bg-[oklch(0.6_0.19_22)]"}
+              className={halted ? "" : "bg-destructive text-white hover:bg-destructive/90"}
               onClick={(e) => {
                 e.preventDefault();
                 const done = { onSuccess: () => setOpen(false) };
@@ -222,9 +223,9 @@ export function TopBar() {
       </div>
       <MarketClock />
       {halted && (
-        <span className="ml-2 inline-flex items-center gap-1.5 rounded-tag px-2 py-0.5 text-xs font-semibold text-[oklch(0.86_0.08_25)]">
+        <Badge variant="destructive" className="ml-2 gap-1.5 font-semibold">
           <OctagonPause className="size-3.5" /> Halt attivo
-        </span>
+        </Badge>
       )}
       <div className="ml-auto flex items-center gap-3">
         <EquityReadout />

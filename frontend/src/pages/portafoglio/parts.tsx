@@ -1,6 +1,7 @@
 import { CircleAlert, CircleCheck, CircleX, Info, Plug } from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { LimitName, LimitStatus, Sourced } from "@/features/portfolio/types";
 import { fmtMoney, fmtPct, toNum } from "@/lib/format";
@@ -168,7 +169,7 @@ export function Bones({ rows = 3, className }: { rows?: number; className?: stri
   return (
     <div className={cn("space-y-2", className)} aria-busy aria-label="Caricamento">
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="h-6 animate-pulse rounded-item bg-hover" style={{ width: `${92 - i * 9}%` }} />
+        <Skeleton key={i} className="h-6 rounded-item bg-hover" style={{ width: `${92 - i * 9}%` }} />
       ))}
     </div>
   );

@@ -2,6 +2,7 @@ import { Gavel, ShieldCheck } from "lucide-react";
 import { useEffect, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { AuthorChip } from "@/components/author-chip";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -220,14 +221,16 @@ export function DecideProposal({ proposal, trigger }: { proposal: DecidablePropo
           {acceptBlocked && <p className="mx-5 mt-3 rounded-item bg-halt-ground px-2.5 py-2 text-xs text-fg">Halt attivo: non si accettano proposte finché il trading è fermo. Rimandare, rifiutare e chiedere restano possibili.</p>}
 
           {refusal && (
-            <div role="alert" className="mx-5 mt-3 rounded-item bg-warn-soft px-2.5 py-2 text-xs leading-4">
-              <p className="font-medium text-fg">Il Runtime ha rifiutato la decisione</p>
-              <ul className="mt-0.5 text-fg-muted">
-                {refusal.map((r) => (
-                  <li key={r}>{r}</li>
-                ))}
-              </ul>
-            </div>
+            <Alert variant="warning" className="mx-5 mt-3 w-auto">
+              <AlertTitle>Il Runtime ha rifiutato la decisione</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-0.5">
+                  {refusal.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
           )}
 
           <div className="flex items-center gap-1.5 px-5 pb-5 pt-4">
