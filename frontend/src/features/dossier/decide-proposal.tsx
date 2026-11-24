@@ -1,5 +1,5 @@
 import { Gavel, ShieldCheck } from "lucide-react";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 import { toast } from "sonner";
 import { AuthorChip } from "@/components/author-chip";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -55,7 +55,7 @@ const isoDay = (offset: number) => {
  * so an acceptance still goes through the deterministic draft and the sovereign Risk Gate. Refusals stay
  * inside the dialog, verbatim.
  */
-export function DecideProposal({ proposal, trigger }: { proposal: DecidableProposal; trigger: ReactNode }) {
+export function DecideProposal({ proposal, trigger }: { proposal: DecidableProposal; trigger: ReactElement }) {
   const { writable, halted } = useShell();
   const [open, setOpen] = useState(false);
   const [action, setAction] = useState<DecideAction>("accept");
@@ -109,7 +109,7 @@ export function DecideProposal({ proposal, trigger }: { proposal: DecidablePropo
   };
 
   const triggerEl = writable ? (
-    <DialogTrigger render={<span className="inline-flex">{trigger}</span>} />
+    <DialogTrigger render={trigger} />
   ) : (
     <Tooltip>
       <TooltipTrigger

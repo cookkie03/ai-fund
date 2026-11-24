@@ -1,5 +1,5 @@
 import { ListPlus } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "react";
 import { toast } from "sonner";
 import { AuthorChip } from "@/components/author-chip";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -20,7 +20,7 @@ const TICKER = /^[A-Z][A-Z0-9.]{0,6}$/;
  * Assign a task to an agent on a ticker (`enqueue_task`). The agent picks it up on its next turn;
  * the Runtime may refuse it, and its reasons stay inside the form that caused them.
  */
-export function AssignTask({ agent: initialAgent, ticker: initialTicker, trigger, align = "end" }: { agent?: string; ticker?: string | null; trigger?: ReactNode; align?: "start" | "end" }) {
+export function AssignTask({ agent: initialAgent, ticker: initialTicker, trigger, align = "end" }: { agent?: string; ticker?: string | null; trigger?: ReactElement; align?: "start" | "end" }) {
   const { writable } = useShell();
   const [open, setOpen] = useState(false);
   const [agent, setAgent] = useState(initialAgent ?? "portfolio_manager");
@@ -69,7 +69,7 @@ export function AssignTask({ agent: initialAgent, ticker: initialTicker, trigger
   return (
     <Popover open={open} onOpenChange={setOpen}>
       {writable ? (
-        <PopoverTrigger render={<span className="inline-flex">{button}</span>} />
+        <PopoverTrigger render={button} />
       ) : (
         <Tooltip>
           <TooltipTrigger

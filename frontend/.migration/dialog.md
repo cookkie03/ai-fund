@@ -5,6 +5,7 @@
 ## Changed
 
 - `src/components/ui/dialog.tsx`: Migrated from `radix-ui` `Dialog` to `@base-ui/react/dialog`. Overlay -> Backdrop, Content -> Popup, Close and Trigger support `render`.
+- `src/features/dossier/decide-proposal.tsx`: Trigger element passed directly to `DialogTrigger` via `render={trigger}`, preserving native `<button>` semantics.
 - leftover scan: clean (0 matches).
 
 ## Left alone

@@ -5,6 +5,7 @@
 ## Changed
 
 - `src/components/ui/popover.tsx`: Migrated from `radix-ui` `Popover` to `@base-ui/react/popover`. Replaced Content with `Portal > Positioner > Popup`.
+- `src/pages/ufficio/assign-task.tsx`: Button element passed directly to `PopoverTrigger` via `render={button}`, preserving native `<button>` semantics.
 - leftover scan: clean (0 matches).
 
 ## Left alone

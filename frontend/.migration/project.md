@@ -35,7 +35,9 @@
 ## App code consumer sweep
 
 - Replaced all legacy `asChild` invocations with Base UI's canonical `render` prop (`TooltipTrigger`, `PopoverTrigger`, `DialogTrigger`, `DropdownMenuTrigger`, `DropdownMenuItem`, `Button`).
+- Passed real button elements directly to `DialogTrigger` and `PopoverTrigger` `render` prop in `decide-proposal.tsx` and `assign-task.tsx`, preserving native `<button>` semantics.
 - Converted `onOpenAutoFocus` on `PopoverContent` to `initialFocus={tickerRef}`.
+- Configured `<MotionConfig reducedMotion="user">` in `src/App.tsx` for global declarative motion accessibility.
 - Replaced manual status tags with official shadcn `Badge`.
 
 ## Verification
