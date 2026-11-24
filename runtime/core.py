@@ -15,6 +15,8 @@ from runtime.commands import (
     AddDossierNote,
     AddWatchlist,
     ApproveOrder,
+    BackupDB,
+    ClearSecret,
     ClosePosition,
     CommandResult,
     DecideProposal,
@@ -27,11 +29,27 @@ from runtime.commands import (
     RefreshData,
     RejectOrder,
     RemoveWatchlist,
+    RestorePrompt,
+    RestoreSettings,
     Resume,
     Say,
+    SetSecret,
     StrikeAnnotation,
+    TestConnection,
+    UpdatePrompt,
     UpdateRiskLimits,
+    UpdateSettings,
     UpsertAnnotation,
+)
+from runtime.configurazioni_handlers import (
+    handle_backup_db,
+    handle_clear_secret,
+    handle_restore_prompt,
+    handle_restore_settings,
+    handle_set_secret,
+    handle_test_connection,
+    handle_update_prompt,
+    handle_update_settings,
 )
 from runtime.events import Event, EventBus, EventLog
 from runtime.handlers import (
@@ -99,6 +117,14 @@ _HANDLER_MAP = {
     RefreshData: handle_refresh_data,
     MarkInboxRead: handle_mark_inbox_read,
     IngestAlert: handle_ingest_alert,
+    UpdateSettings: handle_update_settings,
+    RestoreSettings: handle_restore_settings,
+    UpdatePrompt: handle_update_prompt,
+    RestorePrompt: handle_restore_prompt,
+    SetSecret: handle_set_secret,
+    ClearSecret: handle_clear_secret,
+    TestConnection: handle_test_connection,
+    BackupDB: handle_backup_db,
 }
 
 

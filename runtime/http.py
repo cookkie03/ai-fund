@@ -27,6 +27,8 @@ from runtime.commands import (
     AddDossierNote,
     AddWatchlist,
     ApproveOrder,
+    BackupDB,
+    ClearSecret,
     ClosePosition,
     DecideProposal,
     EnqueueTask,
@@ -38,10 +40,16 @@ from runtime.commands import (
     RefreshData,
     RejectOrder,
     RemoveWatchlist,
+    RestorePrompt,
+    RestoreSettings,
     Resume,
     Say,
+    SetSecret,
     StrikeAnnotation,
+    TestConnection,
+    UpdatePrompt,
     UpdateRiskLimits,
+    UpdateSettings,
     UpsertAnnotation,
 )
 
@@ -71,6 +79,14 @@ _COMMAND_MAP = {
     "refresh_data": RefreshData,
     "mark_inbox_read": MarkInboxRead,
     "ingest_alert": IngestAlert,
+    "update_settings": UpdateSettings,
+    "restore_settings": RestoreSettings,
+    "update_prompt": UpdatePrompt,
+    "restore_prompt": RestorePrompt,
+    "set_secret": SetSecret,
+    "clear_secret": ClearSecret,
+    "test_connection": TestConnection,
+    "backup_db": BackupDB,
 }
 
 
@@ -110,7 +126,7 @@ def create_app(
             body = await request.json() if await request.body() else {}
             cmd = cmd_cls.model_validate(body)
         except ValidationError as val_err:
-            raise HTTPException(status_code=422, detail=val_err.errors(include_context=False)) from val_err
+            raise HTTPException(status_code=422, detail=val_err.errors(include_input=False, include_context=False)) from val_err
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -279,6 +295,38 @@ def create_app(
     @app.get("/v1/read/risk_limits_history", dependencies=[Depends(verify_token)])
     def get_risk_limits_history(limit: int = Query(default=50, ge=1, le=500)) -> list[dict]:
         return runtime.read.risk_limits_history(limit=limit)
+
+    @app.get("/v1/read/settings", dependencies=[Depends(verify_token)])
+    def get_settings() -> dict[str, Any]:
+        return runtime.read.settings()
+
+    @app.get("/v1/read/settings_history", dependencies=[Depends(verify_token)])
+    def get_settings_history(limit: int = Query(default=50, ge=1, le=500)) -> list[dict[str, Any]]:
+        return runtime.read.settings_history(limit=limit)
+
+    @app.get("/v1/read/agent_configs", dependencies=[Depends(verify_token)])
+    def get_agent_configs() -> list[dict[str, Any]]:
+        return runtime.read.agent_configs()
+
+    @app.get("/v1/read/prompt", dependencies=[Depends(verify_token)])
+    def get_prompt(agent: str) -> dict[str, Any]:
+        return runtime.read.prompt(agent)
+
+    @app.get("/v1/read/prompt_history", dependencies=[Depends(verify_token)])
+    def get_prompt_history(agent: str, limit: int = Query(default=50, ge=1, le=500)) -> list[dict[str, Any]]:
+        return runtime.read.prompt_history(agent=agent, limit=limit)
+
+    @app.get("/v1/read/secrets", dependencies=[Depends(verify_token)])
+    def get_secrets() -> list[dict[str, Any]]:
+        return runtime.read.secrets()
+
+    @app.get("/v1/read/runtime_health", dependencies=[Depends(verify_token)])
+    def get_runtime_health() -> dict[str, Any]:
+        return runtime.read.runtime_health()
+
+    @app.get("/v1/read/backups", dependencies=[Depends(verify_token)])
+    def get_backups() -> list[dict[str, Any]]:
+        return runtime.read.backups()
 
     @app.get("/v1/read/tool_calls", dependencies=[Depends(verify_token)])
     def get_tool_calls(

@@ -456,8 +456,9 @@ def _lazy_init_alpaca_broker(env: Mapping[str, str]) -> tuple[BracketBroker, Bro
 def build_agent_spec(agent_name: str, settings: OfficeSettings) -> AgentSpec:
     """Build a fully-populated AgentSpec for an agent using load_prompt."""
     cfg = settings.get_agent(agent_name)
+    db = getattr(settings, "db", None)
     try:
-        prompt_text, prompt_hash = load_prompt(agent_name)
+        prompt_text, prompt_hash = load_prompt(agent_name, db=db)
     except FileNotFoundError:
         prompt_text, prompt_hash = "", ""
     return AgentSpec(

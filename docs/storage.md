@@ -66,3 +66,9 @@ Il comando usa OpenBB con `yfinance` come provider predefinito. `source`, `colle
 SQLite è adeguato al perimetro MVP: un singolo host e un writer coordinato, senza avviare un servizio separato. Non è una promessa per più writer concorrenti, ingestione ad alto volume o retention time-series di produzione. Se il workload supera queste soglie, il passo successivo è un adapter PostgreSQL con migrazioni SQL revisionate; TimescaleDB potrà aggiungere hypertable e policy time-series sul lato PostgreSQL. Non basta cambiare una URL e SQLite non implementa TimescaleDB.
 
 Il package non contiene chiamate vendor, cache, logica LLM o order execution. Il modello `Observation` è volutamente neutro e non sostituisce i contratti finanziari che verranno allineati con la chat vendor.
+
+## Persistenza Configurazioni e Segreti
+
+- **Impostazioni e Prompt versionati**: memorizzati in tabelle dedicate (`settings_versions`, `prompt_versions`) con tracciamento di autore, motivo e timestamp.
+- **Backup online**: gestiti tramite API di backup SQLite in `data/backups/` con metadati registrati in `backup_records` e rotazione automatica.
+- **Segreti**: memorizzati in file esterni (`~/.config/trading-agent/secrets.env`) protetti con permessi rigorosi `0600` e scrittura atomica, completamente isolati dal database e dai log.
