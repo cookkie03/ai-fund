@@ -40,6 +40,7 @@ dev = ["pytest>=8,<10", "ruff>=0.12,<1", "mypy>=1.15,<2", "responses>=0.25,<1"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "--strict-markers"
 markers = ["integration: explicit read-only checks against Alpaca paper"]
 
