@@ -126,3 +126,25 @@ def test_http_read_endpoints_and_commands(client):
     r_hlth = client.get("/v1/read/runtime_health")
     assert r_hlth.status_code == 200
     assert "commit" in r_hlth.json()
+
+
+def test_prompt_and_secret_endpoints(client):
+    r_prompt = client.get("/v1/read/prompt", params={"agent": "portfolio_manager"})
+    assert r_prompt.status_code == 200
+    assert "text" in r_prompt.json()
+
+    r_sec = client.get("/v1/read/secrets")
+    assert r_sec.status_code == 200
+    assert isinstance(r_sec.json(), list)
+
+    r_test = client.post("/v1/commands/test_connection", json={"target": "omniroute"}, headers={"X-Actor": "luca"})
+    assert r_test.status_code == 200
+    assert r_test.json()["ok"] is True
+
+    r_backup = client.post("/v1/commands/backup_db", json={}, headers={"X-Actor": "luca"})
+    assert r_backup.status_code == 200
+    assert r_backup.json()["ok"] is True
+
+    r_backups = client.get("/v1/read/backups")
+    assert r_backups.status_code == 200
+    assert isinstance(r_backups.json(), list)

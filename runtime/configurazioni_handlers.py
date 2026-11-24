@@ -19,7 +19,7 @@ from runtime.commands import (
     UpdateSettings,
 )
 from storage.backup import create_db_backup
-from storage.secrets import SecretsManager
+from storage.secrets import KNOWN_SECRETS, SecretsManager
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +171,7 @@ def handle_test_connection(ctx: Any, cmd: TestConnection, actor: str) -> Command
             ok = False
             detail = "Coppia chiavi Alpaca incompleta"
 
-    for name in manager.KNOWN_SECRETS:
+    for name in KNOWN_SECRETS:
         if target in name.lower() or (target == "alpaca" and "ALPACA" in name):
             manager.record_test(name, ok, detail)
 

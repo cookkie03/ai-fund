@@ -117,6 +117,28 @@ Conventions: amounts are numbers in the account currency, percentages are fracti
 - `modify_exit {ticker, stop_price|null, target_price|null, dry_run, confirm}`: stop must be positive and below the current price, target above it, stop below target. Tightening the stop (or changing only the target) is always allowed, also in Halt (protective). Widening the stop recomputes the open risk and runs the Risk Gate per-trade risk check; a violation is `ok:false` with `reasons`. It updates the protective order on the broker (`modify_stop` / `modify_take_profit`), the trade (`stop_price`, `target_price`), the trailing state and emits `position.changed` (`exit_levels`).
 - `dry_run: true` on `close_position` / `modify_exit` returns `ok:true` with `data:{dry_run:true, ...}` and `risk_gate:{allowed, reasons}` and performs no write and no event. Close preview: `qty`, `qty_remaining_after`, `reference_price`, `estimated_value`, `estimated_realized_pnl`, `closes_position`. Modify preview: `stop_price`, `target_price`, `previous_*`, `widening_stop`, `tightening_stop`, `open_risk_before`, `open_risk`, `open_risk_fraction`.
 
+### 2.6 Configurazioni (Impostazioni, Prompt, Segreti, Salute e Backup)
+
+**Reads**
+- `/v1/read/settings`: `{version, updated_ts, updated_by, pending_restart: [key], sections: [{id, title, items: [{key, label, description, type, value, default, min, max, options, unit, apply, capital, overridden}]}]}`
+- `/v1/read/settings_history?limit=`: `[{version, ts, actor, reason, changes: [{key, old, new}]}]`
+- `/v1/read/agent_configs`: `[{agent, role, model, endpoint, effort, daily_budget_usd, today_cost, prompt_version, prompt_updated_ts}]`
+- `/v1/read/prompt?agent=`: `{agent, version, text, updated_ts, updated_by, reason, is_default}`
+- `/v1/read/prompt_history?agent=&limit=`: `[{version, ts, actor, reason, chars}]`
+- `/v1/read/secrets`: `[{name, label, set: bool, last4, updated_ts, updated_by, source, test}]`
+- `/v1/read/runtime_health`: `{version, commit, started_ts, uptime_s, db: {path_label, size_bytes, wal_bytes, alert_mb, last_backup_ts}, jobs, errors, sse_clients, broker, llm}`
+- `/v1/read/backups`: `[{name, ts, size_bytes}]`
+
+**Commands**
+- `update_settings {changes, reason, confirm, dry_run}`
+- `restore_settings {version, reason}`
+- `update_prompt {agent, text, reason, dry_run}`
+- `restore_prompt {agent, version, reason}`
+- `set_secret {name, value, reason, confirm}`
+- `clear_secret {name, reason, confirm}`
+- `test_connection {target}`
+- `backup_db {}`
+
 **Real-broker note**: `close_position` on `AlpacaBracketAdapter` (cancel the stop/take-profit legs, market or limit sell, OCO on the residual quantity) is only covered with a fake Alpaca client; it has not been verified on a paper account.
 
 ## 3. Frontend Integration
