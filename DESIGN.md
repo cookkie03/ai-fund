@@ -315,6 +315,21 @@ Horizontal rows by sector or position (segmented control), each a threshold-tick
 ### Capital dialogs
 Close or reduce, and stop/target edits, run a debounced dry run as the user types and show the Runtime's preview (quantity, price, value, realized PnL or new risk and R:R) and the Risk Gate's answer before the primary unlocks. A refusal shows the Gate's reasons verbatim in the dialog. Editing limits takes two steps: values (fractions typed as %, bounds checked) plus a required reason, then **Rivedi** shows before → after on the threshold tick with the status change, then **Conferma e applica**. History lists version, author, reason and each change. While the Runtime is unreachable or Halt is active every capital action is disabled and says why.
 
+### Settings ledger (Configurazioni)
+`/configurazioni` is an index tile (232 px, sticky) beside the section column (max 1120 px). The index lists five sections with one line of state each (warn near, down for refusal or breach, `fg-subtle` otherwise) and an accent count of draft edits, then **Altrove**: two-line links to what is configured on other pages (Limiti di rischio in Portafoglio, opened on its tab via `?tab=risk`; Fonti delle notizie; Watchlist; Costi e token). On a phone the index is the page and each section is its own page with a back link. Each setting is a ledger row: label and description on the left, the control in a 17.5 rem column on the right (segmented control for bool and up to three short options, select for longer enums, time field, number with unit), and under it "ora X → Y" when drafted, Modificata or Default, the range written once ("7–3650 giorni"). Tags: **Al riavvio**, **In attesa di riavvio** (warn), **Capitale** (a shield: the change needs an explicit confirmation).
+
+### Draft bar and review sheet
+Edits stay in a draft until reviewed: a raised bar sticks to the bottom of the section column (above the bottom nav on a phone) with "N modifiche · Rivedi", Scarta and the count of values to fix. **Rivedi** opens a sheet (right, 520 px; bottom on a phone) that runs the Runtime's dry run and lists each change as accepted or refused, with refusals and warnings verbatim; a required reason (it stays in the history); a checkbox for capital settings; then the one primary **Conferma e applica**. Settings that apply on restart raise a warn banner afterwards. The history lists version, author, reason and changes, filtered to the section, with Ripristina (a dialog showing the diff back to that version).
+
+### Prompt editor
+Inside the agent's detail: a mono textarea with characters, lines and +/− counts; **Rivedi le differenze** shows the diff, side by side from 1180 px or unified (toggle), unchanged runs folded, with the reason and **Conferma la versione N+1**. The note says it applies from the next cycle. On a phone the editor opens full screen. Versions list author, reason and age with Ripristina.
+
+### Write-only keys
+Keys are never read back: a row shows the source (Store, Ambiente, Mancante), `•••• last4`, the last update and the last connection test. The field is a password input that is never prefilled, never in React state or the query cache, and is emptied before the request resolves. Broker keys require a confirmation checkbox; keys from the environment cannot be removed from the cockpit. Each provider has **Prova connessione**.
+
+### Runtime health
+Meters (uptime, SSE clients, database, failing jobs, broker, LLM) with a "Dal vivo" dot in `fg-muted` (warn when stale), then jobs and recent errors. Database size is drawn on the threshold tick against the alert setting; the agents' daily budgets use the same bar.
+
 ## Do's and Don'ts
 
 ### Do:
