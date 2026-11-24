@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { AuthorChip } from "@/components/author-chip";
+import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAttribution, usePerformance } from "@/features/portfolio/hooks";
 import { PERIOD_LABEL, PERIODS, type Performance, type Period } from "@/features/portfolio/types";
@@ -100,7 +101,7 @@ function Attribution({ period }: { period: Period }) {
     </Unavailable>
   );
   return (
-    <section aria-label="Attribuzione" className="px-4 pb-4 pt-2">
+    <Card aria-label="Attribuzione" className="m-4 rounded-tile border-line-strong/60 bg-ground p-4 shadow-sm">
       <h3 className="text-xs font-semibold text-fg">Attribuzione del rendimento</h3>
       <p className="mt-0.5 text-2xs text-fg-subtle">Contributo al rendimento del periodo, realizzato e aperto.</p>
       {q.isPending ? (
@@ -137,7 +138,7 @@ function Attribution({ period }: { period: Period }) {
         </div>
       ) : null}
       <SourceNote sourced={q.data} className="mt-3" />
-    </section>
+    </Card>
   );
 }
 

@@ -3,6 +3,8 @@ import { useState, type ReactNode } from "react";
 import { AuthorChip } from "@/components/author-chip";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { isCommandMissing } from "@/features/portfolio/api";
 import { commandErrorText, useRiskHistory, useUpdateRiskLimits } from "@/features/portfolio/hooks";
 import { LIMIT_NAMES, type LimitName, type LimitUsage, type RiskLimits, type RiskLimitsRead, type Sourced } from "@/features/portfolio/types";
@@ -160,13 +162,13 @@ function EditDialog({ data, onClose }: { data: RiskLimitsRead; onClose: () => vo
                     </span>
                   </span>
                   <span className="relative">
-                    <input
+                    <Input
                       inputMode="decimal"
                       value={text[name]}
                       onChange={(e) => setText((t) => ({ ...t, [name]: e.target.value }))}
                       aria-invalid={!!invalid}
                       aria-label={LIMIT_META[name].label}
-                      className={cn("num h-8 w-full rounded-control border bg-ground pl-2.5 pr-12 text-right text-sm text-fg outline-none transition-colors focus:border-accent-c", invalid ? "border-down" : "border-line-strong")}
+                      className={cn("num h-8 w-full rounded-control border bg-ground pl-2.5 pr-12 text-right text-sm text-fg outline-none transition-colors focus-visible:border-accent-c", invalid ? "border-down" : "border-line-strong")}
                     />
                     <span className="pointer-events-none absolute inset-y-0 right-2.5 grid place-items-center text-2xs text-fg-subtle">{unit(name)}</span>
                   </span>
@@ -175,12 +177,12 @@ function EditDialog({ data, onClose }: { data: RiskLimitsRead; onClose: () => vo
             })}
             <label className="block px-2 pb-1 pt-3">
               <span className="text-2xs text-fg-subtle">Motivo (obbligatorio, lo leggono anche gli agenti)</span>
-              <textarea
+              <Textarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 rows={2}
                 placeholder="Es. riduco il peso massimo dopo la volatilità della settimana"
-                className="mt-1 w-full resize-none rounded-control border border-line-strong bg-ground px-2.5 py-2 text-sm text-fg outline-none placeholder:text-fg-subtle focus:border-accent-c"
+                className="mt-1 w-full resize-none rounded-control border-line-strong bg-ground px-2.5 py-2 text-sm text-fg outline-none placeholder:text-fg-subtle focus-visible:border-accent-c"
               />
             </label>
           </div>

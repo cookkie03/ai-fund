@@ -3,6 +3,7 @@ import { ChartNoAxesCombined, Eye, FileText, EyeOff, Minus, MousePointer2, MoveU
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AuthorChip } from "@/components/author-chip";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -252,13 +253,14 @@ export function ChartPanel({
               <span className={cn("leading-tight text-fg-faint", compact ? "text-[22px]" : "text-[30px]")}>—</span>
             )}
             {dayChange !== null && (
-              <span
+              <Badge
+                variant="outline"
                 data-role="change"
                 data-dir={dayChange >= 0 ? "up" : "down"}
-                className={cn("num -translate-y-1 rounded-tag px-1.5 py-0.5 text-xs font-semibold", dayChange >= 0 ? "bg-up-soft text-up" : "bg-down-soft text-down")}
+                className={cn("num -translate-y-1 rounded-tag px-1.5 py-0.5 text-xs font-semibold border-transparent", dayChange >= 0 ? "bg-up-soft text-up" : "bg-down-soft text-down")}
               >
                 {fmtPct(dayChange)}
-              </span>
+              </Badge>
             )}
           </span>
         </div>
@@ -311,10 +313,10 @@ export function ChartPanel({
             </span>
           )}
           {symbol && bars.length > 0 && (freshness.state === "stale" || freshness.state === "down") && (
-            <span role="status" className="inline-flex h-6 items-center gap-1.5 rounded-item bg-warn-soft px-2 text-2xs text-warn">
+            <Badge variant="outline" role="status" className="h-6 gap-1.5 rounded-item bg-warn-soft px-2 text-2xs text-warn border-transparent">
               <span className="size-1.5 rounded-full bg-warn" style={{ animation: "status-pulse 1.6s ease-in-out infinite" }} aria-hidden />
               {freshness.age !== null && freshness.age >= 60_000 ? `Non in tempo reale · ${fmtAge(now - freshness.age, now)} fa` : "Non in tempo reale"}
-            </span>
+            </Badge>
           )}
         </div>
       </div>

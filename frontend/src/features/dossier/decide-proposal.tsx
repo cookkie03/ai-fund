@@ -3,7 +3,10 @@ import { useEffect, useState, type FormEvent, type KeyboardEvent, type ReactNode
 import { toast } from "sonner";
 import { AuthorChip } from "@/components/author-chip";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { author, tickerAgentId } from "@/lib/authors";
 import { CommandRefused, useCommand } from "@/lib/runtime/hooks";
@@ -144,7 +147,7 @@ export function DecideProposal({ proposal, trigger }: { proposal: DecidablePropo
             </DialogDescription>
           </div>
 
-          <div className="mx-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-control bg-ground px-3 py-2.5 text-xs">
+          <Card className="mx-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-control border-line-strong/60 bg-ground p-3 text-xs shadow-none">
             <AuthorChip actor={agentId} size="sm" tooltip={author(agentId).name} />
             <span className="text-[13px] font-semibold text-fg">{proposal.ticker}</span>
             <DirectionTag value={proposal.direction} />
@@ -157,7 +160,7 @@ export function DecideProposal({ proposal, trigger }: { proposal: DecidablePropo
             <span className="text-fg-subtle">
               R:R <span className={cn("num", proposal.risk_reward !== null && proposal.risk_reward < 1.5 ? "text-warn" : "text-fg")}>{fmtRR(proposal.risk_reward)}</span>
             </span>
-          </div>
+          </Card>
 
           <fieldset className="mt-4 px-5">
             <legend className="mb-1.5 text-2xs text-fg-subtle">Decisione</legend>
@@ -175,12 +178,12 @@ export function DecideProposal({ proposal, trigger }: { proposal: DecidablePropo
             <label className="block px-5 pt-3">
               <span className="mb-1.5 block text-2xs text-fg-subtle">Sizing (% del capitale)</span>
               <span className="flex items-center gap-2">
-                <input
+                <Input
                   value={sizing}
                   onChange={(e) => setSizing(e.target.value)}
                   inputMode="decimal"
                   aria-invalid={!sizingValid}
-                  className="num h-8 w-24 rounded-control border border-line-strong bg-ground px-2.5 text-sm text-fg outline-none focus:border-accent-c/70 aria-[invalid=true]:border-warn"
+                  className="num h-8 w-24 rounded-control border-line-strong bg-ground px-2.5 text-sm text-fg outline-none focus-visible:border-accent-c/70 aria-[invalid=true]:border-warn"
                 />
                 <span className="text-2xs text-fg-subtle">{resized ? `ridimensionata da ${fmtFraction(proposal.sizing_fraction)}` : "come proposto"}</span>
               </span>
@@ -191,25 +194,25 @@ export function DecideProposal({ proposal, trigger }: { proposal: DecidablePropo
           {action === "defer" && (
             <label className="block px-5 pt-3">
               <span className="mb-1.5 block text-2xs text-fg-subtle">Riconsiderare il</span>
-              <input
+              <Input
                 type="date"
                 value={checkDate}
                 min={isoDay(1)}
                 onChange={(e) => setCheckDate(e.target.value)}
-                className="num h-8 rounded-control border border-line-strong bg-ground px-2.5 text-sm text-fg outline-none [color-scheme:dark] focus:border-accent-c/70"
+                className="num h-8 rounded-control border-line-strong bg-ground px-2.5 text-sm text-fg outline-none [color-scheme:dark] focus-visible:border-accent-c/70"
               />
             </label>
           )}
 
           <label className="block px-5 pt-3">
             <span className="mb-1.5 block text-2xs text-fg-subtle">Motivazione</span>
-            <textarea
+            <Textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
               required
               placeholder={PLACEHOLDER[action]}
-              className="block w-full resize-none rounded-control border border-line-strong bg-ground px-2.5 py-2 text-sm text-fg outline-none placeholder:text-fg-subtle focus:border-accent-c/70"
+              className="block w-full resize-none rounded-control border-line-strong bg-ground px-2.5 py-2 text-sm text-fg outline-none placeholder:text-fg-subtle focus-visible:border-accent-c/70"
             />
             <span className="mt-1 block text-2xs text-fg-subtle">Resta nello storico decisioni della scheda, firmata da te.</span>
           </label>

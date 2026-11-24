@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAllocation } from "@/features/portfolio/hooks";
 import type { AllocationRow } from "@/features/portfolio/types";
@@ -52,7 +53,7 @@ export function AllocationTile({ className }: { className?: string }) {
   const cash = data?.cash;
 
   return (
-    <section aria-label="Allocazione" data-region="allocation" className={cn("flex min-w-0 flex-col rounded-tile bg-ground", className)}>
+    <Card aria-label="Allocazione" data-region="allocation" className={cn("flex min-w-0 flex-col rounded-tile border-line-strong/60 bg-ground p-0 shadow-sm", className)}>
       <TileTitle
         meta={limit !== null ? <span className="inline-flex items-center gap-1.5"><span aria-hidden className="inline-block h-2.5 w-[2px] rounded-full bg-fg" />soglia {fmtFrac(limit, { decimals: 0 })}</span> : undefined}
         end={
@@ -103,6 +104,6 @@ export function AllocationTile({ className }: { className?: string }) {
         )}
       </div>
       <SourceNote sourced={q.data} className="px-4 pb-3" />
-    </section>
+    </Card>
   );
 }

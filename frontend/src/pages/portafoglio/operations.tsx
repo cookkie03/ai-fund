@@ -1,6 +1,7 @@
 import { ShieldCheck } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { AuthorChip } from "@/components/author-chip";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { usePortfolioTrades } from "@/features/portfolio/hooks";
 import type { PortfolioTrade, RiskLimitsRead } from "@/features/portfolio/types";
@@ -19,7 +20,7 @@ function Section({ title, meta, end, children }: { title: string; meta?: ReactNo
     <section className="pt-1">
       <header className="flex h-9 items-center gap-2 px-4">
         <h3 className="text-xs font-semibold text-fg">{title}</h3>
-        {meta !== undefined && <span className="num rounded-tag bg-hover px-1.5 text-[10px] leading-4 text-fg-muted">{meta}</span>}
+        {meta !== undefined && <Badge variant="outline" className="num rounded-tag bg-hover px-1.5 text-[10px] leading-4 text-fg-muted border-transparent">{meta}</Badge>}
         {end && <div className="ml-auto flex items-center gap-1">{end}</div>}
       </header>
       {children}
