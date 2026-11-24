@@ -443,6 +443,64 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         );
         """,
     ),
+    (
+        9,
+        "009_notizie_backend",
+        """
+        CREATE TABLE IF NOT EXISTS news_sources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider TEXT NOT NULL,
+            name TEXT NOT NULL,
+            url TEXT,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'ok',
+            last_fetch_ts TEXT,
+            last_error TEXT
+        );
+
+        ALTER TABLE news ADD COLUMN url TEXT;
+        ALTER TABLE news ADD COLUMN source_id INTEGER;
+        ALTER TABLE news ADD COLUMN provider TEXT NOT NULL DEFAULT 'alpaca';
+        ALTER TABLE news ADD COLUMN published_ts TEXT;
+        ALTER TABLE news ADD COLUMN fetched_ts TEXT;
+        ALTER TABLE news ADD COLUMN tickers_json TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE news ADD COLUMN themes_json TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE news ADD COLUMN image_url TEXT;
+        ALTER TABLE news ADD COLUMN has_full_text INTEGER NOT NULL DEFAULT 0;
+
+        CREATE TABLE IF NOT EXISTS news_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            news_id INTEGER NOT NULL,
+            agent TEXT,
+            kind TEXT NOT NULL CHECK (kind IN ('read', 'cited', 'forwarded')),
+            ts TEXT NOT NULL,
+            cycle_id INTEGER,
+            chat_id INTEGER,
+            tool_call_id INTEGER,
+            topic TEXT,
+            note TEXT,
+            FOREIGN KEY (news_id) REFERENCES news(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_news_usage_news ON news_usage(news_id);
+
+        CREATE TABLE IF NOT EXISTS calendar_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind TEXT NOT NULL CHECK (kind IN ('macro', 'earnings')),
+            ts TEXT NOT NULL,
+            title TEXT NOT NULL,
+            country TEXT,
+            ticker TEXT,
+            importance TEXT CHECK (importance IN ('low', 'medium', 'high')),
+            actual REAL,
+            forecast REAL,
+            previous REAL,
+            source TEXT NOT NULL,
+            fetched_at TEXT NOT NULL,
+            UNIQUE(kind, ts, title, ticker)
+        );
+        CREATE INDEX IF NOT EXISTS idx_calendar_ts ON calendar_events(ts);
+        """,
+    ),
 ]
 
 
@@ -491,7 +549,18 @@ class OfficeDB:
             if version not in applied:
                 self._connection.execute("BEGIN IMMEDIATE")
                 try:
-                    self._connection.executescript(sql)
+                    for statement in sql.split(";"):
+                        stmt = statement.strip()
+                        if not stmt:
+                            continue
+                        try:
+                            self._connection.execute(stmt)
+                        except sqlite3.OperationalError as oe:
+                            msg = str(oe).lower()
+                            if "duplicate column name" in msg or "already exists" in msg:
+                                pass
+                            else:
+                                raise
                     self._connection.execute(
                         "INSERT INTO schema_version (version, name, applied_at) VALUES (?, ?, ?)",
                         (version, name, utc_now_iso()),
@@ -1395,3 +1464,133 @@ class OfficeDB:
             (ts, command, args_json),
         )
         return int(cursor.lastrowid)
+
+    def add_news_source(self, provider: str, name: str, url: str | None = None, enabled: int = 1) -> int:
+        cursor = self._connection.execute(
+            "INSERT INTO news_sources (provider, name, url, enabled, status) VALUES (?, ?, ?, ?, 'ok')",
+            (provider, name, url, enabled),
+        )
+        return int(cursor.lastrowid)
+
+    def list_news_sources(self) -> list[dict[str, Any]]:
+        rows = self._connection.execute(
+            """
+            SELECT s.*, 
+                   (SELECT COUNT(*) FROM news n WHERE n.source_id = s.id AND julianday(n.published_ts) >= julianday('now', '-1 day')) AS items_24h
+            FROM news_sources s
+            ORDER BY s.id
+            """
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def set_news_source_enabled(self, source_id: int, enabled: int) -> bool:
+        cursor = self._connection.execute(
+            "UPDATE news_sources SET enabled = ? WHERE id = ?", (enabled, source_id)
+        )
+        return cursor.rowcount > 0
+
+    def remove_news_source(self, source_id: int) -> bool:
+        cursor = self._connection.execute("DELETE FROM news_sources WHERE id = ?", (source_id,))
+        return cursor.rowcount > 0
+
+    def update_news_source_status(self, source_id: int, status: str, last_error: str | None = None, last_fetch_ts: str | None = None) -> None:
+        self._connection.execute(
+            "UPDATE news_sources SET status = ?, last_error = ?, last_fetch_ts = COALESCE(?, last_fetch_ts) WHERE id = ?",
+            (status, last_error, last_fetch_ts, source_id),
+        )
+
+    def insert_news(
+        self,
+        headline: str,
+        summary: str | None,
+        full_text: str | None,
+        url: str | None,
+        source_id: int | None,
+        source: str,
+        provider: str,
+        published_ts: str,
+        tickers: list[str] | str = "[]",
+        themes: list[str] | str = "[]",
+        image_url: str | None = None,
+        has_full_text: int = 0,
+        fetched_ts: str | None = None,
+    ) -> int:
+        fetched_ts = fetched_ts or utc_now_iso()
+        tickers_json = tickers if isinstance(tickers, str) else json.dumps(tickers)
+        themes_json = themes if isinstance(themes, str) else json.dumps(themes)
+        with self.transaction():
+            if url:
+                existing = self._connection.execute("SELECT id FROM news WHERE url = ?", (url,)).fetchone()
+                if existing:
+                    self._connection.execute(
+                        "UPDATE news SET headline = ?, summary = COALESCE(?, summary), full_text = COALESCE(?, full_text), has_full_text = MAX(?, has_full_text) WHERE id = ?",
+                        (headline, summary, full_text, has_full_text, existing[0])
+                    )
+                    return int(existing[0])
+            cursor = self._connection.execute(
+                """
+                INSERT INTO news (headline, summary, full_text, url, source_id, source, provider, published_ts, fetched_ts, tickers_json, themes_json, image_url, has_full_text, published_at, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (headline, summary, full_text, url, source_id, source, provider, published_ts, fetched_ts, tickers_json, themes_json, image_url, has_full_text, published_ts, fetched_ts),
+            )
+            return int(cursor.lastrowid)
+
+    def log_news_usage(
+        self,
+        news_id: int,
+        agent: str | None = None,
+        kind: str = "read",
+        cycle_id: int | None = None,
+        chat_id: int | None = None,
+        tool_call_id: int | None = None,
+        topic: str | None = None,
+        note: str | None = None,
+        ts: str | None = None,
+    ) -> int:
+        ts = ts or utc_now_iso()
+        with self.transaction():
+            cursor = self._connection.execute(
+                """
+                INSERT INTO news_usage (news_id, agent, kind, ts, cycle_id, chat_id, tool_call_id, topic, note)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (news_id, agent, kind, ts, cycle_id, chat_id, tool_call_id, topic, note),
+            )
+            usage_id = int(cursor.lastrowid)
+            if self.event_log:
+                self.event_log.append(
+                    "news.used", f"news:{news_id}",
+                    {"news_id": news_id, "agent": agent, "kind": kind, "ts": ts},
+                    actor=agent or "system",
+                )
+            return usage_id
+
+    def insert_calendar_event(
+        self,
+        kind: str,
+        ts: str,
+        title: str,
+        country: str | None = None,
+        ticker: str | None = None,
+        importance: str | None = None,
+        actual: float | None = None,
+        forecast: float | None = None,
+        previous: float | None = None,
+        source: str = "openbb",
+        fetched_at: str | None = None,
+    ) -> int:
+        fetched_at = fetched_at or utc_now_iso()
+        cursor = self._connection.execute(
+            """
+            INSERT INTO calendar_events (kind, ts, title, country, ticker, importance, actual, forecast, previous, source, fetched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(kind, ts, title, ticker) DO UPDATE SET
+                actual = COALESCE(excluded.actual, actual),
+                forecast = COALESCE(excluded.forecast, forecast),
+                previous = COALESCE(excluded.previous, previous),
+                importance = COALESCE(excluded.importance, importance)
+            """,
+            (kind, ts, title, country, ticker, importance, actual, forecast, previous, source, fetched_at),
+        )
+        return int(cursor.lastrowid or self._connection.execute("SELECT id FROM calendar_events WHERE kind=? AND ts=? AND title=? AND COALESCE(ticker,'')=COALESCE(?, '')", (kind, ts, title, ticker)).fetchone()[0])

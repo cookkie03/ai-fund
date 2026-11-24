@@ -67,6 +67,80 @@ class OpenBBProvider:
             for row in rows
         )
 
+    def get_news(self, symbol: str | None = None, start: datetime | None = None, end: datetime | None = None) -> tuple[Any, ...]:
+        try:
+            if symbol:
+                res = self._client.news.company(symbol=symbol.upper().strip(), provider=self._provider)
+            else:
+                res = self._client.news.world(provider=self._provider)
+            rows = _rows(res)
+            items = []
+            for r in rows:
+                title = r.get("title") or r.get("headline")
+                url = r.get("url") or r.get("link")
+                pub = r.get("date") or r.get("published_at") or r.get("created_at")
+                if title and url:
+                    items.append({
+                        "headline": title.strip(),
+                        "summary": r.get("text") or r.get("summary"),
+                        "url": url.strip(),
+                        "published_at": _as_utc(pub) if pub else datetime.now(UTC),
+                        "source": r.get("source", "openbb"),
+                    })
+            return tuple(items)
+        except Exception as exc:
+            raise RuntimeError(f"OpenBB news unavailable: {exc}") from exc
+
+    def get_econ_calendar(self, start: datetime | None = None, end: datetime | None = None) -> tuple[Any, ...]:
+        try:
+            res = self._client.economy.calendar(provider=self._provider)
+            rows = _rows(res)
+            items = []
+            for r in rows:
+                title = r.get("event") or r.get("title") or r.get("name")
+                dt = r.get("date") or r.get("time") or r.get("timestamp")
+                if title and dt:
+                    items.append({
+                        "kind": "macro",
+                        "ts": _as_utc(dt).isoformat(),
+                        "title": str(title).strip(),
+                        "country": r.get("country"),
+                        "importance": r.get("importance"),
+                        "actual": float(r["actual"]) if r.get("actual") is not None and str(r["actual"]) != "" else None,
+                        "forecast": float(r["forecast"]) if r.get("forecast") is not None and str(r["forecast"]) != "" else None,
+                        "previous": float(r["previous"]) if r.get("previous") is not None and str(r["previous"]) != "" else None,
+                        "source": f"openbb:{self._provider}",
+                    })
+            return tuple(items)
+        except Exception as exc:
+            raise RuntimeError(f"OpenBB econ calendar unavailable: {exc}") from exc
+
+    def get_earnings_calendar(self, start: datetime | None = None, end: datetime | None = None, tickers: list[str] | None = None) -> tuple[Any, ...]:
+        try:
+            kwargs = {"provider": self._provider}
+            if tickers:
+                kwargs["symbol"] = ",".join(tickers)
+            res = self._client.equity.calendar.earnings(**kwargs)
+            rows = _rows(res)
+            items = []
+            for r in rows:
+                symbol = r.get("symbol") or r.get("ticker")
+                dt = r.get("date") or r.get("report_date") or r.get("time")
+                if symbol and dt:
+                    items.append({
+                        "kind": "earnings",
+                        "ts": _as_utc(dt).isoformat(),
+                        "title": f"Earnings: {symbol.upper()}",
+                        "ticker": symbol.upper(),
+                        "importance": "high",
+                        "actual": float(r["eps_actual"]) if r.get("eps_actual") is not None and str(r["eps_actual"]) != "" else None,
+                        "forecast": float(r["eps_estimated"]) if r.get("eps_estimated") is not None and str(r["eps_estimated"]) != "" else None,
+                        "source": f"openbb:{self._provider}",
+                    })
+            return tuple(items)
+        except Exception as exc:
+            raise RuntimeError(f"OpenBB earnings calendar unavailable: {exc}") from exc
+
 
 def _load_openbb_client() -> Any:
     try:

@@ -68,6 +68,10 @@ The Trading Agent single-writer Runtime process exposes an HTTP and Server-Sent 
     - `/v1/read/portfolio_summary`, `positions`, `allocation`, `performance`, `attribution`, `risk_limits`, `risk_limits_history`: Portafoglio page, see §2.5.
     - `/v1/read/inbox?unread_only=&limit=`: System alert notifications.
     - `/v1/read/scheduled_tasks?status=&limit=`: Scheduled tasks.
+    - `/v1/read/news?ticker=&theme=&source_id=&provider=&scope=all|portfolio|watchlist&q=&before=&limit=`: Paginated news items contract.
+    - `/v1/read/news_item?id=`: Detailed news item with full text and usage detail.
+    - `/v1/read/news_sources`: List of configured news sources.
+    - `/v1/read/calendar?from=&to=&kind=macro|earnings`: Economic and earnings calendar events.
 
 ### 2.4 Server-Sent Events (Live Stream)
 - `GET /v1/events`

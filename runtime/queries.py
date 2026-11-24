@@ -941,3 +941,231 @@ class ReadModel:
         finally:
             if self.db_path != ":memory:":
                 conn.close()
+
+    def news_items(
+        self,
+        ticker: str | None = None,
+        theme: str | None = None,
+        source_id: int | None = None,
+        provider: str | None = None,
+        scope: str = "all", # all | portfolio | watchlist
+        q: str | None = None,
+        before: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        conn = self._get_connection()
+        try:
+            portfolio_tickers = set()
+            portfolio = self.portfolio()
+            if portfolio and portfolio.positions:
+                for p in portfolio.positions:
+                    sym = p.get("ticker") or p.get("symbol")
+                    if sym:
+                        portfolio_tickers.add(str(sym).upper())
+
+            watchlist_tickers = set()
+            for w in self.watchlist():
+                watchlist_tickers.add(str(w.ticker).upper())
+
+            query = "SELECT * FROM news WHERE 1=1"
+            params: list[Any] = []
+
+            if ticker:
+                query += " AND (tickers_json LIKE ? OR headline LIKE ?)"
+                params.extend([f'%"{ticker.upper()}"%', f'%{ticker}%'])
+            if source_id is not None:
+                query += " AND source_id = ?"
+                params.append(source_id)
+            if provider:
+                query += " AND provider = ?"
+                params.append(provider)
+            if before:
+                query += " AND published_ts < ?"
+                params.append(before)
+            if q:
+                query += " AND (headline LIKE ? OR summary LIKE ?)"
+                params.extend([f'%{q}%', f'%{q}%'])
+
+            query += " ORDER BY published_ts DESC, id DESC LIMIT ?"
+            params.append(limit + 1)
+
+            rows = conn.execute(query, params).fetchall()
+            has_more = len(rows) > limit
+            if has_more:
+                rows = rows[:limit]
+
+            items = []
+            for r in rows:
+                tickers = json.loads(r["tickers_json"] or "[]")
+                themes = json.loads(r["themes_json"] or "[]")
+                
+                in_port = any(t.upper() in portfolio_tickers for t in tickers)
+                in_watch = any(t.upper() in watchlist_tickers for t in tickers)
+
+                if scope == "portfolio" and not in_port:
+                    continue
+                if scope == "watchlist" and not in_watch:
+                    continue
+                if theme and theme.lower() not in [th.lower() for th in themes]:
+                    continue
+
+                usage_rows = conn.execute(
+                    "SELECT kind, COUNT(*) as cnt FROM news_usage WHERE news_id = ? GROUP BY kind",
+                    (r["id"],)
+                ).fetchall()
+                usage_map = {row["kind"]: row["cnt"] for row in usage_rows}
+
+                items.append({
+                    "id": int(r["id"]),
+                    "headline": str(r["headline"]),
+                    "summary": r["summary"],
+                    "url": r["url"],
+                    "source": str(r["source"]),
+                    "provider": str(r["provider"]),
+                    "published_ts": str(r["published_ts"]),
+                    "fetched_ts": str(r["fetched_ts"]),
+                    "tickers": tickers,
+                    "themes": themes,
+                    "image_url": r["image_url"],
+                    "has_full_text": bool(r["has_full_text"]),
+                    "in_portfolio": in_port,
+                    "in_watchlist": in_watch,
+                    "usage": {
+                        "reads": usage_map.get("read", 0),
+                        "citations": usage_map.get("cited", 0),
+                        "forwards": usage_map.get("forwarded", 0),
+                    }
+                })
+
+            next_before = rows[-1]["published_ts"] if has_more and rows else None
+            return {"items": items, "next_before": next_before}
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def news_item_detail(self, news_id: int) -> dict[str, Any] | None:
+        conn = self._get_connection()
+        try:
+            r = conn.execute("SELECT * FROM news WHERE id = ?", (news_id,)).fetchone()
+            if not r:
+                return None
+            portfolio_tickers = {str(p.get('ticker') or p.get('symbol')).upper() for p in (self.portfolio().positions if self.portfolio() and self.portfolio().positions else [])}
+            watchlist_tickers = {str(w.ticker).upper() for w in self.watchlist()}
+
+            tickers = json.loads(r["tickers_json"] or "[]")
+            themes = json.loads(r["themes_json"] or "[]")
+            in_port = any(t.upper() in portfolio_tickers for t in tickers)
+            in_watch = any(t.upper() in watchlist_tickers for t in tickers)
+
+            usage_rows = conn.execute(
+                "SELECT kind, COUNT(*) as cnt FROM news_usage WHERE news_id = ? GROUP BY kind",
+                (news_id,)
+            ).fetchall()
+            usage_map = {row["kind"]: row["cnt"] for row in usage_rows}
+
+            detail_rows = conn.execute(
+                "SELECT * FROM news_usage WHERE news_id = ? ORDER BY ts DESC, id DESC",
+                (news_id,)
+            ).fetchall()
+            usage_detail = [{
+                "agent": dr["agent"],
+                "kind": dr["kind"],
+                "ts": dr["ts"],
+                "cycle_id": dr["cycle_id"],
+                "chat_id": dr["chat_id"],
+                "topic": dr["topic"],
+                "note": dr["note"],
+            } for dr in detail_rows]
+
+            return {
+                "id": int(r["id"]),
+                "headline": str(r["headline"]),
+                "summary": r["summary"],
+                "url": r["url"],
+                "source": str(r["source"]),
+                "provider": str(r["provider"]),
+                "published_ts": str(r["published_ts"]),
+                "fetched_ts": str(r["fetched_ts"]),
+                "tickers": tickers,
+                "themes": themes,
+                "image_url": r["image_url"],
+                "has_full_text": bool(r["has_full_text"]),
+                "in_portfolio": in_port,
+                "in_watchlist": in_watch,
+                "usage": {
+                    "reads": usage_map.get("read", 0),
+                    "citations": usage_map.get("cited", 0),
+                    "forwards": usage_map.get("forwarded", 0),
+                },
+                "full_text": r["full_text"],
+                "usage_detail": usage_detail,
+            }
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def news_sources_list(self) -> list[dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            rows = conn.execute(
+                """
+                SELECT s.*, 
+                       (SELECT COUNT(*) FROM news n WHERE n.source_id = s.id AND julianday(n.published_ts) >= julianday('now', '-1 day')) AS items_24h
+                FROM news_sources s
+                ORDER BY s.id
+                """
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def calendar_events(
+        self,
+        from_ts: str | None = None,
+        to_ts: str | None = None,
+        kind: str | None = None,
+    ) -> list[dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            portfolio_tickers = {str(p.get('ticker') or p.get('symbol')).upper() for p in (self.portfolio().positions if self.portfolio() and self.portfolio().positions else [])}
+            watchlist_tickers = {str(w.ticker).upper() for w in self.watchlist()}
+
+            query = "SELECT * FROM calendar_events WHERE 1=1"
+            params: list[Any] = []
+            if kind:
+                query += " AND kind = ?"
+                params.append(kind)
+            if from_ts:
+                query += " AND ts >= ?"
+                params.append(from_ts)
+            if to_ts:
+                query += " AND ts <= ?"
+                params.append(to_ts)
+            query += " ORDER BY ts ASC, id ASC"
+
+            rows = conn.execute(query, params).fetchall()
+            result = []
+            for r in rows:
+                ticker = r["ticker"]
+                in_port = bool(ticker and ticker.upper() in portfolio_tickers)
+                in_watch = bool(ticker and ticker.upper() in watchlist_tickers)
+                result.append({
+                    "id": int(r["id"]),
+                    "kind": str(r["kind"]),
+                    "ts": str(r["ts"]),
+                    "title": str(r["title"]),
+                    "country": r["country"],
+                    "ticker": ticker,
+                    "importance": r["importance"],
+                    "actual": r["actual"],
+                    "forecast": r["forecast"],
+                    "previous": r["previous"],
+                    "source": str(r["source"]),
+                    "in_portfolio": in_port,
+                    "in_watchlist": in_watch,
+                })
+            return result
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
