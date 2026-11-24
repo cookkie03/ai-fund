@@ -18,3 +18,7 @@
   - `forward_news`, `add_news_source`, `set_news_source_enabled`, `remove_news_source`, `refresh_news` con supporto Idempotency-Key e X-Actor.
 - **Eventi SSE**:
   - `news.ingested`, `news.used`, `news.source`.
+
+## Sezioni da registrare nella Wiki
+- `system/interface/frontend-module.md`: inserire i contratti di lettura (`/v1/read/news`, `/v1/read/news_item`, `/v1/read/news_sources`, `/v1/read/calendar`) e i comandi per la gestione delle fonti e l'inoltro delle notizie.
+- `system/foundation/database-schema.md`: documentare le tabelle `news_sources`, `news`, `news_usage`, `calendar_events` e la migrazione 009.
