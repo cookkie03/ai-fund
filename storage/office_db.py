@@ -676,17 +676,18 @@ class OfficeDB:
         self, name: str, role: str, config: dict | str = "{}", prompt_hash: str | None = None
     ) -> None:
         config_json = config if isinstance(config, str) else json.dumps(config)
-        self._connection.execute(
-            """
-            INSERT INTO agents (name, role, config_json, prompt_hash)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(name) DO UPDATE SET
-                role = excluded.role,
-                config_json = excluded.config_json,
-                prompt_hash = excluded.prompt_hash
-            """,
-            (name, role, config_json, prompt_hash),
-        )
+        with self._lock:
+            self._connection.execute(
+                """
+                INSERT INTO agents (name, role, config_json, prompt_hash)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(name) DO UPDATE SET
+                    role = excluded.role,
+                    config_json = excluded.config_json,
+                    prompt_hash = excluded.prompt_hash
+                """,
+                (name, role, config_json, prompt_hash),
+            )
 
     def set_agent_status(
         self, agent: str, status: str, current_task: dict | None = None,
