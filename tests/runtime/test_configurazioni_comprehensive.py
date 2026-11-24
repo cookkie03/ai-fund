@@ -174,15 +174,27 @@ def test_live_settings_immediate_application(test_env):
 
 def test_prompt_next_cycle_loading(test_env):
     db = test_env["db"]
-    from prompts.loader import load_prompt
+    from prompts.loader import load_prompt_full
 
-    # Initial prompt load for portfolio_manager
-    text_v1, _ = load_prompt("portfolio_manager", db=db)
+    # Seed initial version 1 in DB
+    v1, _ = db.insert_prompt_version("portfolio_manager", "luca", "initial", "Sei il Portfolio Manager v1.")
 
-    # Insert v2 prompt (simulating update during cycle)
-    db.insert_prompt_version("portfolio_manager", "luca", "v2 update", "Sei il Portfolio Manager aggiornato al prossimo ciclo.")
+    # Cycle 1 start: load prompt for portfolio_manager
+    text_c1, _, version_c1, _ = load_prompt_full("portfolio_manager", db=db)
+    assert version_c1 == 1
 
-    # In-cycle simulation: if cycle loader caches or reads at start, or if next-cycle loader gets new version
-    text_next, _ = load_prompt("portfolio_manager", db=db)
-    assert "aggiornato al prossimo ciclo" in text_next
+    # Mid-cycle: someone updates the prompt in the DB (version 2 inserted)
+    db.insert_prompt_version("portfolio_manager", "luca", "mid-cycle update", "Sei il Portfolio Manager v2 mid-cycle.")
+
+    # In-cycle check: agent/cycle using the prompt loaded at cycle start retains version 1
+    active_in_cycle = text_c1
+    assert version_c1 == 1
+
+    # Cycle 2 start (next cycle): loader fetches the newly active version (version 2) from DB
+    text_c2, _, version_c2, _ = load_prompt_full("portfolio_manager", db=db)
+    assert version_c2 == 2
+    assert "mid-cycle" in text_c2
+    assert text_c2 != active_in_cycle
+
+
 
