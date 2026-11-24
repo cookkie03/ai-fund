@@ -443,6 +443,36 @@ _MIGRATIONS: list[tuple[int, str, str]] = [
         );
         """,
     ),
+    (
+        9,
+        "009_configurazioni_backend",
+        """
+        CREATE TABLE IF NOT EXISTS settings_versions (
+            version INTEGER PRIMARY KEY,
+            ts TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            before_json TEXT NOT NULL,
+            after_json TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS prompt_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            ts TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            text TEXT NOT NULL,
+            chars INTEGER NOT NULL,
+            UNIQUE(agent, version)
+        );
+        CREATE TABLE IF NOT EXISTS backup_records (
+            name TEXT PRIMARY KEY,
+            ts TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL
+        );
+        """,
+    ),
 ]
 
 
@@ -1250,6 +1280,84 @@ class OfficeDB:
     def list_risk_limits_versions(self, limit: int = 50) -> list[dict]:
         rows = self._connection.execute(
             "SELECT * FROM risk_limits_versions ORDER BY version DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Settings versions ---
+
+    def insert_settings_version(
+        self, actor: str, reason: str, before: dict, after: dict, ts: str | None = None
+    ) -> int:
+        ts = ts or utc_now_iso()
+        row = self._connection.execute(
+            "SELECT COALESCE(MAX(version), 0) + 1 FROM settings_versions"
+        ).fetchone()
+        version = int(row[0])
+        self._connection.execute(
+            """
+            INSERT INTO settings_versions (version, ts, actor, reason, before_json, after_json)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (version, ts, actor, reason, json.dumps(before), json.dumps(after)),
+        )
+        return version
+
+    def latest_settings_version(self) -> dict | None:
+        row = self._connection.execute(
+            "SELECT * FROM settings_versions ORDER BY version DESC LIMIT 1"
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list_settings_versions(self, limit: int = 50) -> list[dict]:
+        rows = self._connection.execute(
+            "SELECT * FROM settings_versions ORDER BY version DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Prompt versions ---
+
+    def insert_prompt_version(
+        self, agent: str, actor: str, reason: str, text: str, ts: str | None = None
+    ) -> tuple[int, int]:
+        ts = ts or utc_now_iso()
+        row = self._connection.execute(
+            "SELECT COALESCE(MAX(version), 0) + 1 FROM prompt_versions WHERE agent = ?", (agent,)
+        ).fetchone()
+        version = int(row[0])
+        chars = len(text)
+        self._connection.execute(
+            """
+            INSERT INTO prompt_versions (agent, version, ts, actor, reason, text, chars)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (agent, version, ts, actor, reason, text, chars),
+        )
+        return version, chars
+
+    def latest_prompt_version(self, agent: str) -> dict | None:
+        row = self._connection.execute(
+            "SELECT * FROM prompt_versions WHERE agent = ? ORDER BY version DESC LIMIT 1", (agent,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list_prompt_versions(self, agent: str, limit: int = 50) -> list[dict]:
+        rows = self._connection.execute(
+            "SELECT * FROM prompt_versions WHERE agent = ? ORDER BY version DESC LIMIT ?", (agent, limit)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Backup records ---
+
+    def insert_backup_record(self, name: str, size_bytes: int, ts: str | None = None) -> None:
+        ts = ts or utc_now_iso()
+        self._connection.execute(
+            "INSERT OR REPLACE INTO backup_records (name, ts, size_bytes) VALUES (?, ?, ?)",
+            (name, ts, size_bytes),
+        )
+
+    def list_backup_records(self, limit: int = 50) -> list[dict]:
+        rows = self._connection.execute(
+            "SELECT * FROM backup_records ORDER BY ts DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(r) for r in rows]
 

@@ -164,3 +164,49 @@ class IngestAlert(BaseModel):
     source: str
     reason: str
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+class UpdateSettings(BaseModel):
+    changes: dict[str, Any]
+    reason: str = Field(min_length=1, max_length=1000)
+    confirm: bool = False
+    dry_run: bool = False
+
+
+class RestoreSettings(BaseModel):
+    version: int = Field(ge=1)
+    reason: str = Field(min_length=1, max_length=1000)
+
+
+class UpdatePrompt(BaseModel):
+    agent: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=100000)
+    reason: str = Field(min_length=1, max_length=1000)
+    dry_run: bool = False
+
+
+class RestorePrompt(BaseModel):
+    agent: str = Field(min_length=1)
+    version: int = Field(ge=1)
+    reason: str = Field(min_length=1, max_length=1000)
+
+
+class SetSecret(BaseModel):
+    name: str = Field(min_length=1)
+    value: str = Field(min_length=1)
+    reason: str = Field(min_length=1, max_length=1000)
+    confirm: bool = False
+
+
+class ClearSecret(BaseModel):
+    name: str = Field(min_length=1)
+    reason: str = Field(min_length=1, max_length=1000)
+    confirm: bool = True
+
+
+class TestConnection(BaseModel):
+    target: Literal["omniroute", "alpaca", "openbb"]
+
+
+class BackupDB(BaseModel):
+    pass

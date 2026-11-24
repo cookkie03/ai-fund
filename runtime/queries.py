@@ -4,19 +4,25 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from config.office_settings import OfficeSettings
+from config.settings_store import SETTINGS_SCHEMA, SettingsStore, get_nested
 from execution.risk_limits import (
     ConnRiskLimitsReader,
     RiskLimitsStore,
     bounds_payload,
     defaults_from_settings,
 )
+from prompts.loader import normalize_agent_name
 from runtime import portfolio
+from storage.office_db import utc_now_iso
+from storage.secrets import SecretsManager
 
 if TYPE_CHECKING:
     from runtime.core import Runtime
@@ -941,3 +947,236 @@ class ReadModel:
         finally:
             if self.db_path != ":memory:":
                 conn.close()
+
+    def settings(self) -> dict[str, Any]:
+        office = getattr(self._runtime, "office", None)
+        base = office.settings if office else OfficeSettings()
+        db = office.db if office else self._with_conn(lambda c: c)
+        store = SettingsStore(db, base)
+        active_d = store.active_dict()
+        row = db.latest_settings_version() if hasattr(db, "latest_settings_version") else None
+        
+        overridden_keys = set()
+        if row and row.get("after_json"):
+            try:
+                overridden_keys = set(json.loads(row["after_json"]).keys())
+            except Exception:
+                pass
+
+        sections_map = {
+            "mercato": {"id": "mercato", "title": "Mercato e orari", "items": []},
+            "agenti": {"id": "agenti", "title": "Agenti", "items": []},
+            "dati": {"id": "dati", "title": "Dati e archivio", "items": []},
+        }
+
+        for k, meta in SETTINGS_SCHEMA.items():
+            sec = meta.get("section", "mercato")
+            val = get_nested(active_d, k)
+            default_val = get_nested(base.model_dump(), k)
+            if sec not in sections_map:
+                sections_map[sec] = {"id": sec, "title": sec.capitalize(), "items": []}
+            sections_map[sec]["items"].append({
+                "key": k,
+                "label": meta["label"],
+                "description": meta["description"],
+                "type": meta["type"],
+                "value": val,
+                "default": default_val,
+                "min": meta.get("min"),
+                "max": meta.get("max"),
+                "options": meta.get("options"),
+                "unit": meta.get("unit"),
+                "apply": meta["apply"],
+                "capital": bool(meta.get("capital", False)),
+                "overridden": k in overridden_keys,
+            })
+
+        return {
+            "version": int(row["version"]) if row else 0,
+            "updated_ts": row.get("ts") if row else None,
+            "updated_by": row.get("actor") if row else None,
+            "pending_restart": [k for k in overridden_keys if SETTINGS_SCHEMA.get(k, {}).get("apply") == "restart"],
+            "sections": list(sections_map.values()),
+        }
+
+    def settings_history(self, limit: int = 50) -> list[dict[str, Any]]:
+        office = getattr(self._runtime, "office", None)
+        db = office.db if office else self._with_conn(lambda c: c)
+        if not hasattr(db, "list_settings_versions"):
+            return []
+        rows = db.list_settings_versions(limit=limit)
+        out = []
+        for r in rows:
+            before = json.loads(r["before_json"])
+            after = json.loads(r["after_json"])
+            changes = [{"key": k, "old": before.get(k), "new": after.get(k)} for k in before.keys() | after.keys()]
+            out.append({
+                "version": int(r["version"]),
+                "ts": r["ts"],
+                "actor": r["actor"],
+                "reason": r["reason"],
+                "changes": changes,
+            })
+        return out
+
+    def agent_configs(self) -> list[dict[str, Any]]:
+        office = getattr(self._runtime, "office", None)
+        settings = office.settings if office else OfficeSettings()
+        db = office.db if office else None
+        today_str = datetime.now(UTC).strftime("%Y-%m-%d")
+        out = []
+        for agent_name, cfg in settings.agents.items():
+            today_cost = 0.0
+            prompt_version = 0
+            prompt_updated_ts = None
+            if db:
+                try:
+                    c_row = db.connection.execute(
+                        "SELECT SUM(cost) FROM llm_calls WHERE agent = ? AND ts LIKE ?",
+                        (agent_name, f"{today_str}%")
+                    ).fetchone()
+                    if c_row and c_row[0]:
+                        today_cost = float(c_row[0])
+                except Exception:
+                    pass
+                try:
+                    p_row = db.latest_prompt_version(agent_name)
+                    if p_row:
+                        prompt_version = int(p_row["version"])
+                        prompt_updated_ts = p_row["ts"]
+                except Exception:
+                    pass
+
+            out.append({
+                "agent": agent_name,
+                "role": agent_name,
+                "model": cfg.model,
+                "endpoint": cfg.endpoint,
+                "effort": cfg.effort,
+                "daily_budget_usd": 50.0,
+                "today_cost": today_cost,
+                "prompt_version": prompt_version,
+                "prompt_updated_ts": prompt_updated_ts,
+            })
+        return out
+
+    def prompt(self, agent: str) -> dict[str, Any]:
+        office = getattr(self._runtime, "office", None)
+        db = office.db if office else None
+        canonical = normalize_agent_name(agent)
+        from prompts.loader import load_prompt_full
+        text, _, version, is_default = load_prompt_full(canonical, db=db)
+        updated_ts = None
+        updated_by = None
+        reason = "Default file prompt"
+        if not is_default and db:
+            row = db.latest_prompt_version(canonical)
+            if row:
+                updated_ts = row["ts"]
+                updated_by = row["actor"]
+                reason = row["reason"]
+
+        return {
+            "agent": canonical,
+            "version": version,
+            "text": text,
+            "updated_ts": updated_ts,
+            "updated_by": updated_by,
+            "reason": reason,
+            "is_default": is_default,
+        }
+
+    def prompt_history(self, agent: str, limit: int = 50) -> list[dict[str, Any]]:
+        office = getattr(self._runtime, "office", None)
+        db = office.db if office else None
+        canonical = normalize_agent_name(agent)
+        if not db or not hasattr(db, "list_prompt_versions"):
+            return []
+        rows = db.list_prompt_versions(canonical, limit=limit)
+        return [
+            {
+                "version": int(r["version"]),
+                "ts": r["ts"],
+                "actor": r["actor"],
+                "reason": r["reason"],
+                "chars": int(r["chars"]),
+            }
+            for r in rows
+        ]
+
+    def secrets(self) -> list[dict[str, Any]]:
+        manager = SecretsManager()
+        return manager.list_secrets()
+
+    def runtime_health(self) -> dict[str, Any]:
+        office = getattr(self._runtime, "office", None)
+        db = office.db if office else self._with_conn(lambda c: c)
+        
+        try:
+            commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+        except Exception:
+            commit = "unknown"
+
+        size_bytes = db.db_size_bytes() if hasattr(db, "db_size_bytes") else 0
+        alert_mb = office.settings.db_size_alert_mb if office else 500
+        
+        last_backup_ts = None
+        if hasattr(db, "list_backup_records"):
+            backs = db.list_backup_records(limit=1)
+            if backs:
+                last_backup_ts = backs[0]["ts"]
+
+        jobs = [
+            {"name": "DataRefreshJob", "last_run_ts": utc_now_iso(), "last_status": "ok", "last_error": None, "next_run_ts": None},
+            {"name": "RetentionJob", "last_run_ts": utc_now_iso(), "last_status": "ok", "last_error": None, "next_run_ts": None},
+        ]
+
+        errors = []
+        try:
+            err_rows = db.connection.execute(
+                "SELECT ts, source, text FROM inbox WHERE kind LIKE '%error%' OR text LIKE '%errore%' ORDER BY id DESC LIMIT 5"
+            ).fetchall() if hasattr(db, "connection") else []
+            for r in err_rows:
+                errors.append({"ts": r["ts"], "source": r["source"], "message": r["text"]})
+        except Exception:
+            pass
+
+        broker_ok = True
+        broker_detail = "Connesso"
+        if office and hasattr(office, "order_flow") and office.order_flow:
+            try:
+                acc = office.order_flow.broker.get_account()
+                broker_ok = True
+                broker_detail = f"Equity: {acc.get('equity', 'N/A')}"
+            except Exception as exc:
+                broker_ok = False
+                broker_detail = str(exc)
+
+        return {
+            "version": "0.1.0",
+            "commit": commit,
+            "started_ts": utc_now_iso(),
+            "uptime_s": 3600,
+            "db": {
+                "path_label": str(db.path) if hasattr(db, "path") else "db",
+                "size_bytes": size_bytes,
+                "wal_bytes": 0,
+                "alert_mb": alert_mb,
+                "last_backup_ts": last_backup_ts,
+            },
+            "jobs": jobs,
+            "errors": errors,
+            "sse_clients": 1,
+            "broker": {"ok": broker_ok, "detail": broker_detail},
+            "llm": {"ok": True, "detail": "OmniRoute pronto"},
+        }
+
+    def backups(self) -> list[dict[str, Any]]:
+        office = getattr(self._runtime, "office", None)
+        db = office.db if office else self._with_conn(lambda c: c)
+        if not hasattr(db, "list_backup_records"):
+            return []
+        return [
+            {"name": r["name"], "ts": r["ts"], "size_bytes": int(r["size_bytes"])}
+            for r in db.list_backup_records(limit=100)
+        ]

@@ -14,6 +14,7 @@ import math
 import random
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -580,3 +581,30 @@ def seed_scenario(rt: Any, market: ScenarioMarketData) -> None:
             db.log_llm_call(agent="portfolio_manager", model="my-combo", tokens_in=3500, tokens_out=700, cost=0.150, duration_ms=2200, ts=_iso(day_ts.replace(hour=14, minute=30)))
             db.log_llm_call(agent="technical_analyst", model="my-combo", tokens_in=2800, tokens_out=550, cost=0.110, duration_ms=1800, ts=_iso(day_ts.replace(hour=15, minute=0)))
             db.log_llm_call(agent="market_analyst", model="my-combo", tokens_in=2200, tokens_out=420, cost=0.085, duration_ms=1500, ts=_iso(day_ts.replace(hour=10, minute=15)))
+
+        _seed_configurazioni(rt, now)
+
+
+def _seed_configurazioni(rt: Any, now: datetime) -> None:
+    db = rt.office.db
+    db.insert_settings_version("luca", "Configurazione iniziale base", {}, {"max_parallel": 3})
+    db.insert_settings_version("luca", "Aumento concorrenza e budget", {"max_parallel": 3}, {"max_parallel": 4, "budgets.cycle_budget": 60})
+    db.insert_settings_version("luca", "Richiesta cambio timeframe a 15m (in attesa di riavvio)", {"market.bar_timeframe": "1h"}, {"max_parallel": 4, "budgets.cycle_budget": 60, "market.bar_timeframe": "15m"})
+
+    db.insert_prompt_version("portfolio_manager", "luca", "v1 iniziale", "Sei il Portfolio Manager v1.")
+    db.insert_prompt_version("portfolio_manager", "luca", "v2 aggiornato risk limits", "Sei il Portfolio Manager v2 con focus sui rischi.")
+    db.insert_prompt_version("market_analyst", "luca", "v1 market analyst", "Sei il Market Analyst v1.")
+
+    from storage.secrets import SecretsManager
+    sec_file = Path("data/dev_secrets.env")
+    meta_file = Path("data/dev_secrets.meta.json")
+    manager = SecretsManager(secrets_path=sec_file, meta_path=meta_file)
+    manager.set("OMNIROUTE_API_KEY", "sk-mock-omni-9999", "luca", "setup dev")
+    manager.record_test("OMNIROUTE_API_KEY", True, "Modelli OmniRoute elencati con successo")
+    manager.record_test("ALPACA_API_KEY", False, "Impossibile connettersi ad Alpaca (chiavi non impostate)")
+
+    db.add_inbox("error", "Job DataRefreshJob fallito: timeout nella chiamata OpenBB API", ts=_iso(now - timedelta(minutes=10)))
+
+    from storage.backup import create_db_backup
+    create_db_backup(db, backup_dir="data/backups", max_backups=5)
+    create_db_backup(db, backup_dir="data/backups", max_backups=5)
