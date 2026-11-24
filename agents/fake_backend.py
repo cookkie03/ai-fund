@@ -144,11 +144,12 @@ class ScriptedBridgeBackend(AgentBackend):
         last_user_msg = next((m.content for m in reversed(chat_context) if m.role == "user"), "")
         lower = last_user_msg.lower()
 
-        # Post-execution commentary turn
-        has_post_execution = any(
-            "eseguita con successo" in m.content or "respinta" in m.content for m in chat_context
+        # Post-execution commentary turn (only immediately following the execution/rejection notice)
+        last_msg = chat_context[-1].content if chat_context else ""
+        is_post_execution_turn = (
+            "eseguita con successo" in last_msg or "respinta" in last_msg
         )
-        if has_post_execution:
+        if is_post_execution_turn:
             return StepResult(
                 content="Ho verificato l'aggiornamento a mercato. L'operazione è stata registrata regolarmente.",
                 done=True,
@@ -156,8 +157,12 @@ class ScriptedBridgeBackend(AgentBackend):
             )
 
         # Step 0: invoke tool
+        last_user_idx = max(
+            (i for i, m in enumerate(chat_context) if m.role == "user"), default=-1
+        )
         has_tool_result = any(
-            m.role == "system" and "Risultato tool" in m.content for m in chat_context
+            m.role == "system" and "Risultato tool" in m.content
+            for m in chat_context[last_user_idx + 1:]
         )
         if not has_tool_result:
             if "chiudi" in lower or "vendi" in lower or "close" in lower:

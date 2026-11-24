@@ -723,3 +723,50 @@ def test_bridge_actions_filter_by_conversation_and_limit(tmp_path):
     assert len(resp_cid2) == 1
     assert resp_cid2[0]["id"] == act3
 
+
+def test_scripted_bridge_backend_handles_user_followup_after_action_execution():
+    """TDD: verify that ScriptedBridgeBackend processes a new user message after an action execution turn."""
+    from agents.backend import AgentSpec, ChatMessage
+
+    backend = ScriptedBridgeBackend()
+    agent = AgentSpec(
+        name="bridge",
+        role="bridge",
+        endpoint="http://localhost:20128/v1",
+        model="my-combo",
+        effort="high",
+    )
+
+    # 1. Turn 1: user asks to close position -> tool call propose_action
+    ctx1 = [ChatMessage(role="user", content="Chiudi 5 azioni AAPL")]
+    res1 = backend.step(agent, ctx1, [])
+    assert len(res1.tool_calls) == 1
+    assert res1.tool_calls[0].name == "propose_action"
+
+    # 2. Turn 2: tool result returned -> assistant explains proposal
+    ctx2 = ctx1 + [
+        ChatMessage(role="assistant", content="Proposta preparata"),
+        ChatMessage(role="system", content="Risultato tool: ok"),
+    ]
+    res2 = backend.step(agent, ctx2, [])
+    assert res2.done is True
+
+    # 3. Post-execution turn (triggered by bridge_action_decide execution)
+    ctx3 = ctx2 + [
+        ChatMessage(role="system", content="Azione 'Chiudi 5 azioni AAPL' eseguita con successo."),
+    ]
+    res3 = backend.step(agent, ctx3, [])
+    assert "registrata regolarmente" in res3.content
+
+    # 4. Turn 4: user asks a NEW question in the same conversation
+    ctx4 = ctx3 + [
+        ChatMessage(role="assistant", content=res3.content),
+        ChatMessage(role="user", content="Mostrami la watchlist"),
+    ]
+    res4 = backend.step(agent, ctx4, [])
+    # MUST NOT return the post-execution commentary! Must invoke tool
+    assert res4.done is False
+    assert len(res4.tool_calls) == 1
+    assert res4.tool_calls[0].name == "add_watchlist"
+
+
