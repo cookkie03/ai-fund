@@ -1807,7 +1807,19 @@ class OfficeDB:
             row = self._connection.execute(
                 "SELECT * FROM bridge_actions WHERE id = ?", (action_id,)
             ).fetchone()
-            return dict(row) if row else None
+            if not row:
+                return None
+            a = dict(row)
+            if "payload_json" in a:
+                a["payload"] = json.loads(a["payload_json"]) if a.get("payload_json") else {}
+            if "preview_json" in a:
+                a["preview"] = json.loads(a["preview_json"]) if a.get("preview_json") else None
+            if "result_reasons_json" in a:
+                a["result_reasons"] = (
+                    json.loads(a["result_reasons_json"]) if a.get("result_reasons_json") else []
+                )
+            a["capital"] = bool(a["capital"])
+            return a
 
     def list_bridge_actions(
         self,

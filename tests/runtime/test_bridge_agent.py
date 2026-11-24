@@ -107,7 +107,6 @@ def test_parallel_conversations_isolated_and_queued_messages(tmp_path):
     assert msgs1_updated[-2]["text"] == "Secondo messaggio su c1"
 
 
-
 def test_message_agent_and_agent_relay_and_pm_task(tmp_path):
     db = OfficeDB(tmp_path / "bridge.db")
     office = build_test_office(db=db)
@@ -155,7 +154,6 @@ def test_message_agent_and_agent_relay_and_pm_task(tmp_path):
     )
     assert synthesis_msg is not None, "Bridge must synthesize response after agent_relay"
     assert synthesis_msg["kind"] == "text"
-
 
     # Also test message to PM creates Scheduled task
     res_pm = rt.execute(
@@ -384,7 +382,6 @@ def test_briefing_reading_and_marking_seen(tmp_path):
     assert b_no_budget["summary_text"] is None
 
 
-
 def test_bridge_http_endpoints_and_idempotency(tmp_path):
     db = OfficeDB(tmp_path / "bridge.db")
     office = build_test_office(db=db)
@@ -588,3 +585,88 @@ def test_bridge_replaces_provisional_title_after_first_turn(tmp_path):
     # The crisp title must reference the discussed topic/ticker rather than being cut off mid-word
     assert "AAPL" in updated_conv["title"] or "Portafoglio" in updated_conv["title"]
     assert not updated_conv["title"].endswith("portafog")
+
+
+def test_bridge_sse_event_shapes_conform_to_handoff_contract(tmp_path):
+    """Verify that all bridge SSE events conform exactly to the handoff contract shapes."""
+    db = OfficeDB(tmp_path / "bridge.db")
+    office = build_test_office(db=db)
+    rt = Runtime(office=office)
+
+    captured_events = []
+    rt.bus.add_listener(lambda ev: captured_events.append(ev))
+
+    seen_ts = "2026-11-24T00:00:00Z"
+    with db.transaction():
+        cid = db.create_bridge_conversation(title="Test SSE Contract")
+        db.append_bridge_message(
+            cid,
+            "luca",
+            "text",
+            "Messaggio di test evento",
+            context={"page": "terminale", "ticker": "AAPL"},
+            refs=[{"type": "ticker", "id": "AAPL", "label": "AAPL"}],
+        )
+        db.create_bridge_action(
+            conversation_id=cid,
+            command="close_position",
+            payload={"ticker": "AAPL", "qty": 5.0},
+            summary="Chiudi 5 AAPL",
+            capital=True,
+            status="pending",
+            preview={"ok": True, "reasons": [], "detail": {"dry_run": True}},
+        )
+        db.set_briefing_seen(seen_ts)
+
+    # 1. bridge.conversation: {conversation: {id, title, created_ts, updated_ts, status, archived}}
+    ev_conv = next(e for e in captured_events if e.type == "bridge.conversation")
+    conv_obj = ev_conv.payload["conversation"]
+    for field in ("id", "title", "created_ts", "updated_ts", "status", "archived"):
+        assert field in conv_obj, f"Missing field {field} in bridge.conversation payload"
+
+    # 2. bridge.message: {conversation_id, message: {id, conversation_id, author, kind, text, ts, context, refs, action}}
+    ev_msg = next(e for e in captured_events if e.type == "bridge.message")
+    assert ev_msg.payload["conversation_id"] == cid
+    msg_obj = ev_msg.payload["message"]
+    for field in (
+        "id",
+        "conversation_id",
+        "author",
+        "kind",
+        "text",
+        "ts",
+        "context",
+        "refs",
+        "action",
+    ):
+        assert field in msg_obj, f"Missing field {field} in bridge.message payload"
+    assert msg_obj["context"]["ticker"] == "AAPL"
+
+    # 3. bridge.action: {conversation_id, action: {id, command, summary, capital, status, preview, result_reasons, decided_ts, decided_by}}
+    ev_act = next(e for e in captured_events if e.type == "bridge.action")
+    assert ev_act.payload["conversation_id"] == cid
+    act_obj = ev_act.payload["action"]
+    for field in ("id", "command", "summary", "capital", "status", "preview", "result_reasons"):
+        assert field in act_obj, f"Missing field {field} in bridge.action payload"
+
+    # 4. briefing.updated: {since}
+    ev_brf = next(e for e in captured_events if e.type == "briefing.updated")
+    assert ev_brf.payload["since"] == seen_ts
+
+    # 5. tool.started and tool.finished emission for bridge tools
+    from tools.bridge_tools import build_bridge_tools
+
+    tools = build_bridge_tools(rt, conversation_id=cid)
+    port_tool = next(t for t in tools if t.name == "read_portfolio")
+    port_tool.fn()
+
+    ev_start = next(e for e in captured_events if e.type == "tool.started")
+    assert ev_start.payload["agent"] == "bridge"
+    assert ev_start.payload["tool"] == "read_portfolio"
+    assert ev_start.payload["conversation_id"] == cid
+
+    ev_finish = next(e for e in captured_events if e.type == "tool.finished")
+    assert ev_finish.payload["agent"] == "bridge"
+    assert ev_finish.payload["tool"] == "read_portfolio"
+    assert ev_finish.payload["conversation_id"] == cid
+    assert ev_finish.payload["success"] is True
