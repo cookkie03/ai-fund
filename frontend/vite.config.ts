@@ -44,5 +44,14 @@ export default defineConfig({
       },
     },
   },
-  preview: { host: "127.0.0.1", port },
+  preview: {
+    host: "127.0.0.1",
+    port,
+    proxy: {
+      "/v1": {
+        target: runtimeUrl,
+        changeOrigin: false,
+      },
+    },
+  },
 });
