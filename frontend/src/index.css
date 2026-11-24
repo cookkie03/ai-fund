@@ -19,11 +19,11 @@
   --line: oklch(0.26 0 0); /* clean neutral borders */
   --line-strong: oklch(0.34 0 0);
 
-  /* text: crisp grayscale hierarchy */
+  /* text: crisp grayscale hierarchy exceeding WCAG AA 4.5:1 contrast */
   --fg: oklch(0.96 0 0);
-  --fg-muted: oklch(0.72 0 0);
-  --fg-subtle: oklch(0.55 0 0);
-  --fg-faint: oklch(0.40 0 0); /* decorative only, never body text */
+  --fg-muted: oklch(0.78 0 0);
+  --fg-subtle: oklch(0.64 0 0);
+  --fg-faint: oklch(0.45 0 0); /* decorative only, never body text */
 
   /* accent + semantics: reserved exclusively for fundamental actions & market states */
   --accent-c: oklch(0.72 0.13 250);
