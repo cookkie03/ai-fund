@@ -381,3 +381,64 @@ def test_alpaca_news_pagination():
     assert items[1].headline == "Apple expands services"
 
 
+def test_rss_malformed_xml_raises(tmp_path, monkeypatch):
+    import httpx
+
+    from data.providers.rss_news import RSSNewsProvider
+
+    class MockResponse:
+        content = b"<not-valid-xml>>"
+        status_code = 200
+        def raise_for_status(self):
+            pass
+
+    class MockClient:
+        def __init__(self, *args, **kwargs):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+        def get(self, url):
+            return MockResponse()
+
+    monkeypatch.setattr(httpx, "Client", MockClient)
+    prov = RSSNewsProvider(url="https://example.com/malformed", name="Bad RSS")
+    with pytest.raises(ValueError, match="Invalid XML"):
+        prov.fetch_news()
+
+
+def test_news_usage_cited_and_forwarded(tmp_path):
+    db_path = tmp_path / "usage.db"
+    db = OfficeDB(db_path)
+    sid = db.add_news_source("rss", "Test", "https://example.com/rss")
+    nid = db.insert_news(
+        headline="Test News", summary=None, full_text=None, url="https://example.com/n1",
+        source_id=sid, source="Test", provider="rss", published_ts="2026-11-24T10:00:00Z", tickers=["AAPL"]
+    )
+    db.log_news_usage(news_id=nid, agent="portfolio_manager", kind="cited", note="Cited in dossier")
+    db.log_news_usage(news_id=nid, agent="portfolio_manager", kind="forwarded", chat_id=1, note="Forwarded note")
+
+    from runtime.queries import ReadModel
+    rm = ReadModel(db_path=db_path)
+    detail = rm.news_item_detail(nid)
+    assert detail["usage"]["citations"] == 1
+    assert detail["usage"]["forwards"] == 1
+    assert len(detail["usage_detail"]) == 2
+
+
+def test_sse_events_ingested_and_source(tmp_path):
+    db = OfficeDB(tmp_path / "sse_events.db")
+    rt = Runtime(office=build_test_office(db=db))
+    events = []
+    rt.bus.add_listener(events.append)
+    with db.transaction():
+        sid = db.add_news_source("rss", "SSE Source", "https://example.com/rss")
+        rt.event_log.append("news.source", f"source:{sid}", {"source": {"id": sid, "name": "SSE Source"}}, actor="scheduler")
+        rt.event_log.append("news.ingested", f"source:{sid}", {"source_id": sid, "count": 5}, actor="scheduler")
+    assert len(events) == 2
+    assert events[0].type == "news.source"
+    assert events[1].type == "news.ingested"
+
+
+

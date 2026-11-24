@@ -292,6 +292,71 @@ def seed_scenario(rt: Any, market: ScenarioMarketData) -> None:
     db = rt.office.db
     now = datetime.now(UTC)
 
+    # Seed 4-5 news sources
+    s1 = db.add_news_source("alpaca", "Alpaca News", "https://data.alpaca.markets/v1/news")
+    s2 = db.add_news_source("rss", "TechCrunch RSS", "https://techcrunch.com/feed/")
+    s3 = db.add_news_source("rss", "Macro RSS", "https://macro.example.com/rss")
+    db.update_news_source_status(s3, "error", "Connection timeout")
+    s4 = db.add_news_source("openbb", "OpenBB Terminal", None)
+    db.update_news_source_status(s4, "unavailable", "OpenBB not installed")
+
+    # Seed 75 news items across providers and tickers
+    tickers_pool = ["AAPL", "NVDA", "MSFT", "AMD", "LLY", "XOM", "JPM", "TSLA", "GOOGL", "META", "AMZN"]
+    themes_pool = ["technology", "macro", "earnings", "semiconductors", "energy"]
+    news_ids = []
+    for i in range(1, 76):
+        sym = tickers_pool[i % len(tickers_pool)]
+        theme = themes_pool[i % len(themes_pool)]
+        pub = now - timedelta(hours=i * 2)
+        nid = db.insert_news(
+            headline=f"Market briefing {i} for {sym}: sector outlook and catalysts",
+            summary=f"Summary for news item {i} regarding {sym}.",
+            full_text=f"Detailed full text analysis for news {i} covering {sym}.",
+            url=f"https://example.com/news/{i}",
+            source_id=s1 if i % 2 == 0 else s2,
+            source="Alpaca News" if i % 2 == 0 else "TechCrunch RSS",
+            provider="alpaca" if i % 2 == 0 else "rss",
+            published_ts=pub.isoformat().replace("+00:00", "Z"),
+            tickers=[sym],
+            themes=[theme],
+        )
+        news_ids.append(nid)
+
+    # Seed usage traces (read, cited, forwarded)
+    for idx, nid in enumerate(news_ids[:35]):
+        db.log_news_usage(news_id=nid, agent="sentiment_analyst", kind="read", cycle_id=1, chat_id=1)
+        if idx % 2 == 0:
+            db.log_news_usage(news_id=nid, agent="portfolio_manager", kind="cited", note=f"Cited in dossier {idx}")
+        if idx % 5 == 0:
+            db.log_news_usage(news_id=nid, agent="portfolio_manager", kind="forwarded", chat_id=1, note="Nota di Luca")
+
+    # Seed calendar week (macro & earnings)
+    for day_offset in range(-3, 5):
+        evt_dt = now + timedelta(days=day_offset)
+        db.insert_calendar_event(
+            kind="macro",
+            ts=evt_dt.replace(hour=14, minute=30, second=0, microsecond=0).isoformat().replace("+00:00", "Z"),
+            title=f"US Macro Economic Report (Day {day_offset})",
+            country="US",
+            importance="high" if day_offset == 0 else "medium",
+            actual=3.2 if day_offset < 0 else None,
+            forecast=3.1,
+            previous=3.0,
+            source="openbb",
+        )
+        sym = tickers_pool[day_offset % len(tickers_pool)]
+        db.insert_calendar_event(
+            kind="earnings",
+            ts=evt_dt.replace(hour=20, minute=0, second=0, microsecond=0).isoformat().replace("+00:00", "Z"),
+            title=f"Earnings Call: {sym}",
+            ticker=sym,
+            importance="high",
+            forecast=1.45,
+            actual=1.52 if day_offset < 0 else None,
+            source="openbb",
+        )
+
+
     def bars(sym: str, tf: str = "1h") -> list[dict[str, Any]]:
         return market.ohlcv(sym, interval=tf, limit=0)
 
