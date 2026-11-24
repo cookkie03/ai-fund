@@ -1,5 +1,5 @@
 import type { DrawingKind } from "lightweight-charts-drawing";
-import { ChartNoAxesCombined, Eye, FileText, EyeOff, Minus, MousePointer2, MoveUpRight, RectangleHorizontal, RotateCw, Rows3, Slash } from "lucide-react";
+import { ChartNoAxesCombined, Eye, FileText, EyeOff, Minus, MousePointer2, MoveUpRight, Newspaper, RectangleHorizontal, RotateCw, Rows3, Slash } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AuthorChip } from "@/components/author-chip";
@@ -230,6 +230,7 @@ export function ChartPanel({
       <div data-region="chart-toolbar" className={cn("flex shrink-0 items-center gap-2 overflow-x-auto px-4", compact ? "h-14" : "h-[68px]")}>
         <div className="mr-3 flex min-w-0 shrink-0 flex-col justify-center">
           {symbol ? (
+            <span className="flex items-center gap-1.5 self-start">
             <Link
               to={`/ticker/${symbol}`}
               data-role="symbol"
@@ -240,6 +241,20 @@ export function ChartPanel({
               <FileText className="size-3 opacity-60 group-hover/sym:opacity-100" strokeWidth={1.75} aria-hidden />
               <span className="sr-only">: apri la scheda</span>
             </Link>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  to={`/notizie?ticker=${symbol}`}
+                  data-role="news"
+                  aria-label={`Notizie su ${symbol}`}
+                  className="grid size-4 place-items-center rounded-tag text-fg-subtle outline-none hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/60"
+                >
+                  <Newspaper className="size-3" strokeWidth={1.75} aria-hidden />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent>Notizie su {symbol}</TooltipContent>
+            </Tooltip>
+            </span>
           ) : (
             <span data-role="symbol" className="text-[13px] font-semibold leading-4 tracking-[-0.005em] text-fg-muted">—</span>
           )}

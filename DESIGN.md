@@ -315,6 +315,30 @@ Horizontal rows by sector or position (segmented control), each a threshold-tick
 ### Capital dialogs
 Close or reduce, and stop/target edits, run a debounced dry run as the user types and show the Runtime's preview (quantity, price, value, realized PnL or new risk and R:R) and the Risk Gate's answer before the primary unlocks. A refusal shows the Gate's reasons verbatim in the dialog. Editing limits takes two steps: values (fractions typed as %, bounds checked) plus a required reason, then **Rivedi** shows before → after on the threshold tick with the status change, then **Conferma e applica**. History lists version, author, reason and each change. While the Runtime is unreachable or Halt is active every capital action is disabled and says why.
 
+### Notizie layout
+`/notizie` is the agents' own news archive, open to Luca. On the desk: a page header (Notizie, "Lo stesso archivio che leggono gli agenti", the Dati di esempio tag in dev, a freshness line "Dal vivo · Ultima notizia X fa", and a ghost **Fonti** trigger with a warn count of failing sources), then the **Flusso** tile (search, scope segmented Tutte / Portafoglio / Watchlist, filter menus Ticker, Tema, Fonte, Provider, each active one removable in place, Azzera) and the **Lettore** tile behind a gutter (420–860 px, default 580, remembered) with tabs Notizia | Calendario; the Calendario tab counts portfolio and watchlist events in the next 48 h. The reader always shows something: the newest item until Luca picks one. On the phone: Flusso / Calendario tabs, search plus a **Filtri** bottom sheet with chip groups, and the reader as a pushed page with a back control. `?ticker=SYM` opens the wire filtered; the ticker page header and the Terminale chart header link there (newspaper icon).
+
+### Wire row
+Time in tabular `fg-subtle`, headline in body weight (two lines max), then source · provider, ticker tags (holdings in `fg`, others muted) and the usage marks. Day headers stick (Oggi, Ieri, weekday and date). ↑/↓ and j/k move the selection. The list pages on scroll; newer items never push what Luca is reading: they wait behind a floating **N nuove notizie** button that reveals them at the top.
+
+### Usage mark
+Who used an item, as counts: book (letture), quote (citazioni), forward (inoltri) icons with a number, drawn only when non-zero; forwards take Luca's author colour because only Luca forwards. A live `news.used` event updates the counts in place.
+
+### Usage trace
+In the reader under the body: "Uso da parte degli agenti" with a counts line (letture, citazioni, inoltri, agenti, Italian plurals), then one row per use, newest first: author avatar, "X l'ha letta / citata / inoltrata a Y", age, and a link line to where it happened ("Ciclo N · chat #SYM" or "chat con Luca"). Forward rows carry Luca's note in quotes. Never used: "Nessun agente l'ha ancora letta".
+
+### Forward menu and news attachment
+**Inoltra** is the reader's one primary. It opens a popover: Agenti del ticker first (a ticker without its agent reads "SYM · al PM" and goes to the Portfolio Manager), then Ufficio. Choosing opens that agent's chat in Ufficio with the item attached to the composer: a chip with headline, source and time, and an X to drop it. The note is the message and is required; Invia sends `forward_news`. A refusal shows verbatim above the composer; a Runtime without the command says so and names `POST /v1/commands/forward_news`.
+
+### Body honesty
+Full text when the source gives it, otherwise the summary with "La fonte fornisce solo il sommario", or only the headline with "La fonte fornisce solo il titolo"; always a ghost "Apri su host" link (http and https only).
+
+### Calendar row
+Macro and earnings for the next 7 days, kind segmented Tutti / Macro / Trimestrali, grouped by day. A row: time, three 3×10 px importance bars (filled `fg-muted`, empty `hover`), event and country or ticker, and Attuale / Atteso / Prec. figures that wrap under the name on narrow tiles (container query). Events on holdings or the watchlist are lifted to `fg` with a briefcase or eye icon that has a title; past events recede.
+
+### Sources sheet
+A right sheet (bottom on the phone): one row per source with name, provider, a status word (Attiva, Errore with the error verbatim in warn, Disattivata, Non disponibile), last fetch age and item count; a Switch (item radius, never a pill), Aggiorna, and a two-step Rimuovi for RSS. **Aggiorna tutte** in the header. An add form for RSS/Atom (name + http(s) URL, checked before sending). Every command answers inline on its row.
+
 ## Do's and Don'ts
 
 ### Do:

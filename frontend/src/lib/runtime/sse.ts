@@ -79,6 +79,10 @@ export const EVENT_TYPES = [
   "annotation.created",
   "annotation.updated",
   "annotation.struck",
+  // News environment (notizie backend): ingestion, agent use, source state.
+  "news.ingested",
+  "news.used",
+  "news.source",
   "command.accepted",
   "command.rejected",
   "cycle.opened",
