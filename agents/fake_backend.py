@@ -88,6 +88,11 @@ class ScriptedBackend(AgentBackend):
                 raise KeyError(
                     f"ScriptedBackend: no scripted response for agent '{agent.name}' at turn {turn}"
                 )
+        elif isinstance(self.script, (list, tuple)):
+            if turn < len(self.script):
+                result = self.script[turn]
+            else:
+                result = StepResult(content="OK", done=True)
         else:
             raise TypeError(f"ScriptedBackend: unsupported script type {type(self.script)}")
 
@@ -140,11 +145,24 @@ class ScriptedBridgeBackend(AgentBackend):
         lower = last_user_msg.lower()
 
         # Step 0: invoke tool
-        has_tool_result = any(m.role == "system" and "Risultato tool" in m.content for m in chat_context)
+        has_tool_result = any(
+            m.role == "system" and "Risultato tool" in m.content for m in chat_context
+        )
         if not has_tool_result:
             if "chiudi" in lower or "vendi" in lower or "close" in lower:
                 target_ticker = "NVDA"
-                for sym in ("AAPL", "GOOGL", "META", "MSFT", "AMD", "JPM", "XOM", "LLY", "TSLA", "NVDA"):
+                for sym in (
+                    "AAPL",
+                    "GOOGL",
+                    "META",
+                    "MSFT",
+                    "AMD",
+                    "JPM",
+                    "XOM",
+                    "LLY",
+                    "TSLA",
+                    "NVDA",
+                ):
                     if sym.lower() in lower:
                         target_ticker = sym
                         break
@@ -201,7 +219,18 @@ class ScriptedBridgeBackend(AgentBackend):
         # Step 1: respond with content
         if "chiudi" in lower or "vendi" in lower or "close" in lower:
             target_ticker = "NVDA"
-            for sym in ("AAPL", "GOOGL", "META", "MSFT", "AMD", "JPM", "XOM", "LLY", "TSLA", "NVDA"):
+            for sym in (
+                "AAPL",
+                "GOOGL",
+                "META",
+                "MSFT",
+                "AMD",
+                "JPM",
+                "XOM",
+                "LLY",
+                "TSLA",
+                "NVDA",
+            ):
                 if sym.lower() in lower:
                     target_ticker = sym
                     break
@@ -224,4 +253,3 @@ class ScriptedBridgeBackend(AgentBackend):
             done=True,
             usage=Usage(prompt_tokens=300, completion_tokens=80, cost=0.015),
         )
-

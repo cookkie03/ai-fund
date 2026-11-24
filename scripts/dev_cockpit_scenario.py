@@ -1166,7 +1166,7 @@ def seed_scenario(rt: Any, market: ScenarioMarketData) -> None:
             tokens_out=380,
             cost=0.085,
             duration_ms=1450,
-            ts=_iso(now - timedelta(minutes=45)),
+            ts=_iso(now),
         )
         db.log_llm_call(
             agent="technical_analyst",
@@ -1175,7 +1175,7 @@ def seed_scenario(rt: Any, market: ScenarioMarketData) -> None:
             tokens_out=220,
             cost=0.045,
             duration_ms=980,
-            ts=_iso(now - timedelta(minutes=43)),
+            ts=_iso(now),
         )
         db.log_llm_call(
             agent="technical_analyst",
@@ -1184,7 +1184,7 @@ def seed_scenario(rt: Any, market: ScenarioMarketData) -> None:
             tokens_out=180,
             cost=0.035,
             duration_ms=820,
-            ts=_iso(now - timedelta(minutes=14)),
+            ts=_iso(now),
         )
         db.log_llm_call(
             agent="market_analyst",
@@ -1193,7 +1193,7 @@ def seed_scenario(rt: Any, market: ScenarioMarketData) -> None:
             tokens_out=310,
             cost=0.060,
             duration_ms=1120,
-            ts=_iso(now - timedelta(hours=2, minutes=26)),
+            ts=_iso(now),
         )
         db.log_llm_call(
             agent="risk_analyst",
@@ -1202,7 +1202,7 @@ def seed_scenario(rt: Any, market: ScenarioMarketData) -> None:
             tokens_out=150,
             cost=0.025,
             duration_ms=650,
-            ts=_iso(now - timedelta(hours=6, minutes=58)),
+            ts=_iso(now),
         )
 
         for d in range(1, 8):
