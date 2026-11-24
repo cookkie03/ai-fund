@@ -1,12 +1,10 @@
 """Tests for Notizie environment, ingestion, agent tools, usage tracking, and read endpoints."""
 
 from datetime import UTC, datetime
-
 import pytest
 from fastapi.testclient import TestClient
 
 from bootstrap import build_test_office
-from data.providers.openbb import OpenBBProvider
 from data.providers.rss_news import RSSItem, RSSNewsProvider
 from runtime.core import Runtime
 from runtime.http import create_app
@@ -37,9 +35,12 @@ def test_openbb_absent_unavailable_without_breaking_others(tmp_path):
     s_openbb = db.add_news_source("openbb", "OpenBB", None)
     s_rss = db.add_news_source("rss", "Valid RSS", "https://example.com/rss")
 
-    # Simulate OpenBB absent / failing
+    class MissingOpenBBProvider:
+        def get_news(self, *args, **kwargs):
+            raise RuntimeError("OpenBB is not installed; install the project's OpenBB extra to use OpenBBProvider")
+
     try:
-        prov = OpenBBProvider(client=None)
+        prov = MissingOpenBBProvider()
         prov.get_news()
     except Exception as exc:
         db.update_news_source_status(s_openbb, "unavailable", str(exc))
@@ -49,6 +50,7 @@ def test_openbb_absent_unavailable_without_breaking_others(tmp_path):
     rss_status = next(s for s in sources if s["id"] == s_rss)
 
     assert openbb_status["status"] == "unavailable"
+    assert "not installed" in openbb_status["last_error"]
     assert rss_status["status"] == "ok"
 
 
