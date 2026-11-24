@@ -35,3 +35,29 @@ Da decidere: se tenerli, unirli o scartarli. Non sono in `unify/main`.
 1. Revisione e PR `unify/main` -> `main` (nessun push diretto su `main`).
 2. Rendere `/home/luca/ai-fund` il repo principale. Oggi non è un repo git: contiene i worktree `public` e `shadcn-ui-migration`. Proposta: clone fresco dopo il merge su `main`, vecchia cartella rinominata `ai-fund.old`.
 3. Pulizia di worktree e rami vecchi, solo dopo la validazione.
+
+## Progetto: wiki locale -> GitHub Wiki
+
+Stato rilevato (`/home/luca/trading-agent-wiki`): vault Obsidian con `wiki/` (105 file `.md`, 1,6 MB) e `raw/` (363 file, 383 MB).
+Il repo `cookkie03/trading-agent-wiki` e il repo codice sono **pubblici**.
+
+### Regola di sicurezza (bloccante)
+La GitHub Wiki di un repo pubblico è pubblica. Quindi in Wiki va **solo `wiki/`**. Non va mai `raw/`:
+- contiene conversazioni personali, videochiamate, audio WhatsApp (`.opus`, `.m4a`) e note giornaliere;
+- pesa 383 MB (le wiki GitHub non sono pensate per questo).
+
+Nota: `raw/` oggi è già tracciato (298 file) nel repo pubblico `trading-agent-wiki`. Va valutato a parte se togliere quei file dalla storia pubblica. Non è parte di questa migrazione e non è stato toccato.
+`storage_state.json` (cookie Google) è sulla disco ma non tracciato: non copiarlo e aggiungerlo a `.gitignore`.
+
+### Struttura di destinazione
+- `Home.md`: da `wiki/overview.md`.
+- `_Sidebar.md`: una sezione per cartella (`system`, `strategy`, `prior-art`, `artifacts`, `syntheses`, `_meta`), con un link per pagina.
+- Pagine: **nomi file piatti** (la Wiki GitHub non ha cartelle). Prefisso per evitare collisioni, es. `system-agents-agents.md`. Esistono già nomi duplicati (es. `architecture.md`), quindi il prefisso è obbligatorio.
+- Link: `[[system/foundation/architecture]]` va riscritto come `[[system-foundation-architecture]]` (con script, mappa vecchio->nuovo percorso, report dei link rotti).
+- Media: solo i pochi file in `wiki/` che servono; vanno in `images/` nel repo wiki o committati nel repo codice e linkati. Frontmatter Obsidian e canvas/base: non supportati, da togliere o convertire.
+
+### Procedura
+1. Script in `scripts/wiki_to_github.py` (sola lettura su `trading-agent-wiki/wiki`, scrive in una cartella di output vuota).
+2. Il repo wiki si crea con la prima pagina dalla UI (poi `git clone https://github.com/cookkie03/trading-agent.wiki.git`); il nome del repo codice finale va deciso prima (vedi `ai-fund`).
+3. Controllo a secco: elenco link rotti e collisioni, nessun push.
+4. Push della Wiki solo dopo ok esplicito di Luca.
