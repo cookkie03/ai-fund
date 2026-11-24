@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import time
 import urllib.request
-import json
 from multiprocessing import Process
+
 import uvicorn
+
 from scripts.dev_cockpit_server import create_dev_app
 
 
