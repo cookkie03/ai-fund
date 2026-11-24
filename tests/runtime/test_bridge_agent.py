@@ -102,6 +102,10 @@ def test_parallel_conversations_isolated_and_queued_messages(tmp_path):
 
     msgs1_updated = rt.office.db.list_bridge_messages(c1)
     assert len(msgs1_updated) >= 4
+    assert msgs1_updated[-1]["author"] == "bridge"
+    assert msgs1_updated[-2]["author"] == "luca"
+    assert msgs1_updated[-2]["text"] == "Secondo messaggio su c1"
+
 
 
 def test_message_agent_and_agent_relay_and_pm_task(tmp_path):
@@ -145,6 +149,13 @@ def test_message_agent_and_agent_relay_and_pm_task(tmp_path):
     relay_msg = next((m for m in bridge_msgs if m["kind"] == "agent_relay"), None)
     assert relay_msg is not None
     assert relay_msg["author"] == "technical_analyst"
+    # Verify that the relay triggered an automatic synthesis turn from Bridge
+    synthesis_msg = next(
+        (m for m in bridge_msgs if m["author"] == "bridge" and m["id"] > relay_msg["id"]), None
+    )
+    assert synthesis_msg is not None, "Bridge must synthesize response after agent_relay"
+    assert synthesis_msg["kind"] == "text"
+
 
     # Also test message to PM creates Scheduled task
     res_pm = rt.execute(
