@@ -1,0 +1,48 @@
+services:
+  engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.engine
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TRADING_AGENT_DB: /app/data/trading-agent.db
+      TRADING_AGENT_ACCOUNT_LABEL: ${TRADING_AGENT_ACCOUNT_LABEL:-default}
+      OFFICE_LLM_ENDPOINT: ${OFFICE_LLM_ENDPOINT:-http://omniroute:20128/v1}
+    ports:
+      - "127.0.0.1:8765:8765"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    volumes:
+      - trading-agent-data:/app/data
+    networks:
+      - default
+      - omniroute
+    restart: unless-stopped
+
+  cockpit:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "${COCKPIT_PUBLIC_PORT:-3000}:80"
+    depends_on:
+      engine:
+        condition: service_healthy
+    networks:
+      - default
+    restart: unless-stopped
+
+networks:
+  default:
+  omniroute:
+    name: omniroute_default
+    external: true
+
+volumes:
+  trading-agent-data:
