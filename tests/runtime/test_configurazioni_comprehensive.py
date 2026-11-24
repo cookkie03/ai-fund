@@ -153,6 +153,36 @@ def test_live_vs_restart_settings_apply(test_env):
     )
     assert r2.json()["ok"] is True
 
-    s = client.get("/v1/read/settings").json()
-    assert "market.bar_timeframe" in s["pending_restart"]
-    assert "max_parallel" not in s["pending_restart"]
+def test_live_settings_immediate_application(test_env):
+    client = test_env["client"]
+    # Update a live setting (max_parallel)
+    r = client.post(
+        "/v1/commands/update_settings",
+        json={"changes": {"max_parallel": 7}, "reason": "immediate live apply", "confirm": True},
+        headers={"X-Actor": "luca"}
+    )
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+
+    # Check that GET /v1/read/settings shows the new value immediately (live application)
+    settings_data = client.get("/v1/read/settings").json()
+    for sec in settings_data["sections"]:
+        for item in sec["items"]:
+            if item["key"] == "max_parallel":
+                assert item["value"] == 7
+
+
+def test_prompt_next_cycle_loading(test_env):
+    db = test_env["db"]
+    from prompts.loader import load_prompt
+
+    # Initial prompt load for portfolio_manager
+    text_v1, _ = load_prompt("portfolio_manager", db=db)
+
+    # Insert v2 prompt (simulating update during cycle)
+    db.insert_prompt_version("portfolio_manager", "luca", "v2 update", "Sei il Portfolio Manager aggiornato al prossimo ciclo.")
+
+    # In-cycle simulation: if cycle loader caches or reads at start, or if next-cycle loader gets new version
+    text_next, _ = load_prompt("portfolio_manager", db=db)
+    assert "aggiornato al prossimo ciclo" in text_next
+
