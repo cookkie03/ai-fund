@@ -45,6 +45,9 @@ export const AGENTS: Record<string, Omit<Author, "id" | "kind">> = {
 
 export const AGENT_IDS = Object.keys(AGENTS).filter((a) => a !== "subagent");
 
+/** The Bridge agent: Luca's peer in the office, outside the trading team (not in AGENT_IDS). */
+export const BRIDGE: Author = { id: "bridge", kind: "agent", name: "Bridge", short: "Bridge", initials: "BR", color: "var(--author-bridge)" };
+
 export const LUCA: Author = { id: "luca", kind: "human", name: "Luca", short: "Luca", initials: "LM", color: "var(--author-luca)", channel: "cockpit" };
 
 export function author(actor: string | null | undefined): Author {
@@ -54,6 +57,7 @@ export function author(actor: string | null | undefined): Author {
   }
   const id = (actor ?? "").trim().toLowerCase();
   if (id in HUMAN_CHANNELS) return { ...LUCA, channel: HUMAN_CHANNELS[id] };
+  if (id === "bridge") return BRIDGE;
   const agent = AGENTS[id];
   if (agent) return { id, kind: "agent", ...agent };
   const label = id ? id.replace(/[-_]/g, " ") : "sconosciuto";

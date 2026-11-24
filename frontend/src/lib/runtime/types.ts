@@ -181,7 +181,13 @@ export type CommandName =
   | "add_news_source"
   | "set_news_source_enabled"
   | "remove_news_source"
-  | "refresh_news";
+  | "refresh_news"
+  | "bridge_say"
+  | "bridge_rename_conversation"
+  | "bridge_archive_conversation"
+  | "bridge_stop"
+  | "bridge_action_decide"
+  | "mark_briefing_seen";
 
 export type CommandPayloads = {
   enqueue_task: { agent: string; ticker: string; reason: string; when_ts?: string };
@@ -219,4 +225,17 @@ export type CommandPayloads = {
   set_news_source_enabled: { source_id: number; enabled: boolean };
   remove_news_source: { source_id: number };
   refresh_news: { source_id: number | null };
+  // Bridge agent (.scratch/assistente/handoff-backend.md, binding contract).
+  /** `conversation_id: null` opens a new conversation; data: {conversation_id, message_id}. */
+  bridge_say: {
+    conversation_id: number | null;
+    text: string;
+    context: { page: string; ticker: string | null; ref: { type: string; id: string } | null } | null;
+  };
+  bridge_rename_conversation: { conversation_id: number; title: string };
+  bridge_archive_conversation: { conversation_id: number; archived: boolean };
+  bridge_stop: { conversation_id: number };
+  /** `confirm` must be true for "confirm": the Runtime reruns the original command from its own handler. */
+  bridge_action_decide: { action_id: number; decision: "confirm" | "dismiss"; confirm: boolean };
+  mark_briefing_seen: { ts: string };
 };

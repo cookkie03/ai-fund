@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
+import { List, Receipt, UsersRound } from "lucide-react";
+import { CollapsedRail } from "@/components/collapsed-rail";
 import { Gutter } from "@/components/gutter";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -7,7 +9,7 @@ import type { ChartDrawing } from "@/features/chart/chart-state";
 import { orderBucket } from "@/lib/orders";
 import { useOrders, useWatchlist } from "@/lib/runtime/hooks";
 import { useMediaQuery } from "@/lib/use-media-query";
-import { PANEL_LIMITS, useShell } from "@/shell/shell-state";
+import { PANEL_LIMITS, PANEL_SHORTCUT, useShell } from "@/shell/shell-state";
 import { ActivityPanel } from "./activity-panel";
 import { ChartPanel } from "./chart-panel";
 import { OrdersDock } from "./orders-dock";
@@ -141,6 +143,7 @@ export function TerminalPage() {
           />
         </>
       )}
+      {!open.left && <CollapsedRail side="left" label="Watchlist" icon={List} shortcut={PANEL_SHORTCUT.left} onOpen={() => setPanelOpen("left", true)} className="mr-2.5" />}
       <div data-region="stage" className="flex min-w-0 flex-1 flex-col">
         <div data-region="upper" className="flex min-h-0 flex-1">
           <ChartPanel symbol={selected} focusDrawing={focus} onDrawings={onDrawings} className="overflow-hidden rounded-tile" />
@@ -159,6 +162,7 @@ export function TerminalPage() {
               {activity({ onCollapse: () => setPanelOpen("right", false), className: "tile-enter-right shrink-0 overflow-hidden rounded-tile", style: { width: size.right } })}
             </>
           )}
+          {!open.right && <CollapsedRail side="right" label="Attività" icon={UsersRound} shortcut={PANEL_SHORTCUT.right} onOpen={() => setPanelOpen("right", true)} className="ml-2.5" />}
         </div>
         {open.bottom && (
           <>
@@ -180,6 +184,17 @@ export function TerminalPage() {
               style={{ height: size.bottom }}
             />
           </>
+        )}
+        {!open.bottom && (
+          <CollapsedRail
+            side="bottom"
+            label="Ordini"
+            icon={Receipt}
+            shortcut={PANEL_SHORTCUT.bottom}
+            onOpen={() => setPanelOpen("bottom", true)}
+            className="mt-2.5"
+            badge={pendingCount > 0 ? <span className="num rounded-tag bg-warn-soft px-1.5 text-[10px] font-medium leading-4 text-warn">{pendingCount} da approvare</span> : undefined}
+          />
         )}
       </div>
     </div>

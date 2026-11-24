@@ -10,6 +10,7 @@ import { fmtPrice, fmtQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Bones, fmtFrac, fmtMoney, SourceNote, statusFor, StatusWord, tone } from "./parts";
 import { AskLinks, CloseDialog, ExitDialog, RowActions, useCapitalBlock, type ActionKind } from "./position-actions";
+import { usePageRef } from "@/features/bridge/state";
 
 type SortKey = "ticker" | "market_value" | "weight" | "unrealized_pnl" | "unrealized_pnl_fraction" | "open_risk" | "days_held";
 
@@ -260,6 +261,9 @@ export function PositionsPanel({
   const [action, setAction] = useState<{ kind: ActionKind; p: PortfolioPosition } | null>(null);
   const [detail, setDetail] = useState<PortfolioPosition | null>(null);
   const rows = q.data && q.data.source !== "unavailable" ? q.data.data : [];
+  // The open position is the side Bridge's context: "riduci questa di metà" needs no ticker.
+  const focus = detail ?? action?.p ?? null;
+  usePageRef(focus ? { type: "position", id: focus.ticker, ticker: focus.ticker } : null);
   const onAction = (kind: ActionKind, p: PortfolioPosition) => {
     setDetail(null);
     setAction({ kind, p });

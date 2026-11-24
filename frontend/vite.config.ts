@@ -2,6 +2,7 @@ import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { assistantFixtures } from "./dev/assistant-fixtures.ts";
 import { newsFixtures } from "./dev/news-fixtures.ts";
 import { officeFixtures } from "./dev/office-fixtures.ts";
 import { portfolioFixtures } from "./dev/portfolio-fixtures.ts";
@@ -17,8 +18,11 @@ export default defineConfig({
   // COCKPIT_PORTFOLIO_FIXTURES=1: the same for the Portafoglio reads and commands (contract in handoff-backend-portafoglio.md).
   // COCKPIT_NEWS_FIXTURES=1: the news reads, commands and a synthetic news.* stream (contract in .scratch/notizie/handoff-backend.md).
   // COCKPIT_TICKER_FIXTURES=1 (or =dense, 40 tickers): synthetic ticker agents, dossiers and proposals (dev server only).
+  // COCKPIT_ASSISTANT_FIXTURES=1 (or empty, slow, nobudget; combinable with commas): the Bridge's reads, commands
+  // and a turn's SSE events, contract in .scratch/assistente/handoff-backend.md (dev server only).
   plugins: [
     react(),
+    ...(process.env.COCKPIT_ASSISTANT_FIXTURES ? [assistantFixtures(runtimeUrl, process.env.COCKPIT_ASSISTANT_FIXTURES)] : []),
     tailwindcss(),
     ...(process.env.COCKPIT_TICKER_FIXTURES ? [tickerFixtures(runtimeUrl, process.env.COCKPIT_TICKER_FIXTURES)] : []),
     ...(process.env.COCKPIT_OFFICE_FIXTURES === "1" ? [officeFixtures()] : []),
@@ -32,6 +36,7 @@ export default defineConfig({
     "import.meta.env.VITE_PORTFOLIO_FIXTURES": JSON.stringify(process.env.COCKPIT_PORTFOLIO_FIXTURES === "1" ? "1" : ""),
     "import.meta.env.VITE_SETTINGS_FIXTURES": JSON.stringify(process.env.COCKPIT_SETTINGS_FIXTURES && !process.argv.includes("build") ? "1" : ""),
     "import.meta.env.VITE_NEWS_FIXTURES": JSON.stringify(process.env.COCKPIT_NEWS_FIXTURES === "1" ? "1" : ""),
+    "import.meta.env.VITE_ASSISTANT_FIXTURES": JSON.stringify(process.env.COCKPIT_ASSISTANT_FIXTURES ? "1" : ""),
   },
   resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
   server: {

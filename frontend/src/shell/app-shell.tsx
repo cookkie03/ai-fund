@@ -4,6 +4,7 @@ import { tileTransition } from "@/lib/motion";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useLocation } from "react-router-dom";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { fmtAge } from "@/lib/format";
@@ -73,6 +74,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { bridgeOpen, setBridgeOpen, halted } = useShell();
   const wide = useMediaQuery("(min-width: 1280px)");
   const down = !connection.booting && !connection.reachable;
+  // The Assistente is the Bridge at full size: the side panel would only duplicate it.
+  const { pathname } = useLocation();
+  const onAssistente = pathname === "/" || pathname.startsWith("/assistente");
 
   return (
     <SidebarProvider defaultOpen={false}>
@@ -94,7 +98,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </main>
           <BottomNav />
         </SidebarInset>
-        {wide ? (
+        {onAssistente ? null : wide ? (
           <AnimatePresence>
             {bridgeOpen && (
               <motion.div

@@ -81,6 +81,11 @@ function keysFor(type: string): string[][] {
   if (type === "prompt.updated") return [["cfg", "prompt"], ["cfg", "agents"]];
   if (type === "secret.updated") return [["cfg", "secrets"], ["cfg", "health"]];
   if (type === "health.changed") return [["cfg", "health"], ["cfg", "backups"]];
+  if (type === "bridge.message") return [["bridge", "conversation"], ["bridge", "conversations"]];
+  if (type === "bridge.action") return [["bridge", "conversation"], ["bridge", "conversations"], ["bridge", "actions"]];
+  if (type === "bridge.conversation") return [["bridge", "conversations"], ["bridge", "conversation"]];
+  if (type === "bridge.status") return [["bridge", "conversations"]];
+  if (type === "briefing.updated") return [["bridge", "briefing"]];
   return [];
 }
 

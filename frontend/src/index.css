@@ -48,6 +48,8 @@
   --author-risk: oklch(0.74 0.08 270);
   --author-system: oklch(0.70 0 0);
   --author-ticker: oklch(0.82 0.01 240);
+  /* The Bridge: Luca's peer, outside the trading team; mint, clear of market lime and technical cyan. */
+  --author-bridge: oklch(0.82 0.08 168);
 
   /* radius scale (concentric: an element inset by N px inside a parent uses parent radius minus N) */
   --radius: 0.5rem; /* shadcn base = control */
