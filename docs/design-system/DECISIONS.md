@@ -225,9 +225,12 @@ One design canvas for the whole product: a page per app section plus a Shell pag
 
 ## 11. Page design log — Decisions (in progress)
 
+Open, for the Agents page: where scheduled tasks, the task queue and analysis cycles live (not in Decisions).
+
 | # | Decision |
 | --- | --- |
 | D1 | Job: the hub of every decision — decide what waits for Luca and find every decision taken, with its outcome. Later versions grow it into the self-evaluation page (trades, decisions, agents); not designed now |
+| D2 | Needs you filters: **To approve** (orders the PM accepted and the risk gate passed, waiting for Luca's ok), **Waiting for PM** (proposals; Luca can decide in the PM's place), **To confirm** (Assistant actions). **Alerts are not decisions**: they live in notifications (bell), where the full list, severity filters and Mark as read are; an alert that blocks a decision (e.g. risk gate block) also shows on that proposal in Decisions as its reason. Home's Needs you keeps showing everything; its Alerts tab leads to notifications |
 | D3 | Hero: "N waiting for you · oldest X", with two weekly context figures (decisions taken, approved vs rejected) |
 | D4 | Opens on Needs you when something waits, otherwise on History |
 | D5 | History holds real decisions only, never alerts |
