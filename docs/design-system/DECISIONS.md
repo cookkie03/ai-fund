@@ -273,3 +273,15 @@ Open, for the Agents page: where scheduled tasks, the task queue and analysis cy
 | # | Decision (draft, to be grilled) |
 | --- | --- |
 | A0 | Shared block `AssistantPanel`: the right panel on desktop (mirror of the left sidebar, on the sidebar surface, resizable), a full-height bottom sheet on phone, and the body of the Assistant page. It keeps everything today's side Bridge does: conversation switcher (new, recent with running turn and actions to confirm), open in the Assistant page, page context attached to messages and removable, `@agent` to have the Assistant write to an agent, tool lines, replies relayed from agents, action cards to confirm (rerun by the Runtime with every check; disabled under Halt or when the Runtime is unreachable), references that open where they live, Not sent with Retry, Stop the turn, fallback when the Assistant endpoints are missing |
+| A1 | Resizable by dragging its edge, 320–560 px, default 384, remembered per user |
+| A2 | From 1280 px up the page narrows; below 1280 px the panel floats over the page. The left sidebar never collapses by itself. The panel keeps the same 8 px edges as the main page: header aligned with the top bar, composer with the page's bottom edge |
+| A3 | Closed the first time, then remembers its last state; ⌘J toggles it |
+| A4 | The context follows the page automatically and is removable; on Portfolio and Decisions it is the selected row (position or proposal) |
+| A5 | "Ask the Assistant" and "Agent chat" open this panel with the right context and a prefilled draft (the question, or `@<instrument>-agent`): there is no second chat |
+| A6 | An action to confirm is one object shown in the chat, Home › Needs you and Decisions › To confirm; confirming in one place updates the others |
+| A7 | While the panel is closed, a live dot on the right toggle shows the Assistant is working; an action to confirm also raises a notification |
+| A8 | The switcher lists the last 8 conversations (ScrollArea) and "All conversations", which opens the Assistant page |
+| A9 | Tools used show as one Trace line per turn that opens to every call with its parameters and time |
+| A10 | Assistant page `/assistant`: conversations on the left (search, All · To confirm · Archived, grouped by day) and the same `AssistantPanel` full width with a centred column; the right toggle is hidden there |
+| A11 | Phone: the same block as a full-height bottom sheet from the Assistant icon in the top bar |
+| A12 | Built strictly from the DS primitives: MessageScroller, Message, Bubble, Trace, Attachment, InputGroup + InputGroupTextarea, Kbd, Popover + ScrollArea (model), NavigationMenu (effort), Button, Badge, Card. Model and effort are chosen per conversation in the composer and shown in each reply's footer |
