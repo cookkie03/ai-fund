@@ -285,3 +285,69 @@ Open, for the Agents page: where scheduled tasks, the task queue and analysis cy
 | A10 | Assistant page `/assistant`: conversations on the left (search, All · To confirm · Archived, grouped by day) and the same `AssistantPanel` full width with a centred column; the right toggle is hidden there |
 | A11 | Phone: the same block as a full-height bottom sheet from the Assistant icon in the top bar |
 | A12 | Built strictly from the DS primitives: MessageScroller, Message, Bubble, Trace, Attachment, InputGroup + InputGroupTextarea, Kbd, Popover + ScrollArea (model), NavigationMenu (effort), Button, Badge, Card. Model and effort are chosen per conversation in the composer and shown in each reply's footer |
+
+## 15. Page design log — Markets (draft 1: recommended answers applied, waiting for Luca)
+
+| # | Question → recommendation applied |
+| --- | --- |
+| M1 | Job → a workspace to scan the watchlist and read any chart with the agents' marks; everything about one instrument stays on Instrument (Open instrument) |
+| M2 | Watchlist → shared with the agents (their universe); row: symbol, name, price, change, Held, flag (Proposal, Blocked); who added it and why on hover; adding asks for the reason |
+| M3 | Chart → the same `TVChart` as Instrument; timeframes 15m · 1H · 1D · 1W; indicators EMA 20, SMA 50, RSI 14, MACD, ATR 14 in a popover |
+| M4 | Author filter → moves from the chart toolbar to the Drawings tab: each author's drawings grouped, Hide/Show per author, Focus per level |
+| M5 | Right column → Drawings · Activity (Running now, last 5 events, link to the instrument Timeline) |
+| M6 | Orders dock → Open · Pending · Filled · Trades with counts, scope this instrument / All (default All). Markets is where the full order list lives. A pending order only shows Decide, which opens the same Decide dialog as Decisions |
+| M7 | Order entry → no manual ticket: the PM drafts every order; Luca acts through Decide, Sell and Modify exits |
+| M8 | Freshness → "Not real-time · 15 min" badge next to the price when the data are delayed |
+| M9 | Layout → watchlist 272 · chart · right column 296, resizable and remembered; when the Assistant panel is open the right column folds away below 1600 px |
+| M10 | Phone → watchlist as horizontal chips, chart, tabs Drawings · Orders · Activity; Markets sits under More |
+
+## 16. Page design log — Agents (draft 1)
+
+| # | Question → recommendation applied |
+| --- | --- |
+| AG1 | Tabs → Team · Queue · Costs |
+| AG2 | Header → status counts (Working, Waiting, Idle, Errors) and cost against budget; the period (Today · 7D · 30D) drives the whole page |
+| AG3 | Team → core cards (PM, Risk Manager, Market Analyst, Assistant) and an instrument desks table (status, now doing, specialists with status dots, next, cost). No tree: the sections carry the hierarchy |
+| AG4 | Queue → the app-level home of queues and tasks: Running now cards and one Queued table (when, agent, task, created by, status) with source filters (Agents, Rules, Schedule, Luca), Run now / Cancel. Per instrument the same tasks show in the Timeline future and on the agent page |
+| AG5 | Costs → cost per day against the daily budget (days over it in warning), tokens, share by agent |
+| AG6 | Errors → Error status on the desk row and in the counts; it leads to the agent's Tool calls filtered on errors |
+| AG7 | Phone → list of agents with status and cost, same three tabs |
+
+## 17. Page design log — Agent detail (draft 1)
+
+| # | Question → recommendation applied |
+| --- | --- |
+| AD1 | Header → avatar with status, name, role and reporting line; Open NVDA, Message (opens the Assistant panel with `@agent`), Assign task, settings gear → Settings › Agents |
+| AD2 | Meters → cost today against budget, tokens in/out, model calls and failures, queue with the next time |
+| AD3 | Tabs → Activity · Conversations · Tool calls · Costs |
+| AD4 | Activity → Running now (steps, messages received while running, Stop), Recent tasks (Delivered, Failed, Merged), Specialists, Queue, Proposals to the PM |
+| AD5 | Conversations → read-only history of what the agent received and sent; writing goes through the Assistant (no second chat, A5) |
+| AD6 | Tool calls → live list, All / Errors, each call opens to its input and output |
+| AD7 | Assign task → dialog: what, when (next in queue, now, at a time), repeat; it joins the agent's queue |
+| AD8 | Core agents use the same page; the PM shows the proposals in its queue instead of specialists |
+
+## 18. Page design log — News (draft 1)
+
+| # | Question → recommendation applied |
+| --- | --- |
+| N1 | Tabs → Feed · Calendar · Sources |
+| N2 | Feed → list beside a reader; scope All · Portfolio · Watchlist · Macro, search, ticker, source, period; live, and "N new" never moves what is being read |
+| N3 | Row → source, time, relevance (High in warning), title, tickers, which agent used it |
+| N4 | Reader actions → Send to an agent (with a note, weighed like a colleague's opinion), Ask the Assistant, Create alert (news rule), Open original |
+| N5 | "How the agents used it" in the reader |
+| N6 | Calendar → next 7 days, earnings and macro, expected / previous / actual, filters, portfolio only |
+| N7 | Sources → providers and RSS feeds with status, Refresh now, Add RSS feed, Test / Disable; news sources live here, not in Settings |
+| N8 | Phone → the list; a story opens in a bottom sheet |
+
+## 19. Page design log — Settings (draft 1)
+
+| # | Question → recommendation applied |
+| --- | --- |
+| ST1 | Sections → Agents · Providers and keys · Accounts · Market and schedules · Alert rules · Notifications · Data and storage · Runtime health; "Lives on its page" links to Risk limits, News sources, Watchlist, Costs |
+| ST2 | Agents → agent list; Model (model, endpoint, effort, daily budget) and Prompt (active version, versions, new version with diff) |
+| ST3 | Changes → collected in a draft bar with one required reason; Review and apply shows before → after; changes that touch capital ask for explicit confirmation |
+| ST4 | Keys → write-only; Test and Replace; a missing key in warning |
+| ST5 | Accounts → named by Luca; order approval per account (Luca approves every order, or automatic within limits) |
+| ST6 | Notifications → per severity Bell / Bell + phone / Off, quiet hours |
+| ST7 | Runtime health → status tiles, recent errors, jobs; a badge on the section when something is wrong |
+| ST8 | Phone → the section list; each section opens full screen |
