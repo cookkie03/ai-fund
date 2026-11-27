@@ -125,6 +125,7 @@ Button use: `default` only for the one committing action (Approve, Send, Confirm
 | Rimanda · Rifiuta · Decidi · Annulla | Postpone · Reject · Decide · Cancel |
 | Accetta · Chiedi | Accept · Ask |
 | Decidi al posto del PM | Decide for the Portfolio Manager |
+| Approvazioni / Decisioni | Decisions |
 | Ordini · Attività · Portafoglio · Ufficio · Terminale · Notizie · Configurazioni · Assistente | Orders · Activity · Portfolio · Agents · Markets · News · Settings · Assistant |
 | Scheda del ticker | Instrument |
 | Dati vecchi · Connessione… · Runtime irraggiungibile · Fermo da 2 min | Stale data · Connecting… · Runtime unreachable · Stopped for 2 min |
@@ -204,3 +205,17 @@ One design canvas for the whole product: a page per app section plus a Shell pag
 | Q27 | Empty fund: starting value with a gray 0.00%, "Not enough history" instead of the curve, Empty "Nothing needs you — agents will ask here when they propose a trade", Empty "No activity yet" |
 | Q28 | Loading: a Skeleton shaped like each section, freshness "Connecting…", no full-page spinner |
 | Q18 | Superseded: no "Today" page. The design canvas shows a live draft of the page being designed, updated after every round, so Luca can comment on its parts; the local dev server on Luca's machine gives the real-time current app |
+
+## 10. Page design log — Portfolio (in progress)
+
+| # | Decision |
+| --- | --- |
+| F1 | Job: what we own and how it performs |
+| F2 | Hero: Total value (same as Home) with a thin Invested / Cash bar |
+| F3 | One strip of five figures: Invested %, Cash (reserve min), Positions n/max, Realized today, Open risk. Unrealized P&L moves to the Positions table total |
+| F4/G3 | Tabs: **Positions** (default) · **Performance** · **Risk**. No Activity tab: the equity curve and allocation move inside Performance and Risk |
+| F5 | Positions shows 7 columns: Instrument, Qty, Last (native + USD), Value, Weight, P&L, Risk to stop. Sector, Avg price, Stop, Target, Days, Proposed by live on the Instrument page |
+| F6 | A row opens the **Instrument** page (the one place for everything about an instrument, investment state included); a ⋯ menu on the row holds Sell, Modify stop, Open instrument, Decision history. No side Sheet |
+| F7/F8 | Sell / Modify stop confirmation and Edit limits dialogs: postponed until drawn |
+| G1/G2 | The Approvals page becomes **Decisions**: tabs Needs you (the full Home list) and History (every decision by Luca, PM, risk gate, Assistant, with who, what, why and the outcome: order working, filled, cancelled, trade closed). Sidebar label "Decisions" with the count of what waits for Luca |
+| G4 | Performance is the summary and navigation of portfolio performance (curve with SPY and drawdown, metrics, attribution, closed trades); every trade there has a "Decision history" button that lands on Decisions › History for that position. The detail lives only in Decisions |
