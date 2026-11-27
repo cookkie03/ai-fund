@@ -249,4 +249,6 @@ Open, for the Agents page: where scheduled tasks, the task queue and analysis cy
 | I5 | Signatures filter (show/hide each author's analyses and drawings) sits on the Analysis and Chart tabs — to be judged on the draft |
 | I6 | History: Decisions (filtered, "Open in Decisions"), Lessons, Versions |
 | I7 | Header links: Agent chat (instrument agent's page, Chat tab), News (filtered); no Portfolio link |
+| I9 | The investment state is **written by the specialist agents**: each section holds the agent's **full analysis** (figures, reasoning, invalidation, sources), not a snippet; the PM writes the synthesis on top. Shared block `AgentAnalysis` |
+| I10 | The TradingView chart (styling untouched) shows drawings by any agent **and by Luca**, streamed in real time and signed by author; Luca can draw too. The chart should be more central. Shared block `TVChart`. Four layout directions (A chart first, B dossier, C split view, D live feed) drawn for Luca to choose from |
 | I8 | **One page for every instrument class**: the template knows every field (equity: sector, industry, market cap, P/E, dividend yield, next earnings; bond: issuer, coupon, maturity, YTM, duration, rating, price % of par) and shows only the fields that have a value — no empty fields |
