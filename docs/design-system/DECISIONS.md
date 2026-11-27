@@ -186,6 +186,7 @@ The agent Luca talks to and its page are both called **Assistant** everywhere in
 | Q23 | Market clock shows one market ("NYSE · Open · 10:32 ET"); its Popover lists the other markets and switches between them |
 | Q24 | Hero curve: no axes or grid, `chart-4`, ~120 px, hover tooltip with date and value, 1D · 1W · 1M as small buttons right of the figure |
 | Q20 | Assistant actions to confirm sit in "Needs you" (Briefing card), first: the action in words, Cancel and Confirm, an AlertDialog for capital actions |
+| Q25 | Trading halted: destructive Alert with Resume trading; Approve disabled with the tooltip "Trading halted"; Decide stays enabled (Postpone and Reject send no order), only Accept is disabled inside it |
 | Q26 | Runtime unreachable: Alert with Retry now; last known values with "Last known · 4 min ago"; every command disabled with the tooltip "Runtime unreachable", navigation only |
 | Q27 | Empty fund: starting value with a gray 0.00%, "Not enough history" instead of the curve, Empty "Nothing needs you — agents will ask here when they propose a trade", Empty "No activity yet" |
 | Q28 | Loading: a Skeleton shaped like each section, freshness "Connecting…", no full-page spinner |
