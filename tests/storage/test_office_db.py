@@ -360,3 +360,44 @@ def test_office_db_validation_and_direct_logging(db: OfficeDB) -> None:
 
     cmd_id = db.log_cli_command(command="halt", args={"scope": "all"})
     assert cmd_id > 0
+
+
+def test_concurrent_writers_never_leak_lastrowid_across_threads(db: OfficeDB) -> None:
+    """Regressione #41: l'id restituito da un insert non deve essere quello di un altro thread.
+
+    La connessione SQLite è condivisa tra thread (il BridgeRunner scrive in background);
+    senza serializzazione `cursor.lastrowid` può riportare il rowid di un insert concorrente.
+    Il thread di disturbo inserisce in `llm_calls` (rowid crescenti, distinti dagli id azione).
+    """
+    import threading
+
+    conv_id = db.create_bridge_conversation(title="race")
+    stop = threading.Event()
+
+    def noise() -> None:
+        while not stop.is_set():
+            db.log_llm_call(
+                agent="bridge",
+                model="m",
+                tokens_in=1,
+                tokens_out=1,
+                cost=0.0,
+                duration_ms=1,
+            )
+
+    worker = threading.Thread(target=noise, daemon=True)
+    worker.start()
+    try:
+        ids = [
+            db.create_bridge_action(
+                conversation_id=conv_id, command="halt", payload={}, summary=f"a{i}"
+            )
+            for i in range(1500)
+        ]
+    finally:
+        stop.set()
+        worker.join(timeout=5)
+
+    assert len(set(ids)) == len(ids), "create_bridge_action ha restituito id duplicati"
+    for i, action_id in enumerate(ids):
+        assert db.get_bridge_action(action_id)["summary"] == f"a{i}"

@@ -639,8 +639,30 @@ class OfficeDB:
         self._tx_depth = 0
         self.event_log: Any = None
         self.on_bridge_relay: Callable[[int], None] | None = None
+        # Connessione condivisa tra thread (runtime, BridgeRunner, scheduler): ogni execute
+        # passa dallo stesso RLock di transaction(), altrimenti `cursor.lastrowid` può
+        # riportare il rowid di un insert concorrente e un writer può finire dentro la
+        # transazione di un altro thread (#41).
+        db_lock = self._lock
+
+        class _SerializedConnection(sqlite3.Connection):
+            def execute(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
+                with db_lock:
+                    return super().execute(*args, **kwargs)
+
+            def executemany(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
+                with db_lock:
+                    return super().executemany(*args, **kwargs)
+
+            def executescript(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
+                with db_lock:
+                    return super().executescript(*args, **kwargs)
+
         self._connection = sqlite3.connect(
-            str(self.path), isolation_level=None, check_same_thread=False
+            str(self.path),
+            isolation_level=None,
+            check_same_thread=False,
+            factory=_SerializedConnection,
         )
         self._connection.row_factory = sqlite3.Row
         self._connection.execute("PRAGMA journal_mode = WAL")
