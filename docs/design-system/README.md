@@ -5,7 +5,7 @@ A complete dashboard for an AI-run investment fund with one human, Luca, who sup
 ## Principles
 
 - **One job per page.** Every page answers one question first (How is the fund doing? What needs my approval? What does this agent do?). Its hero figure or list leads; everything else is secondary.
-- **Progressive disclosure.** Detail opens on demand: a `Sheet` beside a list, `Tabs` inside an object, a `Dialog` for a task, a `Popover` for a definition. Never show all panels at once.
+- **Progressive disclosure.** Detail opens on demand: a `Sheet` beside a list, `Tabs` inside an object, a `Dialog` for a task, a `Popover` for a definition or a quick action (switch, open a link, edit in place, accept). Never show all panels at once.
 - **One card = one object or one question.** Group with `Card` and a `CardTitle`; if two things need different titles, they are two cards.
 - **Distinguishable by shape, not by colour.** Views (charts, tables, lists), objects (instrument, order, agent) and features (approve, halt, edit limits) each have their own component, so the eye can tell them apart in grays.
 - **Signed marks.** Every order, message, analysis and drawing shows its author with `AgentAvatar`.
@@ -48,6 +48,7 @@ Inter Variable, tabular numerals for figures.
 ## Layout
 
 - **Shell:** `AppShell` — `AppSidebar` in the **inset** variant (collapsible to icons) and a `SidebarInset` that starts with `TopBar`: sidebar toggle, breadcrumb, instrument search (⌘K), `FreshnessBadge`, Bridge, notifications, `HaltButton`.
+- **Accounts:** one account = one broker account, named by Luca. The software never knows whether it is paper or live and never shows that as a state; the sidebar header shows the account name with the account switcher.
 - **Navigation:** Home · Portfolio · Approvals (count) · Agents · Markets · News · Assistant, Settings in the footer, Luca's avatar menu (theme, settings). **Home** is the landing page.
 - **Bridge:** its own Assistant page for long conversations, and the same chat in a right `Sheet` from the top bar on every page.
 - **Pages:** `PageHeader` → hero (`HeroBalance` or three to four `StatCard`s) → cards in a 12-column grid with `gap-6` (`space-section`) and `p-6` page padding.
