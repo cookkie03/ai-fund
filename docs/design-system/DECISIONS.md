@@ -223,7 +223,7 @@ One design canvas for the whole product: a page per app section plus a Shell pag
 | G1/G2 | The Approvals page becomes **Decisions**: tabs Needs you (the full Home list) and History (every decision by Luca, PM, risk gate, Assistant, with who, what, why and the outcome: order working, filled, cancelled, trade closed). Sidebar label "Decisions" with the count of what waits for Luca |
 | G4 | Performance is the summary and navigation of portfolio performance (curve with SPY and drawdown, metrics, attribution, closed trades); every trade there has a "Decision history" button that lands on Decisions › History for that position. The detail lives only in Decisions |
 
-## 11. Page design log — Decisions (in progress)
+## 11. Page design log — Decisions (desktop and phone validated by Luca on 2026-11-27)
 
 Open, for the Agents page: where scheduled tasks, the task queue and analysis cycles live (not in Decisions).
 
