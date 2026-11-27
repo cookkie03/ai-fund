@@ -238,7 +238,7 @@ Open, for the Agents page: where scheduled tasks, the task queue and analysis cy
 | D7 | History rows: who decided (avatar), what (Approved, Rejected, Postponed, Asked, Confirmed), instrument, one-line reason, outcome (Working, Filled, Cancelled, Closed +$…), time; grouped by day, newest first; filters by decider, outcome, instrument, date; search |
 | D8 | Approve and Decide in outline on rows; the filled primary only inside the Decide dialog or the Sheet when confirming |
 
-## 12. Page design log — Instrument (in progress)
+## 12. Page design log — Instrument (v0.2 accepted by Luca on 2026-11-27, moving on)
 
 | # | Decision |
 | --- | --- |
@@ -259,3 +259,17 @@ Open, for the Agents page: where scheduled tasks, the task queue and analysis cy
 | O5/O9 | **Timeline** tab replaces History: a navigable time strip (shapes by type, Now line) over a precise event list split at Now — future: scheduled tasks, market events, order expiries, armed alerts; past: decisions, orders and fills (highlighted), analyses, versions, lessons, alerts fired, tasks delivered/merged/failed. Filters by type and source, search. Scheduled tasks come from agents, deterministic rules (move over a threshold, high-relevance news), periodic jobs, bar close, market events |
 | O6 | Luca manages **all alerts**: create, edit, pause, remove rules (price, % move, news relevance, volume, indicator → notify and/or schedule an analysis, cooldown, expiry) in a shared `AlertsDialog`. Scheduled tasks are a queue per agent: one analysis runs at a time; an alert that fires meanwhile is delivered to the running analysis as a message. What runs now (the analysis and the messages it received) is a **Running now** box in Overview, hidden when idle; queued tasks live only in the future part of the Timeline (status Queued / Retry n of m, Run now / Cancel / Edit time). The Timeline has one list |
 | I8 | **One page for every instrument class**: the template knows every field (equity: sector, industry, market cap, P/E, dividend yield, next earnings; bond: issuer, coupon, maturity, YTM, duration, rating, price % of par) and shows only the fields that have a value — no empty fields |
+| O11 | Every Overview box can be **reordered by press and drag**, desktop and phone; the order is saved per user, with "Reset layout" |
+
+## 13. Shell additions from the Instrument review (2026-11-27)
+
+| # | Decision |
+| --- | --- |
+| S1 | The bell opens a **Notifications popover**: unread count on the bell, severity filters (All · Critical · Review · Info), each item with severity, where (instrument or area), time, detail, quick actions (Open in Decisions, Open NVDA, Open Risk, Open timeline) and Mark read; Mark all read; empty state "You're all caught up."; footer links Alert rules and View all |
+| S2 | The Assistant is no longer a chat icon in the middle of the top bar: a **panel-right toggle at the far right corner** opens and collapses the **Assistant panel**, mirroring the left sidebar toggle |
+
+## 14. Page design log — Assistant panel (in progress)
+
+| # | Decision (draft, to be grilled) |
+| --- | --- |
+| A0 | Shared block `AssistantPanel`: the right panel on desktop (mirror of the left sidebar, on the sidebar surface, resizable), a full-height bottom sheet on phone, and the body of the Assistant page. It keeps everything today's side Bridge does: conversation switcher (new, recent with running turn and actions to confirm), open in the Assistant page, page context attached to messages and removable, `@agent` to have the Assistant write to an agent, tool lines, replies relayed from agents, action cards to confirm (rerun by the Runtime with every check; disabled under Halt or when the Runtime is unreachable), references that open where they live, Not sent with Retry, Stop the turn, fallback when the Assistant endpoints are missing |
