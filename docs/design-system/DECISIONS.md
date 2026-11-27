@@ -222,3 +222,15 @@ One design canvas for the whole product: a page per app section plus a Shell pag
 | F9 | One **page-level period bar** (SPY toggle + 1D · 1W · 1M · 3M · YTD · 1Y · All) next to the title drives both the hero change and everything in Performance (curve, range, return, SPY, drawdown, axis, metrics period) |
 | G1/G2 | The Approvals page becomes **Decisions**: tabs Needs you (the full Home list) and History (every decision by Luca, PM, risk gate, Assistant, with who, what, why and the outcome: order working, filled, cancelled, trade closed). Sidebar label "Decisions" with the count of what waits for Luca |
 | G4 | Performance is the summary and navigation of portfolio performance (curve with SPY and drawdown, metrics, attribution, closed trades); every trade there has a "Decision history" button that lands on Decisions › History for that position. The detail lives only in Decisions |
+
+## 11. Page design log — Decisions (in progress)
+
+| # | Decision |
+| --- | --- |
+| D1 | Job: the hub of every decision — decide what waits for Luca and find every decision taken, with its outcome. Later versions grow it into the self-evaluation page (trades, decisions, agents); not designed now |
+| D3 | Hero: "N waiting for you · oldest X", with two weekly context figures (decisions taken, approved vs rejected) |
+| D4 | Opens on Needs you when something waits, otherwise on History |
+| D5 | History holds real decisions only, never alerts |
+| D6 | A row (Needs you or History) opens a side **Sheet**: the proposal in short (one-line thesis, entry/stop/target, risk gate verdict, signing agents), the lifecycle proposal → decision (who, what, why) → order → fill → close with P&L, and the actions when pending; Open instrument link. The decision record and its lifecycle are **persisted in the database** (backend) |
+| D7 | History rows: who decided (avatar), what (Approved, Rejected, Postponed, Asked, Confirmed), instrument, one-line reason, outcome (Working, Filled, Cancelled, Closed +$…), time; grouped by day, newest first; filters by decider, outcome, instrument, date; search |
+| D8 | Approve and Decide in outline on rows; the filled primary only inside the Decide dialog or the Sheet when confirming |
