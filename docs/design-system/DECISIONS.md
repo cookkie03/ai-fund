@@ -153,6 +153,10 @@ In the Claude Design project on the codebase: draw every page of §3 ex ante —
 - **The software does not know or care whether an account is paper or live.** Backend and frontend carry no paper/live flag and never show "Live" or "Paper" as a system state. Luca names his accounts (e.g. "Alpaca · Paper") to tell them apart; the UI shows that name only.
 - Consequence for the design system: `AppSidebar` drops `mode: "Live" | "Paper"`; its header shows the account switcher with the account name (Q10). "Live" in `FreshnessBadge` means live **data**, not a live account.
 
+## 8b. Popovers are quick-action surfaces (settled 2026-11-27)
+
+A `Popover` is not only a definition: it is where quick actions live — a selectable list to switch (markets, accounts), buttons that open a link, edit a value in place or accept something. Anything that needs a reason, a preview or a capital decision still opens a `Dialog`.
+
 ## 9. Page design log — Home (in progress, grilling with Luca)
 
 | # | Decision |
@@ -170,4 +174,11 @@ In the Claude Design project on the codebase: draw every page of §3 ex ante —
 | Q13 | Oldest proposals first, same order as Approvals |
 | Q15 | StatCards: Unrealized P&L, Cash vs reserve (LimitBar), Open risk (LimitBar + Within/Near/Over); positions n/max, realized today and invested stay in Portfolio |
 | Q17 | Backend to add: aggregate `open_risk` in `portfolio_summary` and a unified activity route. No paper/live field (§8) |
+| Q12 | On Home, Approve is `outline` like Decide; the filled `default` Approve stays on the Approvals page (one primary in view). Needs a ProposalCard prop (proposal for `src/ds`) |
+| Q14 | Sections under the hero: StatCards · Needs you · Activity. Agents at work becomes an avatar row with status in the Activity header; a HoverCard shows each agent's current task; link to Agents |
+| Q19 | Needs you, top to bottom: counts as badges (to approve, waiting for PM, alerts, agent errors, filled today) → the 3 proposals → up to 3 briefing items by severity (Ask the Bridge, Mark as read) → View all |
+| Q21 | Severities: Critical (destructive), Review (warning), Info (gray); always icon + word |
+| Q22 | Today's "System" panel (trading on/halted, freshness, account, broker stream, last update, next task, database) opens as a Popover from `FreshnessBadge`; halt stays the Alert under the top bar |
+| Q23 | Market clock shows one market ("NYSE · Open · 10:32 ET"); its Popover lists the other markets and switches between them |
+| Q24 | Hero curve: no axes or grid, `chart-4`, ~120 px, hover tooltip with date and value, 1D · 1W · 1M as small buttons right of the figure |
 | Q18 | A "Today" page in the design canvas (captures + inventory of each current page) **and** the local dev server on Luca's machine for real time |

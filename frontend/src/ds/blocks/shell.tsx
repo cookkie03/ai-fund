@@ -26,7 +26,11 @@ export const NAV: { id: Section; label: string; icon: typeof HomeIcon }[] = [
 ]
 
 /** The app's navigation: shadcn Sidebar, inset variant, collapsible to icons. */
-export function AppSidebar({ active = "home", approvals = 0, mode = "Live", ...props }: React.ComponentProps<typeof Sidebar> & { active?: Section; approvals?: number; mode?: "Live" | "Paper" }) {
+/**
+ * `account` is the name Luca gave the broker account (e.g. "Alpaca · Paper").
+ * The software never knows whether an account is paper or live (DECISIONS §8): it only shows the name.
+ */
+export function AppSidebar({ active = "home", approvals = 0, account, ...props }: React.ComponentProps<typeof Sidebar> & { active?: Section; approvals?: number; account: string }) {
   return (
     <Sidebar variant="inset" collapsible="icon" {...props}>
       <SidebarHeader>
@@ -34,7 +38,7 @@ export function AppSidebar({ active = "home", approvals = 0, mode = "Live", ...p
           <SidebarMenuItem>
             <SidebarMenuButton size="lg">
               <AfMark className="size-8" />
-              <span className="flex flex-col leading-tight"><span className="font-semibold">AI Fund</span><span className="text-xs text-muted-foreground">{mode} account</span></span>
+              <span className="flex flex-col leading-tight"><span className="font-semibold">AI Fund</span><span className="truncate text-xs text-muted-foreground">{account}</span></span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

@@ -5,7 +5,7 @@ A complete dashboard for an AI-run investment fund with one human, Luca, who sup
 ## Principles
 
 - **One job per page.** Every page answers one question first (How is the fund doing? What needs my approval? What does this agent do?). Its hero figure or list leads; everything else is secondary.
-- **Progressive disclosure.** Detail opens on demand: a `Sheet` beside a list, `Tabs` inside an object, a `Dialog` for a task, a `Popover` for a definition. Never show all panels at once.
+- **Progressive disclosure.** Detail opens on demand: a `Sheet` beside a list, `Tabs` inside an object, a `Dialog` for a task, a `Popover` for a definition or a quick action (switch, open a link, edit in place, accept). Never show all panels at once.
 - **One card = one object or one question.** Group with `Card` and a `CardTitle`; if two things need different titles, they are two cards.
 - **Distinguishable by shape, not by colour.** Views (charts, tables, lists), objects (instrument, order, agent) and features (approve, halt, edit limits) each have their own component, so the eye can tell them apart in grays.
 - **Signed marks.** Every order, message, analysis and drawing shows its author with `AgentAvatar`.
