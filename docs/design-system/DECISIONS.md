@@ -43,6 +43,7 @@ Every decision the UI needs, settled with Luca. The only step left before buildi
 | Runtime unreachable | Freshness turns red, capital actions disabled with tooltip | `FreshnessBadge`, `Tooltip` |
 | Assistant | Assistant page **and** the same chat in a right `Sheet` from the top bar | `ChatThread`, `Composer`, `Sheet` |
 | Scrolling | Only the page content scrolls (and the components inside it that scroll on their own). The sidebar and the top bar stay fixed; on phone the top bar and the bottom tabs stay fixed | `AppShell`, `SidebarInset` |
+| Phone overlays | Every Dialog and Popover becomes a **bottom sheet** (Drawer): handle, title, content, full-width stacked buttons (primary first, Cancel last), 44 px targets, 16 px inputs. The freshness badge opens the System sheet (trading, runtime, account, broker stream, last update, next task, database, market switcher, Reconnect, Runtime health). Row quick actions open an actions sheet (⋯) | `Drawer`, `SystemSheet` (proposed) |
 | Phone | Bottom tabs Home · Portfolio · Approvals · Agents · More; details in a bottom `Drawer` | `MobileTabBar`, `Drawer` |
 
 ## 3. Pages — what each one holds
