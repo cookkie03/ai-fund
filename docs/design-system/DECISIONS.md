@@ -34,7 +34,7 @@ Every decision the UI needs, settled with Luca. The only step left before buildi
 | Frame | Sidebar **inset** variant, collapsible to icons | `AppShell`, `AppSidebar` |
 | Navigation | Home · Portfolio · Approvals (count) · Agents · Markets · News · Assistant; Settings + avatar menu in the footer | `AppSidebar` |
 | Landing page | **Home** | §3.1 |
-| Sidebar header | `AfMark` + "AI Fund" + Live / Paper account | `AppSidebar` |
+| Sidebar header | `AfMark` + "AI Fund" + the account switcher showing the **account name Luca chose** (see §8 Accounts) | `AppSidebar` |
 | Top bar | Trigger · breadcrumb · search (⌘K → Combobox) · freshness · Bridge · notifications · Halt | `TopBar` |
 | Freshness | Dot + word + age, always visible | `FreshnessBadge` |
 | Halt | Destructive button → AlertDialog; halted = destructive `Alert` under the top bar, Resume trading | `HaltButton`, `Alert` |
@@ -146,3 +146,28 @@ Button use: `default` only for the one committing action (Approve, Send, Confirm
 ## 7. Next step
 
 In the Claude Design project on the codebase: draw every page of §3 ex ante — desktop and phone, light and dark — from these blocks; then move the `ds/` folder into the frontend and build the pages as compositions.
+
+## 8. Accounts (settled 2026-11-27)
+
+- One account = one broker account. Creating it means choosing the broker (Alpaca, IBKR, …), the endpoint URL under Advanced (paper or live URL) and the credentials.
+- **The software does not know or care whether an account is paper or live.** Backend and frontend carry no paper/live flag and never show "Live" or "Paper" as a system state. Luca names his accounts (e.g. "Alpaca · Paper") to tell them apart; the UI shows that name only.
+- Consequence for the design system: `AppSidebar` drops `mode: "Live" | "Paper"`; its header shows the account switcher with the account name (Q10). "Live" in `FreshnessBadge` means live **data**, not a live account.
+
+## 9. Page design log — Home (in progress, grilling with Luca)
+
+| # | Decision |
+| --- | --- |
+| Q1 | `/` opens Home; Assistant moves to `/assistant` and stays in the Bridge Sheet |
+| Q2 | Job: how the fund is doing. What needs Luca is the next section, not a second job |
+| Q3/Q11 | Hero: **Total value** (positions at market value + cash, base USD, any instrument class), Popover on the label with the definition |
+| Q4 | The 3 oldest proposals with Approve and Decide, plus "View all" to Approvals |
+| Q5/Q16 | A small curve under the hero with a minimal built-in selector 1D · 1W · 1M (default 1D); the change under the figure follows the period. Full chart stays in Portfolio |
+| Q6 | Hero + at most 3 sections; everything else behind a link, Sheet or Popover |
+| Q7 | Desktop 1440 first, phone derived |
+| Q8 | Sample figures with a "Sample data" badge in drawings only; real data after wiring |
+| Q9 | Today's Briefing becomes the Home section "Needs you" (counts, items by severity, Ask the Bridge, Mark as read) and holds the 3 proposals; a compact Briefing stays as the opening of an empty Assistant chat |
+| Q10 | Account switcher in the sidebar header; market clock beside freshness in the top bar; no equity figure in the top bar |
+| Q13 | Oldest proposals first, same order as Approvals |
+| Q15 | StatCards: Unrealized P&L, Cash vs reserve (LimitBar), Open risk (LimitBar + Within/Near/Over); positions n/max, realized today and invested stay in Portfolio |
+| Q17 | Backend to add: aggregate `open_risk` in `portfolio_summary` and a unified activity route. No paper/live field (§8) |
+| Q18 | A "Today" page in the design canvas (captures + inventory of each current page) **and** the local dev server on Luca's machine for real time |
