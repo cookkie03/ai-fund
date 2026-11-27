@@ -35,13 +35,15 @@ Every decision the UI needs, settled with Luca. The only step left before buildi
 | Navigation | Home · Portfolio · Approvals (count) · Agents · Markets · News · Assistant; Settings + avatar menu in the footer | `AppSidebar` |
 | Landing page | **Home** | §3.1 |
 | Sidebar header | `AfMark` + "AI Fund" + the account switcher showing the **account name Luca chose** (see §8 Accounts) | `AppSidebar` |
-| Top bar | Trigger · breadcrumb · search (⌘K → Combobox) · freshness · Bridge · notifications · Halt | `TopBar` |
+| Top bar | Trigger · breadcrumb · search (⌘K → Combobox) · freshness · market clock · Assistant · notifications · Halt | `TopBar` |
 | Freshness | Dot + word + age, always visible | `FreshnessBadge` |
 | Halt | Destructive button → AlertDialog; halted = destructive `Alert` under the top bar, Resume trading | `HaltButton`, `Alert` |
 | Notifications | Popover with `Item` rows: approvals needed, orders filled, limits near/over, runtime state | `TopBar` |
 | Toasts | Order filled, approval needed, data stale, runtime back | `Toaster` |
 | Runtime unreachable | Freshness turns red, capital actions disabled with tooltip | `FreshnessBadge`, `Tooltip` |
-| Bridge | Assistant page **and** the same chat in a right `Sheet` from the top bar | `ChatThread`, `Composer`, `Sheet` |
+| Assistant | Assistant page **and** the same chat in a right `Sheet` from the top bar | `ChatThread`, `Composer`, `Sheet` |
+| Scrolling | Only the page content scrolls (and the components inside it that scroll on their own). The sidebar and the top bar stay fixed; on phone the top bar and the bottom tabs stay fixed | `AppShell`, `SidebarInset` |
+| Phone overlays | Every Dialog and Popover becomes a **bottom sheet** (Drawer): handle, title, content, full-width stacked buttons (primary first, Cancel last), 44 px targets, 16 px inputs. The freshness badge opens the System sheet (trading, runtime, account, broker stream, last update, next task, database, market switcher, Reconnect, Runtime health). Row quick actions open an actions sheet (⋯) | `Drawer`, `SystemSheet` (proposed) |
 | Phone | Bottom tabs Home · Portfolio · Approvals · Agents · More; details in a bottom `Drawer` | `MobileTabBar`, `Drawer` |
 
 ## 3. Pages — what each one holds
@@ -79,8 +81,8 @@ Each page: one job, one hero, cards in order, detail on demand, one primary acti
 - Agent detail: header (`AgentAvatar` lg + status + meters) and `Tabs` **Chat** (`ChatThread`, `Composer`, `Marker` day labels) · **Tool calls** (`ToolCallRow` list, All / Errors filter, freshness) · **Costs**.
 
 ### 3.7 Assistant
-- Job: talk to the Bridge, which can use the same commands as the UI.
-- `ChatThread` + `Composer` full height; commands the Bridge runs show as `Trace` lines with inline confirmations (`AlertDialog` for capital actions).
+- Job: talk to the Assistant, which can use the same commands as the UI.
+- `ChatThread` + `Composer` full height; commands the Assistant runs show as `Trace` lines with inline confirmations (`AlertDialog` for capital actions).
 
 ### 3.8 News
 - Job: read, filter and send news to agents.
@@ -124,6 +126,7 @@ Button use: `default` only for the one committing action (Approve, Send, Confirm
 | Rimanda · Rifiuta · Decidi · Annulla | Postpone · Reject · Decide · Cancel |
 | Accetta · Chiedi | Accept · Ask |
 | Decidi al posto del PM | Decide for the Portfolio Manager |
+| Approvazioni / Decisioni | Decisions |
 | Ordini · Attività · Portafoglio · Ufficio · Terminale · Notizie · Configurazioni · Assistente | Orders · Activity · Portfolio · Agents · Markets · News · Settings · Assistant |
 | Scheda del ticker | Instrument |
 | Dati vecchi · Connessione… · Runtime irraggiungibile · Fermo da 2 min | Stale data · Connecting… · Runtime unreachable · Stopped for 2 min |
@@ -157,11 +160,19 @@ In the Claude Design project on the codebase: draw every page of §3 ex ante —
 
 A `Popover` is not only a definition: it is where quick actions live — a selectable list to switch (markets, accounts), buttons that open a link, edit a value in place or accept something. Anything that needs a reason, a preview or a capital decision still opens a `Dialog`.
 
-## 9. Page design log — Home (in progress, grilling with Luca)
+## 8c. "Assistant", never "Bridge" (settled 2026-11-27)
+
+The agent Luca talks to and its page are both called **Assistant** everywhere in the UI and the docs. "Bridge" is retired as a name (backend identifiers still carry it until they are renamed).
+
+## 8d. How the pages are drawn (settled 2026-11-27)
+
+One design canvas for the whole product: a page per app section plus a Shell page of shared components (AppSidebar, TopBar, MobileTopBar, MobileTabBar) that every artboard imports. One artboard per screen, desktop 1440 and phone 390 side by side, interactive, with Tweaks for theme and state. Sidebar and tab links join the artboards into one clickable prototype. Home is the template for the other pages.
+
+## 9. Page design log — Home (desktop and phone validated by Luca on 2026-11-27)
 
 | # | Decision |
 | --- | --- |
-| Q1 | `/` opens Home; Assistant moves to `/assistant` and stays in the Bridge Sheet |
+| Q1 | `/` opens Home; Assistant moves to `/assistant` and stays in the Assistant Sheet |
 | Q2 | Job: how the fund is doing. What needs Luca is the next section, not a second job |
 | Q3/Q11 | Hero: **Total value** (positions at market value + cash, base USD, any instrument class), Popover on the label with the definition |
 | Q4 | The 3 oldest proposals with Approve and Decide, plus "View all" to Approvals |
@@ -169,16 +180,174 @@ A `Popover` is not only a definition: it is where quick actions live — a selec
 | Q6 | Hero + at most 3 sections; everything else behind a link, Sheet or Popover |
 | Q7 | Desktop 1440 first, phone derived |
 | Q8 | Sample figures with a "Sample data" badge in drawings only; real data after wiring |
-| Q9 | Today's Briefing becomes the Home section "Needs you" (counts, items by severity, Ask the Bridge, Mark as read) and holds the 3 proposals; a compact Briefing stays as the opening of an empty Assistant chat |
+| Q9 | Today's Briefing becomes the Home section "Needs you" (counts, items by severity, Ask the Assistant, Mark as read) and holds the 3 proposals; a compact Briefing stays as the opening of an empty Assistant chat |
 | Q10 | Account switcher in the sidebar header; market clock beside freshness in the top bar; no equity figure in the top bar |
 | Q13 | Oldest proposals first, same order as Approvals |
 | Q15 | StatCards: Unrealized P&L, Cash vs reserve (LimitBar), Open risk (LimitBar + Within/Near/Over); positions n/max, realized today and invested stay in Portfolio |
 | Q17 | Backend to add: aggregate `open_risk` in `portfolio_summary` and a unified activity route. No paper/live field (§8) |
 | Q12 | On Home, Approve is `outline` like Decide; the filled `default` Approve stays on the Approvals page (one primary in view). Needs a ProposalCard prop (proposal for `src/ds`) |
 | Q14 | Sections under the hero: StatCards · Needs you · Activity. Agents at work becomes an avatar row with status in the Activity header; a HoverCard shows each agent's current task; link to Agents |
-| Q19 | Needs you, top to bottom: counts as badges (to approve, waiting for PM, alerts, agent errors, filled today) → the 3 proposals → up to 3 briefing items by severity (Ask the Bridge, Mark as read) → View all |
+| Q19 | Needs you, top to bottom: counts as badges (to approve, waiting for PM, alerts, agent errors, filled today) → the 3 proposals → up to 3 briefing items by severity (Ask the Assistant, Mark as read) → View all |
 | Q21 | Severities: Critical (destructive), Review (warning), Info (gray); always icon + word |
 | Q22 | Today's "System" panel (trading on/halted, freshness, account, broker stream, last update, next task, database) opens as a Popover from `FreshnessBadge`; halt stays the Alert under the top bar |
 | Q23 | Market clock shows one market ("NYSE · Open · 10:32 ET"); its Popover lists the other markets and switches between them |
 | Q24 | Hero curve: no axes or grid, `chart-4`, ~120 px, hover tooltip with date and value, 1D · 1W · 1M as small buttons right of the figure |
-| Q18 | A "Today" page in the design canvas (captures + inventory of each current page) **and** the local dev server on Luca's machine for real time |
+| Q29 | "Needs you" is **one inbox list, most urgent first** (supersedes the cards + Briefing layout of Q19/Q12): one Card, Tabs with counts (All · To approve · To confirm · Alerts), each row = kind badge (Critical, To approve, To confirm, Review, Info) + what + detail + age + two actions (Decide/Approve, Cancel/Confirm, Ask/Mark read); 5 rows then View all; a proposal opens in a Sheet |
+| P1 | Phone order: MobileTopBar → Total value + curve + 1D/1W/1M → figures → Needs you → Activity → MobileTabBar |
+| P2 | Phone figures: one card with three rows (label + figure left, bar or change right), no Carousel |
+| P3 | Phone Needs you: same list and Tabs (scroll sideways); rows show kind, title, age; a tap opens a bottom Drawer with the detail and the two actions |
+| P4 | Phone Activity: avatar row with status summary, 5 compact rows, status badge under the text, View all |
+| P5 | Phone: an Assistant icon in MobileTopBar (beside search, notifications, Halt) |
+| P6 | Phone: the market clock lives in the freshness Popover with System and market switching |
+| P7 | Phone curve: same as desktop, 80 px, value on press-and-hold |
+| Q20 | Assistant actions to confirm sit in "Needs you" (Briefing card), first: the action in words, Cancel and Confirm, an AlertDialog for capital actions |
+| Q25 | Trading halted: destructive Alert with Resume trading; Approve disabled with the tooltip "Trading halted"; Decide stays enabled (Postpone and Reject send no order), only Accept is disabled inside it |
+| Q26 | Runtime unreachable: Alert with Retry now; last known values with "Last known · 4 min ago"; every command disabled with the tooltip "Runtime unreachable", navigation only |
+| Q27 | Empty fund: starting value with a gray 0.00%, "Not enough history" instead of the curve, Empty "Nothing needs you — agents will ask here when they propose a trade", Empty "No activity yet" |
+| Q28 | Loading: a Skeleton shaped like each section, freshness "Connecting…", no full-page spinner |
+| Q18 | Superseded: no "Today" page. The design canvas shows a live draft of the page being designed, updated after every round, so Luca can comment on its parts; the local dev server on Luca's machine gives the real-time current app |
+
+## 10. Page design log — Portfolio (desktop and phone validated by Luca on 2026-11-27)
+
+| # | Decision |
+| --- | --- |
+| F1 | Job: what we own and how it performs |
+| F2 | Hero: Total value (same as Home) with a thin Invested / Cash bar |
+| F3 | One strip of five figures: Invested %, Cash (reserve min), Positions n/max, Realized today, Open risk. Unrealized P&L moves to the Positions table total |
+| F4/G3 | Tabs: **Positions** (default) · **Performance** · **Risk**. No Activity tab: the equity curve and allocation move inside Performance and Risk |
+| F5 | Positions shows 7 columns: Instrument, Qty, Last (native + USD), Value, Weight, P&L, Risk to stop. Sector, Avg price, Stop, Target, Days, Proposed by live on the Instrument page |
+| F6 | A row opens the **Instrument** page (the one place for everything about an instrument, investment state included); a ⋯ menu on the row holds Sell, Modify stop, Open instrument, Decision history. No side Sheet |
+| F7 | **Sell** dialog: amount as Shares, Amount $ or % of position (25/50/75/All shortcuts, equivalent shown in all three), order type Market/Limit, Runtime preview (no effect) with estimated price, value, realized P&L, open risk before → after and the risk gate verdict, required reason, destructive "Sell". **Modify exits** dialog (menu "Modify stop & target…"): stop loss and take profit side by side (current → new, either or both), preview with tighten/widen and raise/lower notes, risk to stop, reward to target, R:R and open risk before → after, risk gate, reason, "Confirm" |
+| F8 | **Edit limits**: step 1 the six limits as editable values (changed fields outlined) + reason → step 2 before → after table (unchanged rows dimmed) and the effect on current positions → Back · Cancel · Confirm & apply |
+| F9 | One **page-level period bar** (SPY toggle + 1D · 1W · 1M · 3M · YTD · 1Y · All) next to the title drives both the hero change and everything in Performance (curve, range, return, SPY, drawdown, axis, metrics period) |
+| G1/G2 | The Approvals page becomes **Decisions**: tabs Needs you (the full Home list) and History (every decision by Luca, PM, risk gate, Assistant, with who, what, why and the outcome: order working, filled, cancelled, trade closed). Sidebar label "Decisions" with the count of what waits for Luca |
+| G4 | Performance is the summary and navigation of portfolio performance (curve with SPY and drawdown, metrics, attribution, closed trades); every trade there has a "Decision history" button that lands on Decisions › History for that position. The detail lives only in Decisions |
+
+## 11. Page design log — Decisions (desktop and phone validated by Luca on 2026-11-27)
+
+Open, for the Agents page: where scheduled tasks, the task queue and analysis cycles live (not in Decisions).
+
+| # | Decision |
+| --- | --- |
+| D1 | Job: the hub of every decision — decide what waits for Luca and find every decision taken, with its outcome. Later versions grow it into the self-evaluation page (trades, decisions, agents); not designed now |
+| D2 | Needs you filters: **To approve** (orders the PM accepted and the risk gate passed, waiting for Luca's ok), **Waiting for PM** (proposals; Luca can decide in the PM's place), **To confirm** (Assistant actions). **Alerts are not decisions**: they live in notifications (bell), where the full list, severity filters and Mark as read are; an alert that blocks a decision (e.g. risk gate block) also shows on that proposal in Decisions as its reason. Home's Needs you keeps showing everything; its Alerts tab leads to notifications |
+| D3 | Hero: "N waiting for you · oldest X", with two weekly context figures (decisions taken, approved vs rejected) |
+| D4 | Opens on Needs you when something waits, otherwise on History |
+| D5 | History holds real decisions only, never alerts |
+| D6 | A row (Needs you or History) opens a side **Sheet**: the proposal in short (one-line thesis, entry/stop/target, risk gate verdict, signing agents), the lifecycle proposal → decision (who, what, why) → order → fill → close with P&L, and the actions when pending; Open instrument link. The decision record and its lifecycle are **persisted in the database** (backend) |
+| D7 | History rows: who decided (avatar), what (Approved, Rejected, Postponed, Asked, Confirmed), instrument, one-line reason, outcome (Working, Filled, Cancelled, Closed +$…), time; grouped by day, newest first; filters by decider, outcome, instrument, date; search |
+| D8 | Approve and Decide in outline on rows; the filled primary only inside the Decide dialog or the Sheet when confirming |
+
+## 12. Page design log — Instrument (v0.2 accepted by Luca on 2026-11-27, moving on)
+
+| # | Decision |
+| --- | --- |
+| I1 | Job: everything we know and decide about one instrument, updated in real time |
+| I2 | Header: symbol, name, class, price (native + USD), change, time, facts; if held, a position strip (qty, value, P&L, weight, stop, target, risk to stop, days · proposed by) with **Sell** and **Modify stop & target** opening the **same shared dialogs as Portfolio** (`SellDialog`, `ExitsDialog`: one component, dialog on desktop, bottom sheet on phone). Not held: "Not in portfolio · on the watchlist" |
+| I3 | Overview leads with **Investment state**: direction, conviction, horizon, next check, last update + version + author, stale-fact warning |
+| I4 | Tabs: Overview · Analysis · Chart (TradingView untouched, agents' drawings) · Notes · History; tabs reuse the blocks of the other pages wherever they can (History › Decisions is the Decisions history filtered by instrument) |
+| I5 | Signatures filter (show/hide each author's analyses and drawings) sits on the Analysis and Chart tabs — to be judged on the draft |
+| I6 | History: Decisions (filtered, "Open in Decisions"), Lessons, Versions |
+| I7 | Header links: Agent chat (instrument agent's page, Chat tab), News (filtered); no Portfolio link |
+| I9 | The investment state is **written by the specialist agents**: each section holds the agent's **full analysis** (figures, reasoning, invalidation, sources), not a snippet; the PM writes the synthesis on top. Shared block `AgentAnalysis` |
+| I10 | The TradingView chart (styling untouched) shows drawings by any agent **and by Luca**, streamed in real time and signed by author; Luca can draw too. The chart should be more central. Shared block `TVChart`. Four layout directions (A chart first, B dossier, C split view, D live feed) drawn for Luca to choose from |
+| I11 | Luca keeps v0 as the base (horizontal tabs). v0.1: **Overview** = every non-prose part of the investment state (state, thesis bullets, catalysts, proposal & risk gate, each specialist's view and key figures); **Analysis** = the prose: every section exactly as its agent wrote it, PM synthesis first; **Chart** = shared TVChart, larger; **History** unchanged. Position strip moves from the header to the bottom of Overview. Analysis uses the **specialists switch bar** (Synthesis · Technical · Fundamental · Sentiment · Market · Risk · **Luca**): one full section at a time. **Luca's notes are his own section** of the investment state (option A), no Notes tab. Text sizes strictly on the type scale |
+| O1 | Overview job: where the instrument stands now and what happens next, with its performance when held |
+| O2/O7 | A **right rail** holds only the minimum (position: qty, value, P&L, weight, stop, target) and **every action** (Sell, Modify exits, Decide for PM, Ask, Manage alerts, Add reminder, Agent chat, a "News for X" component that opens News filtered). Disabled actions stay visible with the reason. No figure appears twice on the page |
+| O3/O8 | Overview is a **mosaic of boxes sized by their content**, one question each: Investment state · Performance (held) · Thesis · Proposal & risk gate (when present) · Specialists · Next up · Watching (alerts) · Portfolio fit · Key facts (class fields; they leave the header) |
+| O4/O10 | Key levels stay drawn on the chart; their written list (name, exact price, distance from price, author, when) is in the **Chart** tab. No "recent changes" or "latest news" boxes: News is a link component |
+| O5/O9 | **Timeline** tab replaces History: a navigable time strip (shapes by type, Now line) over a precise event list split at Now — future: scheduled tasks, market events, order expiries, armed alerts; past: decisions, orders and fills (highlighted), analyses, versions, lessons, alerts fired, tasks delivered/merged/failed. Filters by type and source, search. Scheduled tasks come from agents, deterministic rules (move over a threshold, high-relevance news), periodic jobs, bar close, market events |
+| O6 | Luca manages **all alerts**: create, edit, pause, remove rules (price, % move, news relevance, volume, indicator → notify and/or schedule an analysis, cooldown, expiry) in a shared `AlertsDialog`. Scheduled tasks are a queue per agent: one analysis runs at a time; an alert that fires meanwhile is delivered to the running analysis as a message. What runs now (the analysis and the messages it received) is a **Running now** box in Overview, hidden when idle; queued tasks live only in the future part of the Timeline (status Queued / Retry n of m, Run now / Cancel / Edit time). The Timeline has one list |
+| I8 | **One page for every instrument class**: the template knows every field (equity: sector, industry, market cap, P/E, dividend yield, next earnings; bond: issuer, coupon, maturity, YTM, duration, rating, price % of par) and shows only the fields that have a value — no empty fields |
+| O11 | Every Overview box can be **reordered by press and drag**, desktop and phone; the order is saved per user, with "Reset layout" |
+
+## 13. Shell additions from the Instrument review (2026-11-27)
+
+| # | Decision |
+| --- | --- |
+| S1 | The bell opens a **Notifications popover**: unread count on the bell, severity filters (All · Critical · Review · Info), each item with severity, where (instrument or area), time, detail, quick actions (Open in Decisions, Open NVDA, Open Risk, Open timeline) and Mark read; Mark all read; empty state "You're all caught up."; footer links Alert rules and View all |
+| S2 | The Assistant is no longer a chat icon in the middle of the top bar: a **panel-right toggle at the far right corner** opens and collapses the **Assistant panel**, mirroring the left sidebar toggle |
+
+## 14. Page design log — Assistant panel (in progress)
+
+| # | Decision (draft, to be grilled) |
+| --- | --- |
+| A0 | Shared block `AssistantPanel`: the right panel on desktop (mirror of the left sidebar, on the sidebar surface, resizable), a full-height bottom sheet on phone, and the body of the Assistant page. It keeps everything today's side Bridge does: conversation switcher (new, recent with running turn and actions to confirm), open in the Assistant page, page context attached to messages and removable, `@agent` to have the Assistant write to an agent, tool lines, replies relayed from agents, action cards to confirm (rerun by the Runtime with every check; disabled under Halt or when the Runtime is unreachable), references that open where they live, Not sent with Retry, Stop the turn, fallback when the Assistant endpoints are missing |
+| A1 | Resizable by dragging its edge, 320–560 px, default 384, remembered per user |
+| A2 | From 1280 px up the page narrows; below 1280 px the panel floats over the page. The left sidebar never collapses by itself. The panel keeps the same 8 px edges as the main page: header aligned with the top bar, composer with the page's bottom edge |
+| A3 | Closed the first time, then remembers its last state; ⌘J toggles it |
+| A4 | The context follows the page automatically and is removable; on Portfolio and Decisions it is the selected row (position or proposal) |
+| A5 | "Ask the Assistant" and "Agent chat" open this panel with the right context and a prefilled draft (the question, or `@<instrument>-agent`): there is no second chat |
+| A6 | An action to confirm is one object shown in the chat, Home › Needs you and Decisions › To confirm; confirming in one place updates the others |
+| A7 | While the panel is closed, a live dot on the right toggle shows the Assistant is working; an action to confirm also raises a notification |
+| A8 | The switcher lists the last 8 conversations (ScrollArea) and "All conversations", which opens the Assistant page |
+| A9 | Tools used show as one Trace line per turn that opens to every call with its parameters and time |
+| A10 | Assistant page `/assistant`: conversations on the left (search, All · To confirm · Archived, grouped by day) and the same `AssistantPanel` full width with a centred column; the right toggle is hidden there |
+| A11 | Phone: the same block as a full-height bottom sheet from the Assistant icon in the top bar |
+| A12 | Built strictly from the DS primitives: MessageScroller, Message, Bubble, Trace, Attachment, InputGroup + InputGroupTextarea, Kbd, Popover + ScrollArea (model), NavigationMenu (effort), Button, Badge, Card. Model and effort are chosen per conversation in the composer and shown in each reply's footer |
+
+## 15. Page design log — Markets (draft 1: recommended answers applied, waiting for Luca)
+
+| # | Question → recommendation applied |
+| --- | --- |
+| M1 | Job → a workspace to scan the watchlist and read any chart with the agents' marks; everything about one instrument stays on Instrument (Open instrument) |
+| M2 | Watchlist → shared with the agents (their universe); row: symbol, name, price, change, Held, flag (Proposal, Blocked); who added it and why on hover; adding asks for the reason |
+| M3 | Chart → the same `TVChart` as Instrument; timeframes 15m · 1H · 1D · 1W; indicators EMA 20, SMA 50, RSI 14, MACD, ATR 14 in a popover |
+| M4 | Author filter → moves from the chart toolbar to the Drawings tab: each author's drawings grouped, Hide/Show per author, Focus per level |
+| M5 | Right column → Drawings · Activity (Running now, last 5 events, link to the instrument Timeline) |
+| M6 | Orders dock → Open · Pending · Filled · Trades with counts, scope this instrument / All (default All). Markets is where the full order list lives. A pending order only shows Decide, which opens the same Decide dialog as Decisions |
+| M7 | Order entry → no manual ticket: the PM drafts every order; Luca acts through Decide, Sell and Modify exits |
+| M8 | Freshness → "Not real-time · 15 min" badge next to the price when the data are delayed |
+| M9 | Layout → watchlist 272 · chart · right column 296, resizable and remembered; when the Assistant panel is open the right column folds away below 1600 px |
+| M10 | Phone → watchlist as horizontal chips, chart, tabs Drawings · Orders · Activity; Markets sits under More |
+
+## 16. Page design log — Agents (draft 1)
+
+| # | Question → recommendation applied |
+| --- | --- |
+| AG1 | Tabs → Team · Queue · Costs |
+| AG2 | Header → status counts (Working, Waiting, Idle, Errors) and cost against budget; the period (Today · 7D · 30D) drives the whole page |
+| AG3 | Team → core cards (PM, Risk Manager, Market Analyst, Assistant) and an instrument desks table (status, now doing, specialists with status dots, next, cost). No tree: the sections carry the hierarchy |
+| AG4 | Queue → the app-level home of queues and tasks: Running now cards and one Queued table (when, agent, task, created by, status) with source filters (Agents, Rules, Schedule, Luca), Run now / Cancel. Per instrument the same tasks show in the Timeline future and on the agent page |
+| AG5 | Costs → cost per day against the daily budget (days over it in warning), tokens, share by agent |
+| AG6 | Errors → Error status on the desk row and in the counts; it leads to the agent's Tool calls filtered on errors |
+| AG7 | Phone → list of agents with status and cost, same three tabs |
+
+## 17. Page design log — Agent detail (draft 1)
+
+| # | Question → recommendation applied |
+| --- | --- |
+| AD1 | Header → avatar with status, name, role and reporting line; Open NVDA, Message (opens the Assistant panel with `@agent`), Assign task, settings gear → Settings › Agents |
+| AD2 | Meters → cost today against budget, tokens in/out, model calls and failures, queue with the next time |
+| AD3 | Tabs → Activity · Conversations · Tool calls · Costs |
+| AD4 | Activity → Running now (steps, messages received while running, Stop), Recent tasks (Delivered, Failed, Merged), Specialists, Queue, Proposals to the PM |
+| AD5 | Conversations → read-only history of what the agent received and sent; writing goes through the Assistant (no second chat, A5) |
+| AD6 | Tool calls → live list, All / Errors, each call opens to its input and output |
+| AD7 | Assign task → dialog: what, when (next in queue, now, at a time), repeat; it joins the agent's queue |
+| AD8 | Core agents use the same page; the PM shows the proposals in its queue instead of specialists |
+
+## 18. Page design log — News (draft 1)
+
+| # | Question → recommendation applied |
+| --- | --- |
+| N1 | Tabs → Feed · Calendar · Sources |
+| N2 | Feed → list beside a reader; scope All · Portfolio · Watchlist · Macro, search, ticker, source, period; live, and "N new" never moves what is being read |
+| N3 | Row → source, time, relevance (High in warning), title, tickers, which agent used it |
+| N4 | Reader actions → Send to an agent (with a note, weighed like a colleague's opinion), Ask the Assistant, Create alert (news rule), Open original |
+| N5 | "How the agents used it" in the reader |
+| N6 | Calendar → next 7 days, earnings and macro, expected / previous / actual, filters, portfolio only |
+| N7 | Sources → providers and RSS feeds with status, Refresh now, Add RSS feed, Test / Disable; news sources live here, not in Settings |
+| N8 | Phone → the list; a story opens in a bottom sheet |
+
+## 19. Page design log — Settings (draft 1)
+
+| # | Question → recommendation applied |
+| --- | --- |
+| ST1 | Sections → Agents · Providers and keys · Accounts · Market and schedules · Alert rules · Notifications · Data and storage · Runtime health; "Lives on its page" links to Risk limits, News sources, Watchlist, Costs |
+| ST2 | Agents → agent list; Model (model, endpoint, effort, daily budget) and Prompt (active version, versions, new version with diff) |
+| ST3 | Changes → collected in a draft bar with one required reason; Review and apply shows before → after; changes that touch capital ask for explicit confirmation |
+| ST4 | Keys → write-only; Test and Replace; a missing key in warning |
+| ST5 | Accounts → named by Luca; order approval per account (Luca approves every order, or automatic within limits) |
+| ST6 | Notifications → per severity Bell / Bell + phone / Off, quiet hours |
+| ST7 | Runtime health → status tiles, recent errors, jobs; a badge on the section when something is wrong |
+| ST8 | Phone → the section list; each section opens full screen |

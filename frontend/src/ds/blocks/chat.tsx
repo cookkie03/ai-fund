@@ -8,7 +8,7 @@ import { AgentAvatar, resolveActor } from "@/ds/identity/agent-avatar"
 
 export type ChatMessage = { id: string; actor: string; text: string; time: string }
 
-/** A conversation with an agent or the Bridge: Luca's messages on the right, agents on the left, each signed. */
+/** A conversation with an agent or the Assistant: Luca's messages on the right, agents on the left, each signed. */
 export function ChatThread({ messages }: { messages: ChatMessage[] }) {
   return (
     <MessageGroup className="gap-4">

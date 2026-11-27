@@ -109,8 +109,8 @@ export function HaltButton({ halted = false, onHalt, onResume, size = "sm" }: { 
   )
 }
 
-/** The slim bar at the top of the inset: sidebar toggle, where you are, search, freshness, Bridge, notifications, Halt. */
-export function TopBar({ crumbs = [], freshness = { state: "live" }, notifications = 0, halted, onSearch, onBridge }: { crumbs?: string[]; freshness?: Freshness; notifications?: number; halted?: boolean; onSearch?: () => void; onBridge?: () => void }) {
+/** The slim bar at the top of the inset: sidebar toggle, where you are, search, freshness, Assistant, notifications, Halt. */
+export function TopBar({ crumbs = [], freshness = { state: "live" }, notifications = 0, halted, onSearch, onAssistant }: { crumbs?: string[]; freshness?: Freshness; notifications?: number; halted?: boolean; onSearch?: () => void; onAssistant?: () => void }) {
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
       <SidebarTrigger className="-ml-1" />
@@ -128,7 +128,7 @@ export function TopBar({ crumbs = [], freshness = { state: "live" }, notificatio
       <div className="ml-auto flex items-center gap-2">
         <Button variant="outline" size="sm" className="w-56 justify-start text-muted-foreground" onClick={onSearch}><SearchIcon />Search instruments<Kbd className="ml-auto">⌘K</Kbd></Button>
         <FreshnessBadge {...freshness} />
-        <Button variant="ghost" size="icon-sm" aria-label="Open Bridge" onClick={onBridge}><MessageSquareIcon /></Button>
+        <Button variant="ghost" size="icon-sm" aria-label="Open Assistant" onClick={onAssistant}><MessageSquareIcon /></Button>
         <Popover>
           <PopoverTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Notifications" className="relative" />}>
             <BellIcon />{notifications > 0 && <span className="absolute top-1 right-1 size-2 rounded-full bg-destructive" />}
