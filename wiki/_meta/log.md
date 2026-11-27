@@ -1,0 +1,1366 @@
+---
+tags:
+  - trading-agent
+---
+
+# Wiki Log — Trading Agent
+
+> Log append-only. Grep utile: `grep "^## \[" wiki/_meta/log.md | tail -10`
+
+## [2026-11-23] DECISIONE — Flusso GitHub su main, branch unite eliminate
+
+- **Type**: process
+- **Owner**: 🛠 Luca / Agent Pair
+- **Repository**: `trading-agent` (`main`, commit `db765d6`)
+- **Contenuto**: `.github/workflows/ci.yml` (test backend offline, build frontend su PR e push a `main`) e `release.yml` (release SemVer avviata a mano da `main`) portati su `main`. `AGENTS.md` adotta issue → branch → PR → check → merge con una branch per pagina del cockpit (`<pagina>-frontend`); il merge resta a Luca, l'agente unisce solo su sua richiesta. Eliminate in locale e su GitHub le otto branch già unite (cockpit, Ufficio, Portafoglio, agenti del ticker) e i loro worktree; gli artefatti Impeccable dei worktree sono stati copiati in `.impeccable/` del checkout principale.
+- **Pagine**: [[system/foundation/git-workflow]], [[system/foundation/decision-log]], [[artifacts/project-board]].
+
+## [2026-11-22] IMPLEMENTAZIONE — Backend del Runtime per l'Ufficio del cockpit
+
+- **Type**: feature + verification
+- **Owner**: 🛠 Luca (software) / Agent Pair
+- **Repository**: `trading-agent` (branch `worktree-backend-ufficio`)
+- **Contenuto**: implementazione test-first degli endpoint Read Model e degli eventi SSE per la nuova vista Ufficio:
+  - `/v1/read/agents`: panoramica agenti configurati (`config/office.toml` e tabella `agents`), stato (`working`/`waiting`/`idle`), task o ciclo corrente con ticker, ultima attività, costi e token della giornata UTC corrente.
+  - `/v1/read/chat_topics?agent=`: elenco dei canali/topic per agente con metadati completi, conteggio messaggi e anteprima ultimo messaggio.
+  - `/v1/read/tool_calls?agent=&cycle=&after=&limit=`: cronologia e stream chiamate tool con parametri, durata in ms, esito, errore e flag esplicito `compacted` (non null silenzioso).
+  - `/v1/read/usage?agent=&from=&to=`: aggregato chiamate LLM (`llm_calls`) per agente e periodo.
+  - Eventi SSE live nella tabella `events` emessi da transazione single-writer: `chat.message`, `tool.called`, `agent.status`.
+  - Estensione retention per compattazione tool calls e aggiornamento scenario `scripts/dev_cockpit_scenario.py` e `scripts/dev_cockpit_server.py`.
+- **Verifica**: 376 test passati, 0 falliti, 2 saltati, Ruff pulito; graphify aggiornato.
+
+
+## [2026-11-20] CORREZIONE — Recupero submit con esito ambiguo
+
+- **Repository**: `trading-agent`, commit `9f0655d`.
+- **Contenuto**: un submit che genera un errore conserva `submitting`; la riconciliazione cerca il broker tramite `client_order_id`. Gli errori definitivi non sono ancora distinguibili e richiedono riconciliazione.
+- **Verifica offline**: test prima fallito sullo stato `rejected`, poi passato con broker che accetta e va in timeout; 336 test passati, 2 saltati, Ruff pulito. Nessuna prova Alpaca reale.
+- **Pagine**: [[system/foundation/implementation-status]], [[_meta/hot-cache]].
+
+## [2026-11-20] CORREZIONI — Risolti problemi di review R1–R12 del Runtime unico
+
+- **Type**: fix + verification
+- **Owner**: 🛠 Luca (software) / Agent Pair
+- **Repository**: `trading-agent` (branch `docs/agent-restart`)
+- **Contenuto**: risoluzione test-first di tutti i problemi R1–R12 evidenziati in `.scratch/core-runtime/review.md`:
+  - R1: Credenziali Alpaca centralizzate (`ALPACA_API_KEY/SECRET_KEY`) e riconciliazione automatica all'avvio del runtime.
+  - R2: Chiamate di rete broker fuori dalle transazioni SQLite; submit bracket a 2 fasi con stato locale `submitting`; `RefreshData` asincrono con risposta 202.
+  - R3: Loop di riconnessione esponenziale per lo stream Alpaca, stato reale `connected`, paper mode da `ALPACA_TRADING_URL`.
+  - R4: Riconciliazione che crea i Trade per i fill offline o chiude trade aperti per posizioni broker chiuse.
+  - R5: Scadenze reali per job nello scheduler e tracciamento persistente `job.ran` nell'event log.
+  - R6: Eliminati eventi duplicati da command handler (`halt.changed`, `order.approved`, `order.rejected`).
+  - R7: Riesecuzione fresca del Risk Gate all'approvazione ordine.
+  - R8: Sottoscrizione SSE prima del replay storico, deduplicazione ID, bridge asincrono non bloccante e chiusura su coda piena.
+  - R9: Backoff scheduler di 1s per prevenire busy-loop su task scaduti non consegnabili.
+  - R10: Lock OS anticipato in `trading-agent run` prima del bootstrap; rimosso residuo `poll interval`.
+  - R11: Conferme interattive e flag `-y`/`--yes` per halt/resume/approval; autore messaggi Say come `user`.
+  - R12: Protocollo `BrokerUpdateStream` formalizzato; report e deviazioni documentati.
+- **Verifica**: 336 test superati, smoke test di verifica finale verde, ruff pulito.
+- **Pagine**: [[system/foundation/architecture]], [[system/foundation/implementation-status]], [[artifacts/project-board]], [[_meta/hot-cache]].
+
+## [2026-11-20] IMPLEMENTAZIONE — Runtime unico single-writer ed event-driven (S1–S8)
+
+- **Type**: implementation + verification
+- **Owner**: 🛠 Luca (software)
+- **Repository**: `trading-agent` (branch `docs/agent-restart`)
+- **Contenuto**: implementazione e verifica completa del Runtime unico conforme ad ADR 0003 e `.scratch/core-runtime/spec.md` fette S1–S8:
+  - S1: EventLog + EventBus in-process, migrazione `events`, transazioni SQLite re-entranti con hook `on_commit`.
+  - S2: Command e Read Model facade in-process (`Runtime.execute`, `ReadModel`) con idempotenza su `command.accepted`.
+  - S3: Scheduler a zero-polling orientato agli eventi e scadenze dei task/job; rimozione di `poll_interval`.
+  - S4: Strumentazione eventi interni del ciclo e degli ordini (`cycle.opened/closed`, `order.created/approved/rejected`, `halt.changed`).
+  - S5: Trasporto HTTP FastAPI e SSE (`/v1/health`, `/v1/commands/{name}`, `/v1/read/{name}`, `/v1/events`), lock OS esclusivo `fcntl.flock` su `<db>.lock`.
+  - S6: CLI sottile su `RuntimeClient` con codice di uscita 2 su Runtime offline, rimozione dipendenze dirette da DB in `interface/`.
+  - S7: Stream websocket Alpaca `trade_updates` in thread background, gestione fill con apertura/chiusura Trade in `TradeManager`, riconciliazione su start/reconnect, rimozione `order_sync_interval`.
+  - S8: Docker `compose.engine.yaml` con healthcheck su `/v1/health`, porta 8765, aggiornamento documentazione.
+- **Verifica**: 304 test offline superati (`uv run pytest`), linting superato (`uv run ruff check .`).
+- **Pagine**: [[system/foundation/architecture]], [[system/foundation/implementation-status]], [[artifacts/project-board]], [[_meta/hot-cache]].
+
+## [2026-11-05] DECISIONE — Sei agenti e confini
+
+- **Type**: decision clarification
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: sei agenti separati Market, Sentiment, Technical, Fundamental, Risk e Portfolio Manager; gruppi canvas soltanto visivi. Prima verificare codice residuo e definire agenti. Grafo sotto `agents`; trigger, grafo e tool distinti; nomi/collocazione dei trigger e workflow esterni e cartelle `orchestration`/`steps` aperti fino alla valutazione del codice, senza crearle ora. Portabilità LangGraph/Hermes/Pi/Claude Code da ricercare successivamente, non acquisita.
+- **Pagine**: [[artifacts/project-board]], [[system/agents/agents]], [[system/agents/agent-behaviors]], [[system/foundation/architecture]], [[system/foundation/codebase-architecture]], [[system/foundation/decision-log]], [[_meta/hot-cache]]. Nessuna modifica o verifica di canvas e codice; decisione di design, non attestazione di implementazione.
+
+## [2026-11-04] DECISIONE — Canvas, provider e reviewer PM
+
+- **Type**: decision clarification
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: [[artifacts/architettura.canvas]] prioritario nei dubbi di design, altri canvas idee/reference; provider per funzione broker/dati/modelli, non vendor. Reviewer PM sperimentale interamente accantonato, senza eliminare il PM del canvas né richiedere cancellazione del codice; destinazione del codice da decidere. Tree e distinzione steps/grafi/trigger restano in discussione; interpretazioni due desk/quattro aree da chiarire senza fissare il numero di agenti.
+- **Pagine**: [[system/foundation/decision-log]], [[system/foundation/architecture]], [[system/foundation/codebase-architecture]], [[artifacts/project-board]], [[artifacts/piano-operativo-trading-agent]], [[_meta/hot-cache]]. Nessuna modifica a canvas o codice.
+
+## [2026-11-04] CHIARIMENTO — OpenBB e dati di portafoglio
+
+- **Type**: decision clarification
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: confermato OpenBB SDK come percorso principale per dati di mercato, non Yahoo diretto prioritario; Alpaca per i dati di portafoglio. Provider sottostante distinto e tracciato, senza esclusività implicita; fallback ancora da decidere.
+- **Pagine**: [[system/data/data-vendors]], [[system/foundation/decision-log]], [[artifacts/project-board]], [[_meta/hot-cache]]. Nessuna verifica o modifica del codice.
+
+## [2026-11-02] CORREZIONE — Contratto bracket paper completo
+
+- **Type**: implementation + verification
+- **Owner**: 🛠 Luca (software)
+- **Repository**: `execution/paper.py`, `workflows/trade_cycle.py`, `tests/execution/test_paper.py`.
+- **Contenuto**: `OrderRequest` richiede un `take_profit_price` distinto dall'entry; il contratto verifica stop sotto entry e take-profit sopra entry. `TradeCycle` deriva il target da `entry + 3 * ATR`, coerentemente con la formula documentata nella wiki; il gateway riceve quindi sempre un bracket completo.
+- **Verifica**: test mirati **7 passed**; suite completa **110 passed, 1 skipped**; Ruff core passato; build frontend passata. Commit repository `6c965e9` su `main`.
+- **Stato**: implementato e verificato; l'adapter Alpaca mantiene il proprio seam write-only e resta da collegare al ciclo reale di esecuzione.
+
+## [2026-11-02] IMPLEMENTAZIONE — Configurazione centrale validate
+
+- **Type**: implementation + verification
+- **Owner**: 🛠 Luca (software)
+- **Repository**: `config/settings.py`, `tests/test_config.py`, dipendenza `pydantic-settings`.
+- **Contenuto**: default locali per DB/dashboard, parsing dell’ambiente, segreti Alpaca mascherati e rifiuto di credenziali parziali.
+- **Verifica**: `uv run pytest -q` → 77 passed, 1 skipped; `uv run ruff check config tests/test_config.py` → passed.
+- **Stato**: implementato; integrazione progressiva nei launcher ancora da fare.
+
+## [2026-11-02] INTEGRAZIONE — Dashboard usa Settings centrale
+
+- **Type**: implementation + verification
+- **Owner**: 🛠 Luca (software)
+- **Repository**: `scripts/run_dashboard.py`.
+- **Contenuto**: il launcher dashboard usa `config.Settings` invece di leggere variabili d’ambiente separatamente.
+- **Verifica**: test interfaccia/configurazione e Ruff passati; commit `15d7e08` su `main`.
+
+## [2026-11-02] IMPLEMENTAZIONE — Risk gate deterministico
+
+- **Type**: implementation + verification
+- **Owner**: 🛠 Luca (software)
+- **Repository**: `execution/risk.py`, `tests/execution/test_risk_gate.py`.
+- **Contenuto**: `TradeIntent` long-only, controlli di cash reserve, concentrazione per simbolo e portfolio heat; il gate restituisce un veto strutturato senza chiamare il broker.
+- **Verifica**: slice test e Ruff passati; commit `0cd321a` su `main`.
+- **Limite**: sizing ATR, audit trail e submit paper sono slice successive.
+
+## [2026-11-02] IMPLEMENTAZIONE — State, sizing e paper execution
+
+- **Type**: implementation + verification
+- **Owner**: 🛠 Luca (software)
+- **Repository**: `analysis/strategy_state.py`, `execution/risk.py`, `execution/paper.py` e relativi test.
+- **Contenuto**: `StrategyProfile`, `QuantitativeEvaluation`, `ResearchState`, conversione a `InvestmentState`, sizing risk-based con ATR e executor paper idempotente con audit log.
+- **Verifica**: suite locale per state/risk/execution verde; i commit su `main` sono `4530eec`, `bda05e1`, `5c41502`.
+- **Limite**: broker Alpaca order adapter, persistenza audit e orchestrazione LangGraph restano da implementare.
+
+## [2026-11-02] INTEGRAZIONE — Trade cycle deterministico
+
+- **Type**: implementation + verification
+- **Owner**: 🛠 Luca (software)
+- **Repository**: `workflows/trade_cycle.py`, `interface/dashboard.py`, frontend cockpit.
+- **Contenuto**: il ciclo approvato converte `InvestmentState` in sizing ATR, costruisce l’ordine, applica il risk veto e invia al paper executor idempotente; la dashboard espone una coda decisioni read-only, vuota quando la sorgente non è collegata.
+- **Verifica**: suite **95 passed, 1 skipped**, Ruff core e build frontend passati; commit `2876992`, `e5899b6`, `9281587`, `37ed2c6`.
+- **Limite**: persistenza decisioni/audit, adapter Alpaca ordini e orchestrazione multi-desk LangGraph restano da implementare.
+
+## [2026-11-02] IMPLEMENTAZIONE — Research builder deterministico
+
+- **Type**: implementation + verification
+- **Owner**: 🛠 Luca (software)
+- **Repository**: `agents/research.py` e relativo test.
+- **Contenuto**: assembly pura di `ResearchInputs` in `ResearchState` draft; nessun LLM, broker o side effect, con provenance quantitativa preservata.
+- **Verifica**: suite **101 passed, 1 skipped**; commit `9143683` su `main`.
+
+## [2026-11-02] IMPLEMENTAZIONE — Risk Analyst deterministico
+
+- **Type**: implementation + verification
+- **Owner**: 🛠 Luca (software)
+- **Repository**: `agents/risk.py` e relativo test.
+- **Contenuto**: il Risk Analyst applica il veto numerico al TradeIntent, approva solo state completi entro i limiti e aggiunge il motivo del veto alla contro-tesi senza side effect.
+- **Verifica**: suite **103 passed, 1 skipped**; commit `479cc3b` su `main`.
+- **Limite**: routing multi-desk/LangGraph e policy di sizing parametrizzata dal profilo restano da implementare.
+
+## [2026-11-02] IMPLEMENTAZIONE — Adapter LangGraph minimo
+
+- **Type**: implementation + verification
+- **Owner**: 🛠 Luca (software)
+- **Repository**: `workflows/langgraph_workflow.py`, dipendenza `langgraph`, test dedicato.
+- **Contenuto**: `StateGraph` esplicito per il passaggio `ResearchState → RiskAnalyst`, mantenendo risk/execution deterministici fuori dal grafo.
+- **Verifica**: test workflow passato; suite completa da rieseguire dopo l’integrazione.
+- **Limite**: desk multipli, routing PM, checkpoint e tracing LangSmith restano da implementare.
+
+## [2026-11-02] IMPLEMENTAZIONE — Grafo tecnico/risk/decision
+
+- **Type**: implementation + verification
+- **Owner**: 🛠 Luca (software)
+- **Repository**: `workflows/langgraph_workflow.py` e test.
+- **Contenuto**: il `StateGraph` esegue nodi espliciti di completezza tecnica, Risk Analyst e decisione; il ramo veto è verificato e non produce approvazione.
+- **Verifica**: suite **105 passed, 1 skipped**, Ruff core e build frontend passati; commit `3d54cd8`, `2e7ab98`.
+- **Limite**: desk Market/Fundamentals/Sentiment, PM routing, checkpoint e tracing LangSmith restano da implementare.
+
+## [2026-11-02] CORREZIONE ARCHITETTURALE — Strategia non equivale ad automazione deterministica
+
+- **Type**: architecture correction + plan update
+- **Owner**: 🛠 Luca
+- **Decisione**: una pipeline fissa di indicatori/soglie è baseline quantitativa, non il cuore del Trading Agent. Gli agenti raccolgono/interpretano evidenze, formulano ipotesi, gestiscono conflitti e incertezza; i moduli deterministici calcolano numeri, applicano guardrail e trasformano solo una proposta approvata in execution.
+- **State**: `StrategyProfile` → `QuantitativeEvaluation` → `ResearchState` → `InvestmentState` → `TradeIntent`.
+- **MVP**: trend following hourly resta il contesto di ragionamento, non una formula unica di entry/exit. Il profilo definisce obiettivo, domande, tool, evidenze attese e vincoli.
+- **Documentazione**: integrato nel piano operativo senza cancellare contenuti compatibili; aggiornati ruoli PM/desk/Risk e Fase 2/3/4.
+
+
+## [2026-11-01] VERIFICA — Formule tecniche portate su main
+
+- **Type**: integration + verification
+- **Owner**: 🛠 Luca (software)
+- **Repository**: cherry-pick del commit `a8338e0` su `main`, nuovo commit `02db44e` (`feat: add standard technical indicator formulas`).
+- **Contenuto**: SMA, EMA, RSI Wilder, MACD, ATR Wilder e Pivot Points classici disponibili in `analysis.indicators`; test e lint/format verificati.
+- **Confine**: worker, persistenza `indicator_values` e dashboard restano SMA-only; nessuna strategia MVP o parametro operativo è stato dedotto dalle formule.
+
+
+## [2026-11-01] DECISIONE + IMPLEMENTAZIONE — Strategia MVP e state generico
+
+- **Type**: decision + implementation + verification
+- **Owner**: 🔀 Luca (decisione), 🛠 Luca (software)
+- **Decisione**: trend following su barre hourly, long-only, azioni USA, USD-only, swing trading. Short, pairs trading, multi-leg, FX, opzioni e ML/deep learning restano fuori dallo scope iniziale.
+- **Design**: lo state comune non incorpora finestre o formule specifiche; `StrategyDefinition` porta famiglia/versione/parametri, `MarketContext` porta feature e watermark, `Signal` porta direzione/score/rationale e `RiskPlan` porta sizing/stop.
+- **Implementazione**: `analysis/strategy_state.py`, test `tests/analysis/test_strategy_state.py`, documentazione `docs/strategy-state.md`.
+- **Verifica**: suite repository **70 passed, 1 skipped**; Ruff su `analysis` e test passata.
+- **Limite**: il contratto non serializza ancora LangGraph/SQLite e non autorizza ordini.
+
+## [2026-11-01] DECISIONE — Strategia trend following hourly v0.1
+
+- **Type**: strategy specification
+- **Owner**: 🔀 Luca + Salvatore da validare
+- **Decisione/proposta**: barre 1h, azioni USA liquide, long-only, swing trading; breakout 20 barre precedenti + close sopra EMA50 + volume >= 1.2x media 20; ATR14, stop 2x e trailing 3x; exit su stop o close sotto EMA20; ingresso open della barra successiva.
+- **Sizing baseline**: rischio 0.5% dell'equity, cap posizione 10%, quantità intera; costi/slippage espliciti.
+- **Protocollo**: regular hours, provenance Alpaca, split temporale train/validation/test, walk-forward, benchmark SPY buy-and-hold, baseline senza volume.
+- **Stato**: baseline congelata per il primo backtest; non va ottimizzata dopo aver visto i risultati. Dettaglio → [[strategy/methods/trend-following]].
+
+## [2026-11-01] IMPLEMENTAZIONE + VERIFICA — Formule tecniche pure
+
+- **Type**: implementation + verification
+- **Owner**: 🛠 Luca (software)
+- **Implementazione**: `analysis.indicators` ora espone SMA, EMA, RSI con smoothing Wilder, MACD, ATR con smoothing Wilder e Pivot Points classici; tutte le funzioni usano `Decimal`, parametri espliciti e output deterministici.
+- **Verifica**: test indipendenti sulle formule tecniche passati; lint in corso di verifica finale.
+- **Ambito**: `indicator_worker` e `indicator_values` restano SMA-only. Le nuove formule non vengono materializzate né esposte dalla dashboard finché non sono chiusi parametri MVP, versioni formula e fonti normative.
+- **Separazione**: Sharpe, win rate e drawdown restano metriche di backtest, non indicatori di prezzo; non sono stati aggiunti a questo modulo.
+
+
+## [2026-11-01] IMPLEMENTAZIONE + VERIFICA — Pipeline SMA materializzata
+
+- **Type**: implementation + migration + worker + read-model verification
+- **Owner**: 🛠 Luca (software)
+- **Implementazione**: migration SQLite 004 con `indicator_values` e `outbox_events`; ingestion atomica raw+outbox; claim atomico, retry e deduplication; worker SMA v1; rebuild deterministico; capability dashboard limitata ai derivati `ready`.
+- **Provenance**: parametri canonici, `source_watermark` sulla barra finale della finestra, `formula_version`, `calculated_at`, `status`.
+- **Development**: `scripts/materialize_indicators.py` drena l’outbox esplicitamente; nessun job schedulato aggiunto.
+- **Verifica**: `59 passed, 1 skipped`; Ruff check/format passati sui package attivi.
+- **Ambito**: gli indicatori RSI/MACD/ATR/Pivot nominati nella pagina Quant restano non implementati perché la wiki non fissa ancora formule e parametri MVP.
+
+## [2026-11-01] DECISIONE — Materializzazione production-grade dei derivati
+
+- **Type**: architectural decision / data pipeline design
+- **Owner**: 🛠 Luca (software)
+- **Decisione consolidata**: raw normalizzati e provenance nella stessa transazione DB; outbox/evento dopo commit; worker incrementale idempotente; `indicator_values` con provenance, source watermark, formula version, parameters e status; rebuild deterministico.
+- **Operational policy**: scheduling solo per backfill, recovery e reconciliation; lettura production da valori materializzati `ready`; calcolo on-the-fly solo fuori dal percorso production (preview, test o analisi esplorative).
+- **Implementazione**: non attestata; nessuna migrazione, worker o verifica di runtime è dichiarata da questa registrazione.
+- **Riferimento**: [[system/db-access-performance]]; decisione corrente in [[system/foundation/decision-log]].
+
+## [2026-11-01] CODICE + VERIFICA — SMA nella capability read-only
+
+- **Type**: capability integration + deterministic read verification
+- **Owner**: 🛠 Luca (software)
+- **Wiki basis**: DB centrale come source of truth; indicatori deterministici; direzione compute-once-store, senza introdurre una tabella derivata non ancora progettata.
+- **Codice**: `MarketDataRepository.history()` centralizza la lettura ordinata; `SQLiteDashboardReadModel.sma(symbol, window, interval)` calcola la SMA sulle chiusure persistite e restituisce timestamp finale + valore.
+- **Test**: coperti valori, DB mancante e finestra non positiva; suite offline e Ruff sui moduli attivi passati.
+- **Limite esplicito**: la SMA è ora una capability read-only di verifica; la persistenza degli indicatori richiede una decisione/migrazione separata.
+
+## [2026-11-01] CODICE + VERIFICA — MemPalace persistente
+
+- **Type**: dependency + documentation + operations verification
+- **Owner**: 🛠 Luca (software)
+- **Codice**: aggiunta dipendenza runtime `mempalace>=3.11,<4` in `pyproject.toml`; lock aggiornato con `uv`.
+- **Documentazione**: README aggiornato con palace condiviso `/home/luca/.config/mempalace/palace`, comandi `uv run mempalace` e verifica MCP.
+- **Verifica**: `uv run mempalace --version` → `MemPalace 3.11.0`; `uv lock --check` passato; `claude mcp get mempalace` → `Connected`.
+- **Pulizia**: preview `sync` sui wing: `trading_agent` 109.762 drawer, 16.508 risolvibili, 93.254 unresolved; `trading_agent_wiki` 19.009 risolvibili. Nessuna cancellazione applicata: il basename `source_file` non identifica in modo univoco i path storici.
+- **Reload**: richiesto dopo commit/push per ricaricare dipendenza e configurazione; verificare status e ricerca semantica MCP nella nuova sessione.
+
+## [2026-11-01] CODICE + VERIFICA — Baseline development e primo indicatore
+
+- **Type**: test alignment + capability verification + deterministic quantitative module
+- **Owner**: 🛠 Luca (software)
+- **Development**: confermata la convenzione esplicita `uv run --env-file .env ...`; Docker e auto-loading globale restano fuori dal ciclo dev.
+- **Suite**: riallineato `tests/test_ingest_market_data.py` alle interfacce correnti di `data.ingestion`; verifica `51 passed, 1 skipped`.
+- **Capability**: `SQLiteDashboardReadModel` è stato confermato come seam read-only esistente per portfolio state e latest market data; nessun modulo duplicato aggiunto.
+- **Quant**: aggiunto `analysis.indicators.simple_moving_average` con `Decimal`, finestre complete e validazione della finestra; test dedicati passati.
+- **Lint**: Ruff check/format passati sui package attivi; `openbb-ui` legacy resta fuori scope.
+
+## [2026-11-01] CODICE + VERIFICA — Loader `.env` per sync portfolio
+
+- **Type**: implementation + test + read-only integration verification
+- **Owner**: 🛠 Luca (software)
+- **Codice**: `scripts/sync_portfolio.py` carica le sole variabili Alpaca da `.env` cercato nella directory corrente o nella root del progetto; non sovrascrive variabili già presenti nell'ambiente.
+- **Test**: aggiunto `tests/test_sync_portfolio.py` con credenziali fittizie; 29 test pertinenti passati; Ruff check e format passati.
+- **Verifica reale**: su `main`, `uv run python -m scripts.sync_portfolio --database data/trading-agent.db` ha prodotto `Portfolio snapshot: inserted`; nessun ordine inviato.
+- **Commit**: `934f670`.
+- **Nota**: la suite globale resta bloccata da un errore preesistente e non correlato in `tests/test_ingest_market_data.py`, che importa `ingest` e `to_storage_bar` non presenti nel modulo corrente.
+
+## [2026-11-01] OPERATIONS — Ripristino Mempalace MCP
+
+- **Type**: operations + verification
+- **Owner**: 🛠 Luca (software)
+- **Causa**: `~/.claude.json` era configurato correttamente, ma il comando `/home/luca/trading-agent/.venv/bin/mempalace-mcp` era assente; il virtualenv e il palace persistente esistevano.
+- **Azione**: installato il pacchetto PyPI `mempalace` versione `3.11.0` nel virtualenv esistente. Nessuna modifica a `pyproject.toml`, al codice del repository o alla configurazione MCP persistente.
+- **Verifica**: `mempalace-mcp --help`; avvio locale stdio con `--palace /home/luca/.config/mempalace/palace`; `claude mcp get mempalace` → `Status: ✔ Connected`.
+- **Esito**: ripristino completato; non è stato necessario riavviare host/sessione nella verifica corrente.
+
+## [2026-11-01] CODICE + DOCUMENTAZIONE — Launcher dashboard locale
+
+- **Type**: implementation + documentation
+- **Owner**: 🛠 Luca (software)
+- **Codice**: aggiunti `scripts/run_dashboard_dev.sh` e wrapper root `run_dashboard.sh`; dalla root il comando è `./run_dashboard.sh` e avvia insieme `scripts/run_dashboard.py` e `npm --prefix frontend run dev`; gestione di `Ctrl+C`, verifica di `python3`/`npm` e nessun avvio di `openbb-ui`.
+- **Documentazione**: aggiornati `README.md` e `docs/dashboard.md` con installazione dipendenze, URL locali e comando breve.
+- **Verifica**: `bash -n` e `git diff --check` passati; end-to-end non eseguito nel worktree perché mancano `frontend/node_modules` e il virtualenv ignorato.
+
+## [2026-11-01] RICERCA + CODICE — Pratiche di testing antirez/Redis/DS4
+
+- **Type**: research + test adaptation
+- **Owner**: 🛠 Luca (software)
+- **Nota**: aggiornata `[[prior-art/libraries/redis-testing-practices]]` con fonti primarie DS4 e regole operative persistenti: seam pubblico, expected indipendente, failure-mode coverage, stati espliciti, fixture/provenienza, trace diagnostiche e misure riproducibili.
+- **Codice**: `tests/data/test_yahoo_finance.py` ora costruisce l'atteso con il modello pubblico `PriceBar`, non con `bars[0].__class__`.
+- **Verifica**: test Yahoo isolato passato; suite completa da eseguire dopo l'adattamento.
+
+## [2026-10-31] RICERCA — Pratiche di testing antirez/Redis
+
+- **Type**: research + documentation
+- **Owner**: 🛠 Luca (software)
+- **Nota**: aggiunta `[[prior-art/libraries/redis-testing-practices]]` con fonti primarie Redis/antirez, distinzione tra fatti osservati e proposte per `trading-agent`, e verifica della struttura/test config corrente.
+- **Verifica**: nessun codice modificato; nota indicizzata in `wiki/_meta/index.md`.
+
+
+## [2026-10-31] DECISIONE — Convenzione Git e workspace minimale
+
+- **Type**: decision + documentation
+- **Owner**: 🛠 Luca (software)
+- **Decisione**: lavoro ordinario su `main`; worktree solo su richiesta o per modifiche radicali, sperimentali o incerte; push sempre su GitHub; merge a cura di Luca; PR aperte dall'agente quando il lavoro è su branch separato.
+- **Documentazione**: `docs/git-workflow.md` nel repository codice; [[system/foundation/git-workflow]] nella wiki.
+- **Motivazione**: mantenere il codice monitorabile da VS Code e riservare l'isolamento ai casi in cui è realmente utile.
+
+
+## [2026-10-31] WORKSPACE — Rimozione copie duplicate nel repository codice
+
+- **Type**: workspace cleanup + verification
+- **Repository codice**: rimosse le copie annidate non canoniche `trading-agent/code/` e `trading-agent/wiki/`.
+- **Decisione**: il codice operativo resta nella root di `trading-agent/`; la wiki canonica resta nel repository adiacente `trading-agent-wiki/`.
+- **Verifica**: `code/` e `wiki/` non esistono più; la root contiene il codice attivo; `trading-agent-wiki/wiki/_meta/hot-cache.md` e `overview.md` sono presenti.
+- **Nota**: i riferimenti trovati in `claude-chats/` sono transcript storici, non configurazioni operative.
+
+## [2026-10-31] CODICE — Ingestion OHLCV guidata
+
+- **Type**: implementation + verification
+- **Repository**: worktree `worktree-market-data-ingestion`
+- **Implementazione**: `scripts/ingest_market_data.py` per Yahoo Finance e Alpaca; `tests/test_ingest_market_data.py` per mapping provenance e deduplicazione idempotente SQLite.
+- **Verifica**: `uv run pytest` → 42 passed, 1 skipped; Ruff check/format passati; CLI `--help` passato.
+- **Limite**: nessuna chiamata reale ai provider e nessuna credenziale usata; runtime smoke test ancora opt-in.
+- **Pagina**: [[artifacts/mvp-database-2026-10-31]]
+
+## [2026-06-15] MIGRAZIONE — LangGraph → Datapizza AI (branch feat/datapizza-migration)
+
+- **Branch**: `feat/datapizza-migration` su `trading-agent/`
+- **Framework**: [Datapizza AI](https://docs.datapizza.ai/0.1.0/) — agenti + RAG + pipeline, multi-provider (OpenAI, VertexAI, Ollama), MCP, structured output, multi-agent patterns (handoffs, agents-as-tools)
+- **Wiki page**: [[prior-art/libraries/datapizza-ai]]
+- **Stato**: documentazione studiata, analisi mapping LangGraph ↔ Datapizza avviata, PoC da implementare
+- **Motivazione**: semplificazione dell'orchestrazione, meno boilerplate, structured output nativo, migliore osservabilità
+- **Prossimo passo**: implementazione PoC di `brain/analyst_research` e `brain/pm` come Datapizza agents
+
+## [2026-06-08] CODICE — Universo + Watchlist + Benchmark + Gerarchia agenti (branch feat/universe-watchlist)
+
+- **Cambio di paradigma** (Luca+Salvatore): autonomia sugli asset + benchmark. Piano approvato (`adaptive-nibbling-puzzle.md`). 5 fasi committate, 190 test verdi.
+- **Fase 1** (15b4ace) storage: `Instrument` (tradable/active/is_sp500/asset_class/last_synced_at), `TickerCard` (in_watchlist/…), nuova `TickerEvent`; repository universe/watchlist/eventi; config `[universe][watchlist][benchmark]` + `cycle.max_parallel`.
+- **Fase 2** (1747f01) universo: `broker.list_assets` (Alpaca `/v2/assets`; IBKR []→seed; Paper static); `tradingagents/data/sp500.csv`; `universe/` (Sp500Source, `sync_universe` con diff+inattivi, `seed_watchlist`).
+- **Fase 3** (5805514) benchmark dinamico (`benchmark.py`, simboli da config) + `performance.py` (alpha).
+- **Fase 4** (fd48914) funnel watchlist-driven: trigger da watchlist + `ticker_events` + alert; app/cli `symbols` opzionale → default watchlist + bootstrap; ingest benchmark.
+- **Fase 5** (923de73) gerarchia: `brain/director.py` `analyze_batch` (fan-out parallelo thread-pool, sessione per worker) + `execution/portfolio_risk.py` `admit_within_statute` (riserva/VaR/settore sul book); `run_cycle` ristrutturato (analyze→proposte→Statuto portafoglio→esecuzione seriale) + ammissione dinamica watchlist; **Risk Analyst su 2 livelli, non sostituito**.
+- **Fase 6** wiki: nuova [[system/orchestration/universe-watchlist]]; aggiornati benchmark, parallelism-design, canvas-code-mapping, decision-log, board, index, hot-cache; segnato "hermes agent" come riferimento da studiare.
+- **Fase 7** (da fare): daemon background start/stop da terminale (richiesta Luca).
+
+## [2026-06-07] CODICE — config globale + broker configurabile + consolidamento
+
+- **Input di Luca**: serve un **file di configurazione globale** per tutti i parametri; mancava la **config del broker** (paper/live); e i due sistemi di config (`default_config` env-override + `config.toml`) vanno **consolidati** — decisione: **`.env` solo per le chiavi**, niente override di parametri via env.
+- **`config.toml` + `tradingagents/config.py`** (`Settings`: llm·broker·risk·charter·screening·cycle·data·costs): **fonte unica** dei parametri, con default di codice sotto. `load_settings()` = default < config.toml (nessun overlay env).
+- **Broker configurabile**: `[broker] provider=paper|alpaca, mode=paper|live`; `broker/alpaca.alpaca_base_url(mode)` (paper vs live); il CLI costruisce il broker da lì, con guardia se mancano le chiavi Alpaca.
+- **Consolidamento**: rimosso `_ENV_OVERRIDES`/`_apply_env_overrides` da `default_config.py`; il **modello LLM è sourced da `config.toml`** (single source); `default_config` resta solo per gli infra-default ereditati (vendors, cache path, benchmark). `.env.example` riscritto **solo segreti** (chiavi + DB connection). Rimosso `tests/test_env_overrides.py`.
+- **Visibilità modello**: il CLI stampa il modello effettivo all'avvio. `.env.example` ora include `FRED_API_KEY` (mancava).
+- **Stato**: suite **206 verdi**.
+
+## [2026-06-07] CODICE — warm start + context state per-agente
+
+- **Domande/indicazioni di Luca**: servono **sia** il contesto iniettato (primo prompt su task nuovo) **sia** il tool-calling successivo; e ogni agente deve avere il **suo state di contesto**, strutturato, cucito sul compito, che dura e si automantiene per tutto il task. Inoltre: prima gli agenti **non** avevano memoria della conversazione tra i giri (confermato: veniva scartata).
+- **Warm start** (commit 1a3efdf): `brain/warmup.py` — state/dati vuoti = trigger → pre-lancio degli extractor (senza chiamata dell'agente) → primo contesto iniettato popolato. Fill-if-missing. Coesiste col tool-calling durante l'analisi.
+- **Context per-agente** (commit 70aa694): `brain/agent_context.py` `AgentContext` + `make_agent_context` — finestra di contesto **per agente**, con **sezioni cucite sul compito** (market: macro/catalysts/price/portfolio · sentiment: news/social/… · technical: price/indicators/volume · fundamental: valuation/price · risk: …). Parte dal contesto iniettato, **accumula i tool result mantenendo la struttura**, **automantenuta** in `BrainState.contexts` per tutto il task (round + revisioni). `llm.generate(..., recorder=)` riporta ogni tool call al context dell'agente.
+- **Stato**: suite **216 verdi**.
+- **DA FARE SUCCESSIVAMENTE (input Luca)**: deduplicazione DB di **ogni singola informazione** salvata, in modo uniforme/sistematico. → board 🔴 + decision-log aperta.
+
+## [2026-06-07] CODICE — tool-calling autonomo degli agenti + allineamento canvas
+
+- **Input di Luca**: il tool-calling deve essere **emesso dai singoli agenti AI**; l'architettura deve rispettare `architettura.canvas`. Contesto: l'**Extractors set** = tutti gli strumenti che estraggono/calcolano/immettono; ogni agente ha tutti i tool utili al compito; i tool sono chiamati dagli agenti (o a eventi/ricorrenze), rispondono all'agente e salvano sul DB.
+- **Letto il canvas**: edge chiave `<agent> → Extractors set → DB`; desk Research(Market,Sentiment)/Technical(Tecnical,Fondamentali)/Risk; PM orchestratore; Investment State→Trade→transactions; mantainer technical→rendicontazione; alert/periodical synthesis→PM.
+- **Implementato tool-calling vero** (commit f4cb029): `brain/tooling.py` (`Extractors` bundle + `build_desk_tools` = StructuredTool LangChain per-agente, extract→risponde→write-through DB; ogni agente riceve tutti i tool utili); `brain/llm.py` `StructuredLLM.generate(..., tools=)` con **loop di tool-calling** (il modello emette le call, eseguiamo, ricicliamo, poi output strutturato) via `bind_tools`+`with_structured_output`; `brain/graph.py` i nodi desk+risk costruiscono i tool e li passano; `cli` cabla i fetcher live in `Extractors`. Test: gli agenti chiamano i tool da soli e fanno write-through (prezzo `rt` persistito).
+- **Mantainer** (commit e68b480): `execution/mantainer.py` marca le posizioni a mercato e aggiorna `portfolio_snapshots` dal broker, a fine ciclo.
+- **Allineamento canvas**: creata [[system/_reference/canvas-code-mapping]] (✅/🟡/🔴). Spina dorsale del canvas rispettata; restano 🔴 minori (tabelle FX/insider/calendario/report, adaptive extractor rate-limit, Market Alert/calendar trigger).
+- **Stato**: suite **213 verdi**.
+
+## [2026-06-07] CODICE — chiusura 🔴 (tool layer, VaR/settore, disinvestimento, opzioni) (feat/rebuild, autonomo)
+
+- **Tool layer** (commit a7e8b9d): `tradingagents/tools/` = inventario wiki come callable reali. `get_realtime_quote` (**real-time first** via `live_fn` + **write-through** su interval `rt`, fallback DB), `get_open_positions_risk` (portfolio heat), `volume_spike`. Brain: PM prende il prezzo **real-time-first** (opz. `quote_fn`), Risk gate sizing con **heat reale**. *NB*: il tool-calling LLM-driven (l'agente che emette tool call da solo) resta rifinitura; qui i tool sono reali e usati, con la regola real-time-first applicata.
+- **Statuto VaR + settore** (commit f85d848): guardrail `portfolio_var` (heat + rischio trade ≤ max_var) e `sector_concentration` (esposizione settore ≤ max_sector_pct); repo `instrument_sector`/`sector_exposure`; charter `max_sector_pct`.
+- **Disinvestimento rating-based** (commit fc8043e): `rank_holdings_by_weakness` + `disinvest_weakest` (vende il più debole per conviction+score, `exit_reason=rating`, set `protect`).
+- **Tool catena opzioni** (commit e808729): `get_options_chain` (live_fn iniettabile) + `select_contract` (strike più vicino) + `YFinanceOptionsFetcher`. Completa il percorso leva (Trade decide Call/Put → tool sceglie il contratto).
+- **Stato**: suite **211 verdi**. **Tutti i 🔴 della mappa di completezza affrontati.** Resta come rifinitura: tool-calling LLM-driven nel brain; catena opzioni reale in esecuzione; token metering reale.
+
+## [2026-06-06] CODICE — batch 🔴 (Statuto, DTC, loop, learning, uscite) (feat/rebuild, autonomo)
+
+Lavoro autonomo sui pezzi 🔴 (gap codice↔wiki) dopo la mappa di completezza:
+- **Statuto riserva 10% cash** (commit 90d7982): `check_guardrails` enforce il cash-reserve quando c'è lo snapshot portafoglio; **DTC chiuso**: il PM imposta `next_check_date` (`PMDecision.next_check_days`), il ciclo aggiorna la **scheda ticker** (latest call + next_check_date) dopo ogni deep-dive (B/C).
+- **Loop autonomo** (commit ebfb316): `app.run_forever` (tick = periodical synthesis) + CLI `--loop SECONDS`; sleep iniettabile + max_cycles per i test.
+- **Learning substrate** (commit 4e3b7b1): `DecisionLog` (opinioni per-agente + esito + link trade + payload sigillato) + `Trade.exit_reason`; ogni deep-dive logga la decisione (qualsiasi esito) → substrato per matching tesi↔esito.
+- **Gestione uscite** (commit 30ae438): `execution/exits.py` `manage_exits` chiude le posizioni a stop/target con `exit_reason`; il ciclo gestisce le uscite **prima** di aprire nuove posizioni; `CycleReport.closed`.
+- **Backtester** (commit 9e08efa): `backtesting/` deterministico long-only ATR su barre storiche (riusa indicatori+risk engine); hit-rate/return/drawdown; `run_backtest` dal DB; VectorBT motore futuro. Valida le soglie.
+- **Leva via opzioni** (commit a6c5f70): la funzione Trade instrada **Strong Buy→Call / Strong Sell→Put**, standard→equity (no margine); `asset_type`/`option_type` su OrderProposal→OrderRequest→Trade→broker. Catena opzioni reale (strike/scadenza) = follow-up.
+- **Stato**: suite **202 verdi**. Lifecycle trade completo; backtester e leva opzioni presenti.
+- **Restano 🔴**: agenti che chiamano i tool da soli (real-time first, ora contesto iniettato); Statuto **VaR/settore**; disinvestimento **rating-based**; catena opzioni reale.
+
+## [2026-06-06] CODICE — provider OpenRouter + price-alert + macro/fondamentali (feat/rebuild, autonomo)
+
+- **Provider full OpenRouter** (commit d2d3426, su richiesta di Luca): `default_config.py` → `llm_provider=openrouter`, `deep/quick_think=deepseek/deepseek-chat`; il client OpenAI-compatible auto-risolve il base_url OpenRouter → serve solo `OPENROUTER_API_KEY`. Aggiornati `test_env_overrides` (baseline) e `.env.example`.
+- **Trigger Engine — price alert** (commit 3c8370a): aggiunta sorgente `price_alerts` (movimento anomalo `|Δ|>k·ATR`, mercati efficienti) a `collect_triggers`; priorità checkpoint 1.0 > price_alert 0.9 > screening=score; dedup per simbolo. Test con barra-spike.
+- **Fondamentali → DB** (commit 084317e): `FundamentalSnapshot` + `ingest_fundamentals` + `YFinanceFundamentalsFetcher` (.info); desk Fondamentali legge i metrics.
+- **Macro (FRED) → DB** (commit 1f4c56f): `MacroPoint` + `ingest_macro` (DB-first dedup) + `FredFetcher` + `DEFAULT_MACRO_SERIES`; desk Market include lo snapshot macro. CLI usa FRED solo se `FRED_API_KEY` presente.
+- **Social-sentiment → DB** (commit 7be0626): `SocialPost` + `ingest_social` (DB-first dedup) + `StockTwitsFetcher` (stream pubblico **keyless**, reale); desk Sentiment legge i post social (con sentiment basic). CLI collega StockTwits.
+- **Stato**: suite **194 verdi**. **Tutti e 4 i desk leggono dati reali dal DB** — nessun placeholder dati residuo. Catena dati completa: prezzi+news+fondamentali+macro+social.
+
+## [2026-06-06] CODICE — Statuto DB-driven + consuntivo commissioni + news (feat/rebuild, autonomo)
+
+- **Lavoro autonomo** (Luca staccato ~50 min). Continuazione su `feat/rebuild`.
+- **Statuto parametrico** (commit 20153cc): `charter` table guida davvero il Risk gate. `repo.load_charter`/`seed_default_charter` (DEFAULT_CHARTER: min_risk_reward 1.5, max_position_pct .10, cash_reserve .10, max_var .10, base_risk .01, heat_max .06). Il brain carica le soglie dal DB; l'app le semina al bootstrap. **Consuntivo costi**: `Trade.commission`/`token_cost` registrati nel cycle (cost-accounting momento 2).
+- **README** (commit f89b92c): riscritto per l'architettura nostra (mappa codice→wiki, avvio, test).
+- **News → DB** (commit 93598eb): `NewsItem` + `ingest_news` (DB-first dedup) + `YFinanceNewsFetcher`; i desk **Market** (catalizzatori) e **Sentiment** (tono) ora leggono le news dal DB invece dei placeholder. CLI collega `YFinanceNewsFetcher`.
+- **Test**: suite a **185 verdi** (+2 integration). Restano placeholder solo: macro (FRED), fondamentali, social-sentiment.
+- **Registrato**: board (2 ✅), hot-cache.
+
+## [2026-06-06] CODICE — REBUILD del repo a nostra immagine (branch feat/rebuild)
+
+- **Decisione di Luca**: non adattarci al fork, **rifare tutto** tenendo solo l'infra; state/nodi/edge **devono corrispondere alla wiki**, nessun adattamento. Poi Luca si stacca chiedendo lavoro autonomo per ~50 min.
+- **Prune** (commit 0e41f1e): rimossi `agents/{analysts,researchers,managers,risk_mgmt,trader,schemas}`, `agents/utils/agent_states` + tutto `agents/`, `graph/`, `cli/`, `main.py` e i loro test (analyst_execution, structured_agents, signal_processing, memory_log, checkpoint_resume, crypto_asset_mode, ticker_symbol_handling). Tenuti: `llm_clients/`, `dataflows/`, `structured.py`→`brain/`. `pyproject` ripulito. **Suite 175 verdi.**
+- **Brain** (commit 90035db): `tradingagents/brain/` = **LangGraph nostra topologia**. `state.py`=ResearchState come state; nodi market/sentiment/technical/fundamentals → PM (aggrega direction/conviction + k-ATR) → Risk (gate bear singolo, guardrail deterministici **binding**) → loop "nel dubbio chiedi" (capped) → END. `schemas.py` (DeskOpinion/PMDecision/RiskDecision), `prompts.py` (i 6 system prompt nostri, EN), `llm.py` (StructuredLLM + ForkStructuredLLM OpenRouter/DeepSeek), `context.py`. `make_brain_analyzer` lo innesta nel `run_cycle`. 4 test offline (fake LLM: tesi BUY approvata, override hard-guardrail→SEND_BACK, HOLD senza livelli, esecuzione via cycle). **Suite 179.**
+- **App/CLI** (commit 422ff99): `app.run_once` (ingest→screen→cycle, dipendenze iniettate) + `cli.py` (`python -m tradingagents.cli AAPL …`, deps live yfinance+DeepSeek). Console script ripristinato. Test e2e offline. **Suite 180.**
+- **Stato**: `feat/rebuild` = repo a nostra immagine, runnabile end-to-end (brain reale via LLM, oppure stub/fake offline). Catena: ingest→price_bars→indicatori→screening→ticker_card→Trigger Engine→coda→**brain(2 desk→PM→Risk)**→cost gate→Trade→broker→reconcile.
+- **Registrato**: [[system/foundation/decision-log]] (rebuild chiuso), [[system/agents/agents]] (brain), board (3 ✅), hot-cache.
+
+## [2026-06-06] CODICE — alpha-core unificato + cycle runner (branch feat/alpha-core)
+
+- **Branch** `feat/alpha-core` = **unione di tutte le linee** (merge `feat/indicators` + `feat/broker-adapter`): storage+domain+execution+ingestion+indicators+broker. Merge pulito; **full suite 276 verdi** subito dopo il merge (incl. ~239 test del fork → conferma che il nostro codice è interamente additivo).
+- **`tradingagents/orchestration/`** (cycle runner):
+  - `triggers.py` — **Trigger Engine** (prima implementazione di [[system/orchestration/trigger-engine]]): `TriggerEvent` + `collect_triggers` = due checkpoint (`next_check_date`) + screening top-K da `ticker_card`, dedup per simbolo (checkpoint precedenza) + ordinati per priorità → coda unica.
+  - `analyze.py` — `Analyzer` protocol (**hook dove si innesta il grafo LLM di Luca**) + `hold_analyzer` stub (testabile senza LLM).
+  - `cycle.py` — `run_cycle`: trigger → analyze → **cost gate** → execute, ritorna `CycleReport`.
+- **Cost accounting** (prima implementazione di [[system/investment/cost-accounting]]): `broker/commission.py` (`CommissionModel`: Zero/PerTrade/PerShare/Percent) + `execution/costs.py` (`assess_costs` = guardrail net-EV) integrato nel `run_cycle` (no-trade se la ricompensa non copre i costi).
+- **Test**: 7 nuovi (commission, cost guardrail, triggers, cycle stub/buy/cost-skip); **full suite 283 verdi**.
+- **Stato branch**: `feat/alpha-core` è la linea completa e runnabile (manca solo il grafo reale al posto dello stub). `my-main` intatto.
+
+## [2026-06-06] DESIGN — Trigger Engine centralizzato + Cost accounting a runtime
+
+- **Input di Luca** (due temi di design, da segnare e pensare):
+  1. **Centralizzare i trigger** (alert, `next_check_date`, calendario economico, periodical synthesis, news). Valutazione: ottima idea, si salda col funnel. → creata [[system/orchestration/trigger-engine]]: un **Trigger Engine** raccoglie tutte le sorgenti, normalizza in `TriggerEvent`, immette nella **coda di priorità D** ([[system/orchestration/parallelism-design]]); il PM consuma una sola coda (dedup, priorità, rate-limit, audit "perché mi sono svegliato"). Il Trigger Engine = il "perché", il funnel = il "come".
+  2. **Commissioni a runtime**. → creata [[system/investment/cost-accounting]]: gestione in 3 momenti — pre-trade (stima `CommissionModel` per broker + token-cost → guardrail **net-EV / R:R al netto dei costi** → no-trade se i costi non sono coperti), post-fill (commissione reale + token-cost sul `trade`), accounting/learning (net performance reale). Token metering per ciclo + budget anti-overtrading opzionale. Consolida le decisioni esistenti (transaction cost auto-adattivo · token cost = commissione).
+- **Registrato**: 2 nuove pagine + [[_meta/index]] + board 🟠 (2 card) + [[system/foundation/decision-log]] (2 decisioni aperte).
+- **Stato**: entrambi **proposti/aperti**, da implementare nel cycle runner (trigger) e nell'adapter broker + Trade gate (cost).
+
+## [2026-06-06] CODICE — broker adapter + esecuzione (branch feat/broker-adapter)
+
+- **Branch** `feat/broker-adapter` (commit 14e2dc6, base `feat/trade-execution`).
+- **`tradingagents/broker/`**: `base.py` (`Broker` protocol + `OrderRequest`/`BrokerOrder`/`OrderStatus`), `paper.py` (`PaperBroker` in-process: fill istantanei, **idempotente su `client_order_id`**, traccia cassa/posizioni), `alpaca.py` (`AlpacaBroker` REST paper via `requests`, integration).
+- **`execution/submit.py`**: `submit_trade` (pending→broker→aggiorna status/broker_order_id), `execute_thesis` (size+record+submit end-to-end), `reconcile_open_trades` (rilegge il broker come **source of truth** → la routine di graceful recovery decisa nella wiki).
+- **`.env.example`**: `ALPACA_API_KEY`/`ALPACA_SECRET_KEY`.
+- **Test**: 5 unit (PaperBroker idempotenza, submit, execute_thesis, reconcile) + 1 integration Alpaca gated. Suite branch: **32 verdi**.
+- **NB branching**: esistono due linee d'integrazione divergenti — `feat/indicators` (storage+domain+execution+ingestion+indicators) e `feat/broker-adapter` (storage+domain+execution+broker). Per l'alpha completa andranno unite (decisione PR a Luca).
+- **Registrato**: [[system/execution/execution]] (callout broker); board ✅ + card adapter broker aggiornata (resta IBKR); hot-cache.
+
+## [2026-06-06] CODICE — indicatori + backbone deterministica E2E (branch feat/indicators)
+
+- **Branch** `feat/indicators` (commit 9a0fda4) = **integrazione di tutto** (merge `feat/trade-execution` + `feat/data-ingestion`): storage + domain + execution + ingestion + indicators.
+- **`tradingagents/indicators/`**: `core.py` (ATR, RSI, SMA, EMA, 52w high/low, max_drawdown — puro Python; `compute_indicator` = tool famiglia B) + `db.py` (`atr_from_db`, `indicator_snapshot` leggono `price_bars`). Chiude il gap: il risk engine voleva l'ATR come input, ora lo si calcola dai dati.
+- **Test E2E** (`tests/test_pipeline_e2e.py`): la **spina deterministica senza LLM** — ingest barre → ATR dal DB → `atr_levels` → `position_size` → `propose_and_record` → ordine persistito + lookup idempotente. È lo scheletro su cui il grafo LLM si innesta (deve solo riempire view/direction dello state).
+- **Test**: 8 nuovi (7 indicatori + 1 E2E); **40 test "nostri" verdi** sull'intera catena integrata.
+- **Registrato**: board ✅; [[system/quant/quant-backtesting]] (indicatori) + [[system/execution/execution]]; hot-cache.
+
+## [2026-06-06] CODICE — connettori dati + screening (branch feat/data-ingestion)
+
+- **Branch** `feat/data-ingestion` (commit d2a6783, base `feat/storage-layer`).
+- **`tradingagents/ingestion/`**:
+  - `price_ingest.py` — `PriceFetcher` (protocol), `YFinanceFetcher` (adapter reale via yfinance), `ingest_price_bars()` **DB-first**: check-presenza (no ri-download dello storico immutabile, confronto ts normalizzato naive per SQLite) + write-through su `price_bars` con double-date.
+  - `screening.py` — `compute_screening_signals()` deterministico (total_return, avg_range_pct, momentum_ratio, range_position → score [0,1]; no LLM = Quick Thinker) + `screen_ticker()` che legge le barre dal DB e scrive `ticker_card.screening_score` → input della coda di priorità del funnel.
+- **Test**: 5 unit (fake fetcher offline + check-presenza dedup + screening) + 1 **integration yfinance reale** → tutti verdi. Bug risolto in corsa: confronto ts tz-aware vs naive (SQLite) → normalizzato.
+- **Nota**: i `dataflows/` del fork restituiscono testo per LLM; questa è la via strutturata che popola il DB. Mancano: queue + adaptive extractor (rate-limit), mantainer, vendor news/fondamentali/macro.
+- **Registrato**: [[system/data/data-layer]] (callout connettori); board ✅; [[system/orchestration/parallelism-design]] (screening ora ha il primo codice).
+
+## [2026-06-06] CODICE — sessione autonoma a branch (storage + dominio + trade)
+
+- **Mandato Luca**: *"vai vai, continua con tutto quello che serve al codice per rispettare la wiki, partendo dal codice attuale; fai i test, lavora per branch e committa in autonomia, poi valuto io le PR"*. → autonomia piena, slice verticali testate e committate; PR decide Luca.
+- **Branch del fork** (`/Users/luca/Desktop/trading-agent`, base `my-main`):
+  1. `feat/storage-layer` (commit b5a16e4) — pacchetto `tradingagents/storage/` (vedi entry sotto), 7 test.
+  2. `feat/domain-model` (commit 80bc978) — `tradingagents/domain/`: `enums.py` (Direction 5-livelli + RiskVerdict), `state.py` (ResearchState Pydantic = research_state/investment_state, gate completezza, `seal()` Opzione C), `risk.py` (ATR levels, R:R guardrail, conviction multiplier, sizing risk-based con heat+cap, guardrail Statuto). 15 test. Realizza [[system/investment/state-schemas]] + [[system/investment/position-sizing]].
+  3. `feat/trade-execution` (commit 296a1ce, merge di 1+2) — `tradingagents/execution/trade.py`: Trade deterministico (no LLM) state→ordine via risk engine, `client_order_id` idempotente, `inject_portfolio_state` (tool G), `propose_and_record` end-to-end. 5 test integrazione. Realizza [[system/execution/execution]].
+- **Test**: `uv run pytest` → **27/27 verdi** sul branch d'integrazione (7 storage + 15 dominio + 5 trade). I test sono l'**oracolo** (metodo concordato).
+- **Strategia branch**: tre PR indipendenti/impilabili; `feat/trade-execution` include gli altri due via merge. Luca decide ordine PR.
+- **Divisione lavoro**: Claude = fondazione dati/dominio/esecuzione deterministica; Luca = grafo (M1).
+- **Registrato**: [[system/data/data-layer]] · [[system/execution/execution]] · [[system/investment/state-schemas]] · [[system/investment/position-sizing]] (callout "implementato"); board 3× ✅; [[system/_reference/fork-gap-analysis]].
+
+## [2026-06-06] CODICE — strato dati (alpha v0) implementato nel fork
+
+- **Svolta**: Luca dà il via al codice (*"rendiamo trading-agent una prima versione alpha"*), prende il **grafo** in autonomia, delega a Claude *"vedi cosa ha senso fare ma parti"*. Scelta: costruire lo **strato dati** (M2), il gap più grosso e il contratto su cui il grafo poggia → lavoro parallelo non-collidente.
+- **Discussione metodo**: la visione di Luca "wiki-spec → agenti paralleli finché il codice combacia" valutata onestamente — valida come nord, ma da rendere convergente (contratti congelati + test-oracolo + slice verticali + review umana). Lo storage è il **primo contratto congelato**.
+- **Implementato** in `/Users/luca/Desktop/trading-agent`, pacchetto `tradingagents/storage/`:
+  - `models.py` — 7 tabelle SQLAlchemy 2.0 sulle 4 aree wiki: `instruments`, `ticker_card` (scheda funnel), `price_bars` (time-series, double-date anti look-ahead), `research_states` (JSON, sealing Opzione C), `portfolio_snapshots` (rendicontazione), `trades` (`client_order_id` idempotente), `charter` (Statuto parametrico).
+  - `database.py` — engine/session/`init_db`; SQLite default (`~/.tradingagents/`), Postgres/Timescale-ready (hypertable `price_bars` su dialetto postgres).
+  - `repository.py` — helper tipati = contratto di accesso (upsert instrument/scheda, top_screened per la coda D, save/latest research_state, insert price bars, snapshot portafoglio, record_trade + lookup idempotente, charter get/set).
+  - `tests/test_storage.py` — **7 test di accettazione, tutti verdi** (oracolo del data-layer).
+  - deps: `sqlalchemy>=2.0` in `pyproject.toml`; `TRADINGAGENTS_DATABASE_URL` in `.env.example`.
+- **Verifica**: `uv run pytest tests/test_storage.py` → 7 passed; suite completa colleziona 239 test senza errori (additivo, non rompe nulla).
+- **Registrato**: [[system/data/data-layer]] (callout "Implementato alpha v0"); [[system/_reference/fork-gap-analysis]] (M2 avviato, ordine M1/M2 risolto in parallelo); board ✅ Fatto; [[_meta/index]] invariato.
+- **NB**: codice **non committato** (Luca non l'ha chiesto) — file nuovi in working tree del fork.
+
+## [2026-06-06] Gap analysis fork TradingAgents ↔ design (ponte verso il codice)
+
+- **Contesto**: Luca ha aggiunto la dir `/Users/luca/Desktop/trading-agent` (fork vivo di TradingAgents, repo `cookkie03/trading-agent`, già produce report NVDA/MONC.MI) e ha chiesto: altra progettazione o codice? Risposta: il fork copre gran parte del design → basta progettazione astratta, serve **adattare il fork**.
+- **Ispezione fork**: `tradingagents/` (agents/dataflows/graph/llm_clients), `default_config.py`, `graph/setup.py`, `agent_states.py`, `schemas.py`, `trader.py`, elenco tool. Già presenti: 4 analisti, PM, grafo LangGraph, tool (incl. **reddit + stocktwits**), structured output, multi-provider, quick/deep think, checkpoint, `output_language=English`, `past_context`.
+- **Creata** [[system/_reference/fork-gap-analysis]]: mappa **TENGO** (tool, vendor, grafo, structured, multi-LLM) / **ELIMINO** (bull/bear + research_manager, risk debate 3→1, LLM trader→Python, 4 analisti→2 desk, debate-state) / **AGGIUNGO** (DB centrale, esecuzione broker, logica rischio nostra, funnel multi-ticker, conviction enum, trigger autonomi, prompt nostri, OpenRouter+DeepSeek). + **roadmap M0→M6** (M0 wiring+validazione · M1 grafo nostro · M2 DB · M3 rischio+trade deterministico · M4 esecuzione · M5 funnel · M6 leva/learning).
+- **Differenza strutturale chiave**: nel fork il PM è **giudice finale** (pipeline), nel nostro design è **orchestratore in cima** → `graph/setup.py` da riscrivere.
+- **graphify**: `graphify-out/` già presente nel fork (run 2026-05-26, 1192 nodi/818 edge); le community **confermano** la mappa della gap analysis. Da ri-girare dopo le modifiche al grafo.
+- **Punto aperto**: ordine **M1 vs M2** (snellire-grafo-prima vs DB-prima) — proposta M1 prima (definisce cosa persistere), da confermare con Luca.
+- **Registrato**: [[_meta/index]] (nuova voce); board → 🟡 In corso "Roadmap di adattamento del fork".
+
+## [2026-06-06] Topologia parallelismo multi-ticker — architettura a imbuto
+
+- **Richiesta Luca**: al bivio design/codice, scelto di chiudere l'ultima decisione architetturale (parallelismo). Poi domande puntuali sullo **screening**.
+- **Decisione**: le alternative A–E **si compongono** in un **funnel** (non competono): **E** screening deterministico → **D** coda di priorità → **A** deep-dive subgraph per-ticker → **B/C** scheda ticker nel DB. Subgraph vs nodi già deciso (subgraph). Aggiunta sezione "Decisione (2026-06-06): architettura a imbuto" in [[system/orchestration/parallelism-design]] (status draft→active).
+- **Screening — design dettagliato** (risposte alle 6 domande di Luca): **non è un agente** (modulo deterministico Python/quant, Quick Thinker); **usa info passate** (segnali quant nel DB + feedback storico); **lo aggiornano extractor + mantainer** (job periodico, nessun attore nuovo); **2 popolazioni** (portafoglio sempre + universo investibile per origination); **cadenza** periodical synthesis + on-trigger; **scrive nella scheda ticker del DB** (`screening_score`/`rank`/`last_screened_at`), **non** sullo state classico. Confine netto stato-persistente (scheda) vs stato-di-lavorazione (`research_state`).
+- **Ordine MVP**: D+A prima, E e B/C come strati successivi senza rework (alpha-first, ma agganci già definiti).
+- **Registrato**: decisione chiusa in [[system/foundation/decision-log]] (+ riga "ora chiusa"); open row rifocalizzata su "numeri e soglie"; board → ✅ Fatto + card 🟠 trasformata in task MVP; [[system/orchestration/parallelism-design]] (2 sezioni nuove).
+- **Bivio design/codice**: la topologia era l'ultima vera decisione architetturale software. Restano da progettare: schema DB concreto (= ponte al codice) + criteri info-sufficienti/anti-loop (piccolo). Il resto è implementazione o richiede Salvatore.
+
+## [2026-06-06] System prompt degli agenti — metodo + 4 prompt desk
+
+- **Richiesta Luca**: *«proviamo ad andare avanti, per i system prompt bisogna formarsi come veri prompt engineer»*. Sessione condotta da Claude (formazione distillata + proposta + reazione).
+- **Creata** [[system/agents/system-prompts]]: (1) **principio di separazione** comportamento/forma-output/tool; (2) **7 principi** di prompt engineering adottati; (3) **scheletro a 7 blocchi** riutilizzabile; (4) i **4 system prompt del desk scritti per intero** (Technical · Market · Sentiment · Fondamentali). Realizza i comportamenti di [[system/agents/agent-behaviors]] usando i tool di [[system/tools/tools-inventory]].
+- **Scelte di Luca (AskUserQuestion)**: (1) **lingua dei prompt = inglese** (doc resta IT); (2) scrivere **gli altri 3 desk** adesso (Market/Sentiment/Fondamentali) — fatto. PM e Risk rimandati.
+- **Registrato**: decisione chiusa in [[system/foundation/decision-log]]; [[_meta/index]] (nuova voce); board → card ✅ Fatto + card Prompt Builder rifocalizzata (restano PM+Risk); [[system/agents/agents]] (decisione aperta Prompt Builder ora linkata).
+- **Aggiornamento (stessa sessione)**: scritti anche i **2 prompt speciali** — **PM** (orchestratore: chiama i desk come tool, "nel dubbio chiedi sempre", aggrega e decide direction/conviction, set ATR-coefficient stance + next_check_date, flag leva) e **Risk Analyst** (gate bear: guardrail deterministici binding da `<guardrail_checks>`, verdict approved/declined/send_back soglia ~60-70%, validazione leva). Ora **tutti e 6** i prompt esistono come bozze v0. Open point #4 chiuso; status pagina resta `active`.
+- **Prossimo**: consolidamento nel **Prompt Builder** (assemblaggio prompt + contesto XML + JSON-strict, pattern rizzo) + rifinitura iterativa via LangSmith.
+
+## [2026-06-06] Comportamento per-agente del desk — impianto approvato
+
+- **Richiesta Luca**: *«proviamo anche il comportamento per-agente»*. Sessione condotta da Claude (proposta + reazione).
+- **Creata** [[system/agents/agent-behaviors]]: per ognuno dei 4 agenti (Market · Sentiment · Technical · Fondamentali) definite **5 dimensioni** — input · tool (dall'inventario [[system/tools/tools-inventory]]) · output nello state ([[system/investment/state-schemas]]) · stile di ragionamento · criterio di stop. + 5 comportamenti trasversali.
+- **Scelte di Luca (AskUserQuestion + note)**: (1) **news/sentiment spartiti per tipo di informazione** — Market=catalizzatori macro/settore, Sentiment=mood/posizionamento da **più fonti possibili** (vendor news + social/forum Reddit·StockTwits·X + piattaforme sentiment dedicate); (2) **tutti contribuiscono alla direzione** — ognuno col contributo primario della sua specialità (Market→direzione contesto, Technical→entry/livelli) ma libero di esprimersi su tutto, PM aggrega; (3) **stop = auto-stop + il PM può richiamare**.
+- **Sotto-lavoro generato**: enumerare le **fonti/tool di sentiment** (famiglia D di [[system/tools/tools-inventory]] aggiornata: split `get_news`/`get_news_sentiment`/`get_social_sentiment`); si interseca con "indicatori di sentiment" (Salvatore).
+- **Registrato**: decisione chiusa in [[system/foundation/decision-log]] (+ riga "ora chiusa"); open row trasformata in "fonti sentiment"; TODO in [[system/agents/agents]] barrato e linkato; [[_meta/index]] (nuova voce); board → card ✅ Fatto + 🟠→🔴 "fonti sentiment".
+- **Prossimo collegato**: scrivere i **system prompt** che realizzano questi comportamenti (Prompt Builder) → [[system/agents/agents]].
+
+## [2026-06-06] Inventario tool agenti — impianto approvato
+
+- **Richiesta Luca**: scegliere su cosa lavorare; ha scelto **"Tool degli agenti"** (la cosa che aveva messo lui sul piatto il 2026-06-05). Sessione condotta da Claude con proposta concreta + reazione di Luca.
+- **Creata** [[system/tools/tools-inventory]]: inventario dei tool che gli agenti possono chiamare. **9 famiglie** (A prezzi & quote · B indicatori tecnici · C fondamentali · D news/sentiment · E macro · F calendario · G portafoglio · H opzioni · I guardrail=non-tool LLM), ognuna con **5 etichette** (cosa · live/storico · write-through · agente · vendor). **2 regole trasversali**: parametrici mai hardcoded · il dato live torna all'agente *e* scrive copia nel DB. Marcata distinzione tool ereditabili da TradingAgents `dataflows` vs da costruire.
+- **Scelte di Luca (AskUserQuestion)**: (1) `inject_portfolio_state` = **auto a ogni ciclo + richiamabile**; (2) indicatori tecnici = **un solo tool parametrico** `compute_indicator(ticker, indicator, params)`; (3) vendor live MVP = **decidiamo dopo** (candidato Finnhub annotato). Impianto + 9 famiglie + 2 regole **approvati**.
+- **Registrato**: decisione chiusa in [[system/foundation/decision-log]] (+ riga "ora chiusa"); open row rifocalizzata su "vendor"; TODO in [[system/agents/agents]] barrato e linkato; [[_meta/index]] (nuova voce); board → card ✅ Fatto + 🔴 reworded "fissare i vendor".
+- **Prossimo collegato**: **comportamento per-agente** (quali tool usa ogni desk, in che ordine, criterio di stop) → [[system/agents/agents]].
+
+## [2026-06-05] ingest | Conversazione Luca↔Salvatore 2026-06-04 sera + Indicatori Macro
+
+- **Type**: call (15 messaggi audio WhatsApp + export chat) + documento strategia (Indicatori Macro)
+- **Source audio**: `raw/audio/WhatsApp Audio 2026-06-04 at 19.59.54` → `21.59.32` (15 file .txt + .opus)
+- **Source chat**: `raw/daily-notes/2026-06-04.md` (chat export Luca↔Salvatore + conversazione Claude su broker)
+- **Source documento**: `Indicatori per Analisi Macroeconomica.md` (vault root — non archiviato per istruzione esplicita)
+- **Pages created**: [[strategy/indicators/macro-indicators]]
+- **Pages updated**: [[system/quant/quant-backtesting]], [[system/foundation/decision-log]], [[system/foundation/ideas-log]], [[artifacts/project-board]], [[_meta/index]]
+- **Archived**: `raw/audio/*.txt` → `raw/archived/audio/` (file .opus lasciati in place)
+- **Conflicts**: nessuno
+- **Notes**: backtesting equivoco chiarito (deterministico, non AI simulation); policy capitale (no investimento prima della prova); collaboratori pipeline (Zappa, Trezzi, SIM); eToro copy trading come canale monetizzazione futuro; Salvatore sta completando il documento indicatori (12 categorie, per ora PIL completo + Consumi iniziato)
+
+## [2026-06-05] Position sizing (modello risk-based) + autonomia informativa + tool da costruire
+
+- **Position sizing** (passo concordato n°2): proposto in [[system/investment/position-sizing]] il modello **risk-based / fixed-fractional** che si aggancia all'`entry_price` ATR — budget di rischio % (scalato per conviction) → quantità derivata da `stop_distance = k_stop × ATR`, + **portfolio heat** come cap aggregato. Vantaggio: volatility-adjustment *gratis*. Numeri di partenza (1% risk, heat 5–6%, cap titolo 10%) da tarare in backtest. Pagina passata a `status: active`. In attesa di reazione di Luca (decisione aperta aggiornata).
+- **Autonomia informativa real-time first + write-through** (input Luca): gli agenti chiamano info aggiornate in autonomia, anche più volte per verificare; **prima il tool real-time** (non il DB), che **consegna all'agente + copia nel DB** (DB = centro unico). Riconciliato col DB-first: check-presenza per lo storico, real-time-first per il live. → decisione chiusa in [[system/foundation/decision-log]] + callout in [[system/agents/agents]] + sezione in [[system/data/data-layer]] + board ✅.
+- **Selezione tool da costruire** (input Luca): aggiunto come cosa a cui pensare — inventario tool (real-time/storico, write-through, agente, parametri, vendor), parte dai dataflows TradingAgents + tool propri → TODO in [[system/agents/agents]] + decision-log (aperta) + card board.
+- **Prossimo**: spiegazione a voce dell'opzione C (Luca non ricorda cosa sia) — fatta in chat in questa sessione.
+
+## [2026-06-05] approvazioni Luca: sizing impianto + opzione C + idea agenti-sul-sizing
+
+- **Position sizing impianto APPROVATO** (Luca: *«mi convince»*) → decisione chiusa in [[system/foundation/decision-log]]; [[system/investment/position-sizing]] sezione marcata approvata; board card → ✅ + reworded "tarare i numeri". Restano solo i numeri da backtest.
+- **Opzione C (state annidati) CONFERMATA** (Luca: *«ho capito e secondo me ci sta»*) dopo spiegazione a voce → [[system/investment/state-schemas]] sezione marcata confermata; decisione chiusa in [[system/foundation/decision-log]]; board card 🟠→✅.
+- **Idea da valutare — intervento agenti sul sizing** (Luca, *sul piatto*): indagare rischi (rompe determinismo, LLM debole sui numeri, sovraesposizione) vs benefici (contesto non catturato); via di mezzo = fattore ±X% clampato dai cap. → [[system/investment/position-sizing]] (sezione) + [[system/foundation/ideas-log]] + decision-log (aperta) + card 💡 board.
+
+## [2026-06-04] Graceful shutdown & recovery — design (Luca non conosce i DB → spiegazione dal basso)
+
+- **Richiesta Luca**: discutere graceful shutdown & recovery, premettendo di non aver mai studiato i database. Sessione condotta da Claude con spiegazione in parole semplici.
+- **Spiegati** (chat + glossario): transazione/atomicità, broker=source of truth, riconciliazione, intent log (diario delle intenzioni), idempotenza/client order id, checkpoint LangGraph. Aggiunte 3 voci al glossario: **Transazione/Atomicità**, **Riconciliazione**, **Idempotenza/Client order id**.
+- **Design deciso** (sezione dedicata in [[system/data/data-layer]]): routine di init al boot = riconciliazione col broker + controllo intent log; policy = analisi a metà → scarta e ricomincia pulita, ordine a metà → riconciliazione; atomicità copre il crash a metà-scrittura.
+- **Scelta di Luca (AskUserQuestion)**: su disallineamento DB↔broker → **allinea da solo + logga, senza intervento umano** (coerente con autonomia totale). Checkpoint LangGraph per riprendere a metà = ottimizzazione futura, non MVP.
+- **Registrato**: decisione chiusa in [[system/foundation/decision-log]] (+ riga "ora chiusa"); card board 🔴→reworded "Implementare" + card ✅ Fatto; [[_meta/glossario]] (3 voci); [[system/data/data-layer]] (rimossa apertura, aggiunta sezione design).
+
+## [2026-06-04] DB — accesso, performance, minimizzazione query, forma fisica
+
+- **Domanda Luca**: stato attuale del DB, quando/da chi è interrogato, come gestirlo, tecniche per velocizzare read/write, come interrogarlo il meno possibile, che forma avrebbe.
+- **Creata pagina** [[system/data/db-access-performance]]: stato attuale (design, non implementato) · tabelle read/write per attore · gestione a layer (models→repo→service) · tecniche scrittura (batch/COPY, pooling, partitioning) e lettura (indici mirati, BRIN, GIN su JSONB, materialized view, indicatori pre-calcolati) · **minimizzazione query** (check-presenza, snapshot di ciclo in memoria = tool iniezione portafoglio, periodical synthesis, read-through cache, no N+1) · **forma fisica proposta**: PostgreSQL + **TimescaleDB** (hypertable time-series + relazionale + JSONB).
+- **Decisioni CHIUSE da Luca**: **motore DB = PostgreSQL + TimescaleDB**; **cache = in-process per l'MVP, Redis idea futura** (solo se il sistema diventa multi-processo). Spiegato a Luca perché Redis aggiunge un processo+invalidazione separati e non vale finché c'è un solo processo. → [[system/foundation/decision-log]] (chiuse) + board (✅).
+- **Aggiornati**: [[_meta/index]], [[system/data/data-layer]] (callout link), [[system/foundation/decision-log]], [[artifacts/project-board]], [[system/data/db-access-performance]].
+
+## [2026-06-04] validazione collettiva investment_state + flag spiegazione opzione C
+
+- **Input Luca**: tra le opzioni del PM/software, includere la **validazione dell'`investment_state` da parte di tutti gli agenti**, dediti ad assicurare sempre **completezza · correttezza · esaustività delle fonti**.
+- **Registrato**: sezione *Validazione collettiva* in [[system/investment/state-schemas]] (sign-off di tutti gli agenti, `send_back` su lacuna, da decidere se nodo esplicito o responsabilità nel system prompt) + nota nel gate di [[system/execution/execution]] + card in board.
+- **Flag**: Luca segnala di **non aver capito la parte sulla "validazione dello schema dello state"** (opzione C / sealing). Aggiunto un callout *"in parole semplici"* (analogia brutta→raccoglitore) in [[system/investment/state-schemas]]; **da rispiegare a voce** alla ripresa.
+
+## [2026-06-04] istruzione PM "nel dubbio chiedi sempre"
+
+- **Input Luca**: il PM, decisore finale, va istruito (system prompt) a **chiedere SEMPRE ulteriori info ai desk** quando ha dubbi/indecisioni, *anche per le piccolezze*, prima di decidere.
+- **Registrato**: bias "nel dubbio, chiedi" in [[system/orchestration/parallelism-design]] (sezione criteri info-sufficienti) bilanciato coi tetti anti-loop (rete di sicurezza, non scusa per decidere su info parziale; **no-trade preferibile** a basi incerte) + nota nel PM di [[system/agents/agents]] + card in board (system prompt).
+
+## [2026-06-04] chiusura punti state + pesi agenti dal backtest
+
+- **`entry_price` APPROVATO** da Luca (*«leggendolo mi sembra ok»*) → decisione chiusa in [[system/foundation/decision-log]], board → ✅, [[system/investment/state-schemas]] sezione marcata approvata.
+- **Aggregazione `direction`/`conviction`**: Luca chiarisce il suo modello → **deciso**: ogni desk propone (`suggested_direction`/`suggested_conviction`), il **PM aggrega e decide**. Aggiunto campo `agent_opinions` allo schema; nota in [[system/agents/agents]]; decisione chiusa.
+- **State annidati**: Luca non ha preferenza, vuole valutare le opzioni → scritte in [[system/investment/state-schemas]] le **3 opzioni A (piatto) / B (sotto-state) / C (ibrido)**; resta **aperta** (board 🟠).
+- **Forma fine di storage**: chiarito cosa significava (come persistere il documento-state annidato) → orientamento **JSON/JSONB** in colonna, niente secondo DB. In [[system/investment/state-schemas]] + [[system/data/data-layer]].
+- **Pesi degli agenti dal backtest** (input Luca): la ponderazione dinamica dei desk è un **output del backtesting validatore** (hit-rate per-agente), non un parametro a mano → [[system/quant/learning-feedback-loop]] §4 + [[system/quant/quant-backtesting]] + board.
+- **Precisazione pesi (Luca)**: i pesi sono **indicazione, non regola** — contesto/awareness in input al PM, non automatismo che scavalca il giudizio; aggancio risolto come **(a) input al PM** (scioglie la tensione con "conviction dal PM"). Seconda funzione: **diagnostica** su cosa/come migliorare agenti e tool collegati. Decisione chiusa + §4 e punti aperti aggiornati.
+- **State annidati**: Luca sceglie **orientamento C (ibrido)**, da *validare al massimo* → in [[system/investment/state-schemas]] aggiunta la strategia di validazione a basso rework (sealing piatto→annidato). Schema dello state **chiuso a livello di design**.
+
+## [2026-06-04] commenti Luca su entry_price + cross-link glossario
+
+- **Trigger**: Luca legge la proposta `entry_price` e dà 9 commenti + input successivi, poi "aggiorna tutti i riferimenti del glossario".
+- **Risposte/spiegazioni**: aggiunti al glossario **ATR** e **Risk/Reward Ratio** con formule complete; spiegato (in chat + pagine) il *perché leva via opzioni e non margine* → nota in [[strategy/questions-for-salvatore]] §4. Aggiunto esplicativo ATR/R:R in [[system/investment/state-schemas]].
+- **Decisioni chiuse (2026-06-04)**: **autonomia totale** (nessun input umano oltre l'accensione, auto-start timer+alert); **PM attivato anche dal `next_check_date` scaduto** (terzo trigger); **backtesting = validatore continuo e asincrono** delle soglie (R:R, k_*, ATR, Statuto); **conviction = enum** (non score 0-100). Tutte in [[system/foundation/decision-log]] + board.
+- **Nuove registrazioni**: disinvestimento come **batch di trade coordinati** del PM (solo se tutto analizzato) → [[system/investment/rating-scoring]]; **tool di iniezione stato portafoglio** obbligatorio → [[system/agents/agents]]; **comportamento per-agente del desk** da approfondire → [[system/agents/agents]] (decisione aperta); **legenda colori canvas** (viola=DB·arancio=agent·verde=tool·azzurro=state) → [[_meta/taxonomy]].
+- **Nuova pagina**: [[system/investment/investment-state-template]] — template-menu completo dell'`investment_state` da affrontare con Salvatore (marcatori CORE/OPZIONALE/DA VALUTARE, sezioni A–F + guardrail).
+- **Cross-link glossario**: script una-tantum (`tmp/glosslink.py`) → **145 link** al glossario su 27 pagine, prima occorrenza per termine, escluse tabelle (pipe)/code/heading/frontmatter. Verificato: 0 link in tabelle, 0 annidati, anchor tutti validi.
+- **Aggiornati**: [[system/agents/agents]], [[system/quant/quant-backtesting]], [[system/investment/rating-scoring]], [[system/investment/state-schemas]], [[system/investment/investment-state-template]], [[strategy/questions-for-salvatore]], [[system/foundation/decision-log]], [[_meta/glossario]], [[_meta/taxonomy]], [[_meta/index]], [[artifacts/project-board]] + i 27 file cross-linkati.
+
+## [2026-06-04] design state | Proposta struttura `entry_price` (backbone ATR)
+
+- **Trigger**: "riprendiamo". Ripartenza dallo Step 1 (schema dello state). Sessione condotta da Claude (Luca preferiva reagire più che decidere a freddo).
+- **Lavoro**: progettata e scritta in [[system/investment/state-schemas]] la **proposta per `entry_price`** del limit order — chiude il punto che Luca voleva "strutturare bene". Backbone in **unità di ATR** (coerente col volatility-adjustment del [[system/investment/position-sizing]]): `entry/stop/tp` derivati da `current_price` ± `k·ATR`; l'LLM ragiona in coefficienti `k_*` (non prezzi assoluti), la funzione Python traduce in prezzo. Due agganci: `k_entry` **scalato per conviction** (più convinto → meno sconto), e **guardrail R:R** deterministico (`k_tp/k_stop ≥ soglia`, default 1.5) nel gate di rischio. Ciclo di vita del limit non colpito → scadenza alla `next_check_date`. Default prima alpha: ATR(14), `k_stop=2`, `k_tp=3`.
+- **Stato**: è una **proposta da approvare**, non una decisione presa. Board aggiornata (card `entry_price` → "proposta pronta"), `entry_price` rimosso dai punti aperti di state-schemas.
+- **Aperti residui state**: granularità conviction, n. state annidati, storage state, dove avviene l'aggregazione.
+
+## [2026-06-03] review pre-sviluppo | Risposte di Luca alle lacune → nuove pagine + board come hub
+
+- **Trigger**: "cosa manca da capire/decidere prima dello sviluppo" → analisi lacune → Luca risponde punto per punto (chat 2026-06-02, si ferma a metà) → "sistemami tutto" + "usa la board come centrale operativa con riferimenti" + "salva la convenzione in CLAUDE.md" + "distingui owner pagine/task".
+- **Lette le 2 call del 2026-05-29** (`raw/archived/`): confermato ruolo `mantainer` (technical → rendicontazione) e modello di attivazione (alert prezzo/news + periodical synthesis).
+- **Nuove pagine create**: [[system/investment/state-schemas]], [[system/investment/position-sizing]] (con spiegazione Kelly), [[system/investment/rating-scoring]], [[system/orchestration/parallelism-design]], [[strategy/questions-for-salvatore]].
+- **Pagine aggiornate**: [[system/foundation/decision-log]] (9 decisioni chiuse nuove + tabella aperte con colonna Owner + riferimenti), [[system/data/data-layer]] (storage time-series, mantainer confermato, queue extractor, deploy/recovery), [[system/execution/execution]] (adapter broker intercambiabili, transaction cost auto-adattivo), [[system/agents/agents]] (conviction dal PM, monitoring da SFC, link), [[system/quant/quant-backtesting]] (calcolo fattori interno, VectorBT, link Salvatore), [[system/foundation/stack]] (broker Alpaca→IBKR), [[_meta/glossario]] (Kelly, overfitting, conviction, adapter, time-series, subgraph), [[system/foundation/ideas-log]] (sezione 2026-06-02).
+- **Board ridisegnata** ([[artifacts/project-board]]): centrale operativa, owner 🛠/📈/🔀 + `→ [[pagina]]` su ogni card, prossimi 2 passi in testa.
+- **CLAUDE.md**: nuova sezione "Centrale operativa — la Board" (convenzione board-hub, owner, riferimenti, creare pagine).
+- **Meta**: [[_meta/index]] (6 link nuovi), [[_meta/hot-cache]] (sessione + decisioni). `taxonomy.md` invariato.
+- **Follow-up 2026-06-03**: Luca conferma di aver commentato l'intera analisi. Aggiunti: **subgraph come pattern granulare** ([[system/orchestration/parallelism-design]]); **disinvestimento a 2 livelli** automatico/valutato ([[system/investment/rating-scoring]], [[system/execution/execution]]); **alternative di attivazione alert** esplicitate ([[system/data/data-layer]]); **trailing stop loss** in glossario; punto **legale parcheggiato** ([[system/foundation/ideas-log]]). Corretta la nota "fermato a metà" in hot-cache.
+- **Follow-up 2026-06-03 (idee iniziali)**: Luca chiede di recuperare le idee iniziali sparse — "agent di reportistica su cosa va male" e "ponderazione pesi degli agent del desk". Ricostruite dalle fonti (ideas-log 2026-05-21, architecture Layer 5, mvp, glossario) e **unificate** in nuova pagina [[system/quant/learning-feedback-loop]] (substrato logging · reportistica diagnostica · scoring agenti · ponderazione pesi · feedback post-trade). Decisione di Luca: **reportistica = modulo deterministico + narrazione** (tenuto come opzione, non agente dedicato). Aggiornati: [[system/investment/rating-scoring]] (§2/§4 → link), [[system/foundation/architecture]] (Layer 5 + reportistica), [[system/foundation/mvp]] (post-MVP + substrato), [[system/agents/agents]] (TODO), [[_meta/index]], [[system/foundation/ideas-log]], [[artifacts/project-board]] (3 card nuove + decisione aperta punto di aggancio pesi).
+
+## [2026-05-29] refactor strutturale | Riorganizzazione completa per argomento + moduli da canvas
+
+- **Trigger**: "rifattorizzare completamente la struttura tree e di file della wiki" → "eliminiamo references" → "i moduli vanno rifatti, non rispettano `architettura.canvas`"
+- **Decisioni di struttura (con Luca)**: dissolvi-del-tutto le call (date inline, no `journal/`); naming inglese; PM = agente LLM orchestratore; moduli decomposti per aree del canvas (4 file).
+- **Rinominazioni cartelle**: `build/` → `system/`; `references/` **eliminata**.
+- **`references/` smistata**: prior-art → `prior-art/{tradingagents,libraries,papers}/`; `tool-set-provider` → [[system/data/data-providers]]; `onboarding-wiki-workflow` → [[_meta/onboarding]]; `trading-floor-canvas` → [[artifacts/trading-floor]]; `note-audio-salvatore` dissolto in nuova [[strategy/methods/dual-portfolio]].
+- **Moduli ricreati su `architettura.canvas`**: eliminati `exchange-db`, `llm-agent-system`, `risk-management`; creati [[system/data/data-layer]] (DB-hub + extraction + mantainer), [[system/agents/agents]] (PM orchestratore + 2 desk + Risk Analyst/Statuto), [[system/execution/execution]] (Investment State → Trade → Exchange); [[system/quant/quant-backtesting]] mantenuto. [[system/foundation/architecture]] riallineata (2 desk, mantainer, PM agente, canvas `architettura.canvas`).
+- **Dissolte ed eliminate** (grezzi in `raw/archived/`): 8 call (`conversazione`/`videochiamata`/`whatsapp`) + `architecture-handwritten-notes` + `note-audio-salvatore`.
+- **Link**: riscritti tutti i wikilink path-qualified + bare + alias; rimosse le `sources:` verso le call dissolte; provenienza ora inline (date). Verifica: 0 link rotti fuori da questo log (le voci storiche qui sotto conservano i nomi dell'epoca).
+- **Meta aggiornati**: [[_meta/taxonomy]] (path nuovi, righe morte marcate), [[_meta/index]] (riscritto), [[overview]], [[_meta/hot-cache]].
+
+
+
+- **Trigger**: `/wiki-lint` — "rivediamo completamente la struttura della wiki per farla funzionare meglio con le cose discusse nelle ultime call"
+- **Lint**: 1 link rotto (`dev-roadmap.canvas`), 1 ambiguo (`trading-floor.canvas` duplicato), 1 orfana (`tradingagents-graph-schema`), 1 conflitto (Trader), 54 file spazzatura, 3 file pending. Freshness: nessun problema >90gg.
+- **Riallineamenti contenuto**:
+  - [[system/foundation/architecture]] riscritta sulla topologia 2026-05-29 (PM orchestratore → analisti → research_state → Risk Analyst gate → Trade deterministico; Layer DB esteso/Extractors/gate; protocollo state+DB con context rot; sequenza di sviluppo "riscrivere il grafo")
+  - [[system/agents/agents]] **conflitto Trader risolto**: Funzione + sezione Leva riallineate (segnale `Strong` nel research_state validato dal Risk Analyst, esecuzione deterministica); Dipendenze/TODO aggiornati
+  - [[system/data/data-layer]] **schema DB consolidato** (5 tabelle core ↔ 4 aree logiche, mapping unico)
+- **Ingest pending**:
+  - daily-note 2026-05-28 (storage SQL vs JSON) → domanda aperta in [[system/data/data-layer]] e [[system/foundation/decision-log]]
+  - daily-note 2026-05-29 (tool per indicatori + SFC) → sezione tool-centric di [[system/agents/agents]]
+  - transcript 05-13 → pagina [[references/videochiamata-luca-salvatore-2026-05-13]] già completa; archiviato, raw_source_path corretto
+- **Fix link rotti**: `ops/wiki-restructuring-plan` (2×), `external/trading-agents-framework` (2×), `tradingagents-graph.canvas` (2×, canvas eliminato da Luca)
+- **Pages updated**: [[system/foundation/architecture]], [[system/agents/agents]], [[system/data/data-layer]], [[system/foundation/decision-log]], [[_meta/index]], [[references/videochiamata-luca-salvatore-2026-05-13]], [[prior-art/tradingagents/code-wiki]], [[prior-art/tradingagents/graph-schema]], [[_meta/hot-cache]]
+- **Deleted**: 54 frammenti `raw/audio/.txt*.txt`; stub `wiki/artifacts/artifact-workbench.md`
+- **Archived**: `raw/archived/daily-notes/2026-05-28.md`, `2026-05-29.md`; `raw/archived/audio/2026-05-13 13-14-17.txt` (+.tmp.mp3)
+- **Canvas**: Luca ha riorganizzato in Obsidian in parallelo → tutti sotto `artifacts/` (design in `artifacts/architecture/`); eliminati da lui `mvp-system-cycle.canvas`, `trading-floor.canvas` (root), `tradingagents-graph.canvas`. `wiki/build/architecture/` non esiste più.
+- **Conflicts**: il conflitto Trader (segnalato nell'ingest precedente) è stato **risolto** in questa sessione.
+- **Notes**: vedi anche il cleanup pass 2 sotto.
+
+## [2026-05-29] cleanup | Rimozione ridondanze + link rotti residui
+
+- **Trigger**: richiesta utente — "tenere tutto pulito, togliere informazioni ridondanti, file non essenziali"
+- **Refactor**: [[system/foundation/mvp]] — rimossi *Ciclo operativo* (vecchia topologia, duplicava [[system/foundation/architecture]]) e *Decisioni fondanti* (duplicavano [[system/foundation/decision-log]], con dati stale su crypto/Binance/DeepSeek 1/20); allineato a stock-only + topologia 29/05; **mantenuti** metriche a due livelli, backtesting integrato, sequenza track, insight NotebookLM
+- **Deleted**: `wiki/artifacts/kanban-project-status.md` — stale (06/05), `type:ops` (ruolo eliminato dalla taxonomy), "Blocked: Crypto vs Equity" già chiuso, ridondante con [[artifacts/luca-board]] + [[artifacts/salvatore-board]] + [[system/foundation/decision-log]]. Riferimenti sistemati in [[_meta/index]] e [[references/videochiamata-luca-salvatore-2026-04-30]]
+- **Link rotti risolti**: `[[strategy/]]`→`[[strategy/index]]` (quant-backtesting); 3 stub metriche in [[strategy/methods/trend-following]] → testo semplice; `[[raw/daily-notes/2026-05-19]]` in [[system/foundation/ideas-log]] → path archiviato
+- **Pages updated**: [[system/foundation/mvp]], [[_meta/index]], [[references/videochiamata-luca-salvatore-2026-04-30]], [[system/quant/quant-backtesting]], [[strategy/methods/trend-following]], [[system/foundation/ideas-log]], [[_meta/hot-cache]]
+- **Stato finale**: 0 link rotti reali nella wiki
+
+## [2026-05-29] ingest | Due videochiamate Luca & Salvatore 29/05 — LangChain/LangGraph + design architettura custom
+
+- **Type**: call (2 videochiamate, trascrizioni audio)
+- **Sources raw**:
+  - `raw/archived/2026-05-29 11-08-30.txt` — call mattina (TradingAgents/LangGraph spiegato + decisione portfolio vs day-trading)
+  - `raw/archived/2026-05-29 14-41-53.txt` — call pomeriggio (design su `agents.canvas`)
+- **Pages created**:
+  - [[references/videochiamata-luca-salvatore-2026-05-29]]
+  - [[strategy/metrics/benchmark]]
+- **Pages updated**:
+  - [[system/agents/agents]] (topologia agenti, Trade deterministico, PM orchestratore, context rot, OpenRouter/DeepSeek)
+  - [[system/data/data-layer]] (design DB esteso, extractors, market alert, retention)
+  - [[system/agents/agents]] (Risk Analyst gate bear + guardrail deterministici)
+  - [[system/quant/quant-backtesting]] (posizione TA/fondamentali/sentiment)
+  - [[system/foundation/decision-log]] (10 decisioni chiuse del 29/05 + aggiornate aperte)
+  - [[system/foundation/stack]] (OpenRouter, DeepSeek V4 Pro + costi, storage)
+  - [[wiki/overview]], [[strategy/index]], [[artifacts/luca-board]], [[artifacts/salvatore-board]], [[_meta/index]], [[_meta/hot-cache]]
+- **Conflicts**: segnalato (non risolto automaticamente) — vecchio "LLM Trader produce JSON" + "agente Esecutore gestisce leva" in [[system/agents/agents]] vs nuovo "Trade = funzione Python deterministica". Da riconciliare dove vive la logica leva via opzioni.
+- **Skipped**: nessuno (`raw/notes/` conteneva solo `.DS_Store`)
+- **Notes**: Sessione di design molto densa. Confermato il pivot definitivo a gestione di portafoglio mid-term stock-only; definita la topologia del grafo da costruire (riscrittura su base TradingAgents), il DB esteso ispirato alla dashboard SFC, e lo stack LLM (OpenRouter + DeepSeek V4 Pro). [[system/foundation/architecture]] resta da allineare alla nuova topologia.
+
+## [2026-05-27] update | Decoupling logic segnali Strong Buy/Sell da agenti specifici
+
+- **Change**: Scollegata esplicitamente la logica dei segnali ad alta convinzione (Strong Buy e Strong Sell) per la leva con opzioni da una tipologia rigida di agenti (come i "Ricercatori"). Il calcolo e la validazione della convinzione sono trattati come concetti/task di sistema, e l'assegnazione finale del ruolo all'agente o nodo più idoneo avverrà durante la mappatura granulare del grafo LangGraph.
+- **Pages updated**: [[references/conversazione-luca-salvatore-2026-05-27]], [[system/agents/agents]], [[system/agents/agents]], [[system/foundation/decision-log]]
+
+## [2026-05-27] ingest | Brainstorming Luca & Salvatore 27/05 — Ricercatori/Esecutori + Statuto 10% + Opzioni Leva + Token Cost Estimator + Piero Site
+
+- **Type**: chat + 18 note vocali WhatsApp (brainstorming architetturale e operativo)
+- **Sources raw**:
+  - `raw/daily-notes/2026-05-27.md` — log chat WhatsApp del 27 maggio 2026
+  - `raw/audio/WhatsApp Audio 2026-05-27 at *` (18 file trascrizioni .md) — note vocali Salvatore trascritte
+- **Pages created**:
+  - [[references/conversazione-luca-salvatore-2026-05-27]]
+- **Pages updated**:
+  - [[system/agents/agents]] (suddivisione Ricercatori/Esecutori, opzioni leva, integrazione LangSmith)
+  - [[system/agents/agents]] (Statuto deterministico, riserva liquidità 10%, OpenRouter LLM cost estimator)
+  - [[system/foundation/decision-log]] (aggiunte 5 decisioni chiuse e 4 aperte/aggiornate del 27/05)
+  - [[_meta/index]] (collegata nuova source page delle referenze)
+  - [[_meta/hot-cache]] (aggiornato contesto sessione, decisioni e pending ingests)
+- **Contradictions**: nessuna
+- **Notes**: Sessione estremamente prolifica che sposta l'orizzonte operativo verso un modello "Wealth Manager" autonomo ("Piero") basato su stock-only e leva controllata tramite acquisto opzioni (Call/Put), tracciato con LangSmith e regolato da uno Statuto istituzionale rigido con 10% liquidità disinvestita costante.
+
+## [2026-05-27] ingest | Daily Notes 19-22-23-25-26/05 + WhatsApp chat 22/05 + Istruzioni wiki
+
+- **Type**: daily notes (idee tecniche) + chat WhatsApp (test TradingAgents) + istruzioni wiki (scope + struttura)
+- **Sources raw**:
+  - `raw/daily-notes/2026-05-19.md` — appunti lettura TradingAgents Code Wiki + istruzioni wiki
+  - `raw/daily-notes/2026-05-22.md` — idee architetturali e organizzative
+  - `raw/daily-notes/2026-05-23.md` — istruzioni wiki: scope stock-only, dismetti moduli sequenziali, LangChain
+  - `raw/daily-notes/2026-05-25.md` — LangSmith, Mermaid, evaluation CLI
+  - `raw/daily-notes/2026-05-26.md` — conversazione Luca+Salvatore su report TradingAgents NVDA
+  - `raw/audio/WhatsApp Chat - Salvatore Luca/_chat.txt` — chat WhatsApp 22/05 test NVDA
+  - `raw/audio/WhatsApp Chat - Salvatore Luca/*.opus` (6 file) — audio Salvatore, richiedono wiki-preprocess
+- **Pages created**:
+  - [[references/whatsapp-luca-salvatore-2026-05-22]]
+  - [[references/conversazione-luca-salvatore-2026-05-26]]
+- **Pages updated**:
+  - [[system/foundation/ideas-log]] (aggiunte sezioni 22/05, 25/05, 26/05)
+  - [[system/foundation/stack]] (aggiunta sezione AI Agent Framework: LangChain, LangSmith, Mermaid, struttura repo)
+  - [[system/foundation/decision-log]] (aggiunte 7 decisioni chiuse 2026-05-19/23/26; chiuse 3 aperte: fork, multi-asset, debate)
+  - [[system/data/data-layer]] (rinominato da module-a-exchange-db; scope stock-only, exchange da scegliere)
+  - [[system/quant/quant-backtesting]] (rinominato da module-c-quant-backtest; aggiornati riferimenti)
+  - [[system/agents/agents]] (rinominato da module-d-prompt-builder-trader; Bull/Bear agents eliminati)
+  - [[system/agents/agents]] (rinominato da risk-analyst; aggiornati riferimenti)
+  - [[_meta/index]] (aggiornati link moduli + aggiunte 2 nuove source page)
+- **Contradictions**: Scope decisione 2026-04-30 (crypto) contradetto da 2026-05-23 (stock-only) → risolto a favore della più recente
+- **Notes**: 6 file .opus trascritti con Whisper medium in questa sessione. 1 .m4a (2026-05-13) ancora pending. Audio contenevano: valutazione report NVDA, analisi del ragionamento AI vs bias, rischio sistemico AI trading, contesto S&P500 Mag7.
+
+## [2026-05-22] ingest | Tool Set Provider Dati Exchange + Note Quant Salvatore + Brenndoerfer + Update videochiamata-05-13
+
+- **Type**: note (provider dati) + audio notes (strategie quant) + article (quant trading)
+- **Sources raw**:
+  - `raw/notes/Tool Set, Provider dati, Exchange.md` → archiviato
+  - `raw/articles/quant strategy/*.txt` (6 file, 2 trascrizioni uniche) → da archiviare
+  - `raw/articles/quant strategy/Quantitative Trading Strategies...md` → da archiviare
+  - `raw/audio/Bella, Come tutto bene?...txt` → da archiviare (contenuto extra aggiunto a videochiamata-05-13)
+  - `raw/notes/sessione-brainstorming-2026-05-13.md` → archiviato (già ingestato come mvp-prototype-design)
+  - `raw/daily-notes/2026-05-13.md` → archiviato (contenuto minimalissimo, già coperto)
+  - `raw/daily-notes/2026-05-14.md` → archiviato (contenuto minimalissimo, già coperto)
+  - `raw/audio/Come stai tutto bene?...txt` → da archiviare (già ingestato come videochiamata-05-06)
+  - `raw/audio/così ce l'abbiamo...txt` → da archiviare (già ingestato come videochiamata-04-30)
+  - `raw/audio/Invece Obsidian...txt` → da archiviare (già ingestato come videochiamata-04-30)
+- **Pages created**:
+  - [[system/data/data-providers]]
+  - [[strategy/methods/dual-portfolio]]
+  - [[prior-art/papers/brenndoerfer-quant-trading]]
+  - [[strategy/methods/mean-reversion-stat-arb]]
+- **Pages updated**:
+  - [[references/videochiamata-luca-salvatore-2026-05-13]] (aggiunto sez. 8-11: struttura multi-agente verbale Salvatore, order book crypto, fork vs from scratch, sequenza operativa)
+  - [[strategy/index]] (aggiunto mean-reversion-stat-arb)
+  - [[_meta/index]] (aggiunte 4 nuove pagine + mean-reversion a strategy)
+- **Contradictions**: nessuna
+- **Notes**: 4 file audio confermati come già ingestati in sessioni precedenti. File quant strategy contenevano 2 trascrizioni uniche duplicate. Daily notes erano minimalissime. I file audio da archiviare richiedono permesso bash — da completare manualmente.
+
+## [2026-05-22] update | CLAUDE.md riscritto
+
+- **Change**: CLAUDE.md ridotto all'osso e reso resistente a ristrutturazioni future
+- **Rimosso**: struttura vault hardcodata, riferimenti a cartelle eliminate (ops/, theory/, decisions/), dataview queries obsolete, tipi frontmatter non più usati
+- **Aggiunto**: delega esplicita dei path a taxonomy.md, tabella skill operative, regola di precedenza (taxonomy.md vince su path)
+- **Principio**: se la struttura cambia → si aggiorna taxonomy.md, non CLAUDE.md
+
+## [2026-05-21] lint | Wiki health check + fix
+
+- **Link rotti risolti** (~35 link su 12 pagine): `[[theory/*]]` → `[[system/foundation/architecture]]`, `[[decisions/decision-log]]` → `[[system/foundation/decision-log]]`, `[[ops/*]]` → rimossi o redirectati verso `artifacts/`
+- **raw_source_path corretti**: `references/trading-floor-canvas.md` (puntava a file mancante), `references/videochiamata-luca-salvatore-2026-04-30.md` (m4a mancante → svuotato)
+- **Merge duplicati**: `references/external/trading-agents-framework.md` → contenuto incorporato in `references/external/paper-trading-agents.md` + eliminato; `references/library-portfolio-optimizer.md` → contenuto incorporato in `references/external/cvx-portfolio-optimizer.md` + eliminato
+- **Pagina orfana risolta**: `artifacts/idea architettura.canvas` aggiunto all'index
+- **overview.md**: fix link `[[references/_meta/index]]` → `[[_meta/index]]`
+- **Index aggiornato**: path completi per paper, rimozione duplicati, aggiunta canvas orfano
+- **hot-cache aggiornato**: struttura wiki con ideas-log.md e external/ corretti
+- **Pending ingest**: lanciato subagent in background per i raw pendenti (sessione-brainstorming-2026-05-13, quant strategy txts, Tool Set note, daily-notes 13-14 maggio, audio txts)
+
+## [2026-05-21] ingest | TradingAgents Code Wiki + note di lettura Luca
+
+- **Type**: article (code wiki) + note (daily note 2026-05-19)
+- **Source raw**: `raw/articles/TradingAgents Code Wiki.md`, `raw/daily-notes/2026-05-19.md`
+- **Pages created**: [[prior-art/tradingagents/code-wiki]], [[system/foundation/ideas-log]]
+- **Pages updated**: [[system/agents/agents]] (riscritto da raw dump a pagina strutturata), [[system/foundation/architecture]] (pattern architetturali: look-ahead bias doppia data, DB-first, indicatori dal DB), [[system/foundation/decision-log]] (nuove decisioni: DB-first, LangGraph, agent philosophy, look-ahead bias; aperte: fork vs from scratch, self-scheduling, debate architecture)
+- **Contradictions**: decisione "From scratch" (2026-04-30) vs. "fork da TradingAgents" (2026-05-19, Luca) — segnalata nel decision-log, da formalizzare
+- **Notes**: ideas-log.md creato come file append-only su richiesta di Luca per raccogliere tutte le idee del progetto
+
+## [2026-05-14] update | Aggiunta sezione strategy/
+- **Operazione**: recuperata la distinzione build/ (software, Luca) vs strategy/ (conoscenza mercato, Salvatore)
+- **Cartelle create**: `strategy/`, `strategy/methods/`, `strategy/indicators/`, `strategy/metrics/`
+- **File creati**: [[strategy/index]], [[strategy/methods/trend-following]], [[strategy/methods/factor-investing]]
+- **File aggiornati**: [[system/quant/quant-backtesting]] (link a strategy/), [[_meta/taxonomy]], [[_meta/index]], [[overview]]
+
+## [2026-05-13] restructure | Ristrutturazione completa del vault
+- **Operazione**: ristrutturazione della wiki da struttura generica a struttura orientata al progetto
+- **Cartelle eliminate**: `ops/`, `theory/`, `agents/`, `decisions/`, `questions/`
+- **Cartelle create**: `build/modules/`, `references/external/`
+- **File creati**: [[system/foundation/decision-log]], [[system/foundation/stack]], [[system/data/data-layer]], [[system/quant/quant-backtesting]], [[system/agents/agents]], [[system/agents/agents]], [[references/external/trading-agents-framework]], [[prior-art/libraries/cvx-portfolio-optimizer]], [[_meta/glossario]]
+- **File aggiornati**: [[system/foundation/architecture]] (merge theory/), [[system/foundation/mvp]] (link fix), [[overview]], [[_meta/index]], [[_meta/taxonomy]]
+- **Logica**: ops/ → board; theory/ → build/system-map; agents/ → references/external/; decisions/ → build/decision-log; questions/ → inline nei module files e nelle board
+
+## [2026-05-13] ingest | Videochiamata Luca-Salvatore 2026-05-13
+- **Type**: call (trascrizione audio)
+- **Source**: `raw/audio/2026-05-13 13-14-17.m4a` + trascrizione `.txt`
+- **Pages created**: [[references/videochiamata-luca-salvatore-2026-05-13]], [[ops/wiki-restructuring-plan]]
+- **Pages updated**: [[decisions/decision-log]], [[_meta/index]]
+- **Contradictions**: nessuna
+- **Notes**: Temi principali: trend following come strategia (Moncler example), value investing non scalabile per ora, walk-through architettura e canvas con Salvatore, struttura proposta per sezione quant wiki, workflow Salvatore in Obsidian, piano ristrutturazione wiki (pianificato, non eseguito). Insight critico: effetto FX obbligatorio da considerare su asset con ricavi internazionali.
+
+## [2026-05-13] artifact | Canvas + Glossario — artifact duraturi per il team
+- **Pages created**: [[artifacts/mvp-system-cycle.canvas]], [[artifacts/dev-roadmap.canvas]], [[ops/glossario]]
+- **Pages updated**: [[notebooklm-research-2026-05-13]] (aggiunti riferimenti precisi ai paper), [[_meta/index]]
+- **Notes**: canvas del ciclo operativo e roadmap di sviluppo per spiegare a Salvatore; glossario aggiornabile in italiano; tabella riferimenti ai paper nella synthesis
+
+## [2026-05-13] synthesis | Ricerca NotebookLM — Approcci da progetti simili AI+Finance
+- **Type**: research session (NotebookLM query su 43 fonti)
+- **Pages created**: [[notebooklm-research-2026-05-13]]
+- **Pages updated**: [[system/foundation/mvp]], [[decisions/decision-log]], [[_meta/index]]
+- **Decisioni chiuse**:
+  - Framework backtesting: **VectorBT** (usato da MarketSenseAI)
+  - LLM principale: **DeepSeek** confermato (Alpha Arena: miglior costo/perf)
+  - SL/TP: obbligatori come hard constraint (Simone Rizzo: senza → drawdown devastante)
+  - Output LLM: JSON strutturato obbligatorio (tutti i framework convergono)
+  - Prophet: **non usare** come forecast principale (non regge i crolli)
+- **Nuovi insight operativi**: Quick+Deep Thinker pattern, Pivot Points nel Prompt Builder, Rebalancing Gate, Black-Litterman per views LLM → pesi portfolio
+- **Notes**: Qwen 3 Max +22.88% in Alpha Arena (sorpresa), ma non ancora disponibile facilmente. DeepSeek al secondo posto (+4.76%), Claude -33%.
+
+## [2026-04-30] init | Inizializzazione vault
+- **Pages created**: [[overview]], [[_meta/index]], [[_meta/log]], [[_meta/taxonomy]], [[_meta/hot-cache]]
+- **Vault type**: project wiki
+- **Project shape**: software + research + economic
+- **Collaborators**: 2
+- **Notes**: bootstrap iniziale della wiki
+
+## [2026-04-30] bootstrap | Hub pages create
+- **Pages created**:         
+- **Pages updated**: [[overview]], [[_meta/index]]
+- **Notes**: resi navigabili i principali ingressi della wiki
+
+## [2026-04-30] update | Skill mapping locale
+- **Pages updated**: [[AGENTS]]
+- **Notes**: aggiunti adattamenti locali per le skill `wiki-*` e policy d'uso per artifact, preprocess e query
+
+## [2026-04-30] update | Wiki skills generalized
+- **Pages updated**: [[AGENTS]]
+- **Notes**: refactor delle skill `wiki-init`, `wiki-ingest`, `wiki-query`, `wiki-save`, `wiki-lint`, `wiki-artifact`, `wiki-preprocess` per renderle context-aware e riusabili tra vault di progetto e second brain
+
+## [2026-04-30] update | Operational surface hardened
+- **Pages created**: [[ops/dashboard]], [[ops/current-state]], [[ops/backlog]], [[system/foundation/architecture]], [[decisions/decision-log]], [[questions/open-questions]], [[artifacts/artifact-workbench]]
+- **Pages updated**: [[overview]],      [[_meta/index]], [[AGENTS]]
+- **Notes**: aggiunta una superficie operativa pronta all'uso con dashboard, backlog, stato corrente, system map e registri iniziali
+
+## [2026-05-13] brainstorming | Design MVP Prototype
+- **Partecipanti**: Luca, Claude Code
+- **Pages created**: [[system/foundation/mvp]]
+- **Pages updated**: nessuna (aggiornamento index pendente)
+- **Raw**: `raw/notes/sessione-brainstorming-2026-05-13.md`
+- **Decisioni chiuse**:
+  - Architettura: monolite modulare (Opzione A)
+  - Tipo prototipo: agente autonomo paper trading + backtesting continuativo + metriche
+  - Orizzonte trade: swing trading (4h/daily)
+  - Sequenza sviluppo: Modulo A (Exchange+DB, Luca solo) in parallelo con progettazione Modulo C (Quant+Backtest, con Salvatore), poi Modulo D (Prompt Builder + LLM Trader)
+  - Ciclo raffinato: Risk Analyst è upstream del Trader (fonte: trading-floor.canvas)
+  - Portfolio architecture-first, single-asset deployment nel MVP
+- **Decisioni ancora aperte**: framework backtesting (vectorbt vs backtesting.py), strategia del fondo (formalizzare con Salvatore)
+- **Notes**: prima sessione di design strutturata con agent; raw note contiene tutto il materiale grezzo
+
+## [2026-04-30] ingest | Conversazione progettuale Luca-Salvatore
+- **Type**: call / note
+- **Pages created**: [[references/conversazione-luca-salvatore-2026-04-28-30]], [[theory/modular-trading-agent-architecture]], [[theory/trader-workflow-automation]]
+- **Pages updated**: [[overview]], [[ops/dashboard]], [[ops/current-state]], [[ops/backlog]], [[system/foundation/architecture]], [[decisions/decision-log]], [[questions/open-questions]],   [[_meta/index]]
+- **Contradictions**: nessuna
+- **Notes**: ordinato un bundle di audio, trascrizioni e appunti tra Luca e Salvatore; escluse le parti strettamente personali non rilevanti
+
+## [2026-04-30] artifact | kanban | Stato Progetto
+- **File**: [[kanban-project-status]]
+- **Based on**: [[ops/dashboard]], [[ops/current-state]], [[ops/backlog]], [[system/foundation/architecture]], [[decisions/decision-log]], [[questions/open-questions]], [[references/conversazione-luca-salvatore-2026-04-28-30]]
+
+## [2026-04-30] ingest | Videochiamata Luca-Salvatore (2026-04-30)
+- **Type**: video-call
+- **Pages created**: [[references/videochiamata-luca-salvatore-2026-04-30]]
+- **Pages updated**: [[theory/modular-trading-agent-architecture]], [[system/foundation/architecture]], [[kanban-project-status]], [[ops/backlog]], [[_meta/index]]
+- **Contradictions**: nessuna
+- **Notes**: Ingestiti i due transcript della videochiamata odierna. Definita l'architettura multi-agente e la roadmap verso la dashboard di augmentazione.
+
+## [2026-05-06] artifact | kanban | Kanban — Stato Progetto
+- **File**: [[kanban-project-status]]
+- **Based on**: aggiornamenti di sessione
+
+## [2026-05-06] update | Correzione file allucinati
+- **Change**: Rimossi output AI allucinati da `raw/archived/articles/Private & Shared/Trading Agent 3192e441b0e580d5921bf33f9b559735.md` e riscritta la pagina `[[references/videochiamata-luca-salvatore-2026-05-06]]` basata sul vero transcript `raw/transcripts/2026-05-06 13-29-25.txt`.
+- **Pages updated**: [[references/videochiamata-luca-salvatore-2026-05-06]], [[Trading Agent 3192e441b0e580d5921bf33f9b559735]]
+- **Notes**: Il file della fonte originariamente conteneva allucinazioni dell'agente che sono state eliminate.
+
+## [2026-05-10] ingest | Videochiamata Luca-Salvatore (2026-05-06) — trascrizione completa
+- **Type**: call (trascrizione ad alta fedeltà, versione molto più completa della precedente)
+- **Source**: `raw/audio/Come stai tutto bene?...txt`
+- **Pages updated**: [[references/videochiamata-luca-salvatore-2026-05-06]], [[theory/modular-trading-agent-architecture]], [[decisions/decision-log]], [[questions/open-questions]], [[artifacts/luca-board]], [[artifacts/salvatore-board]]
+- **Contradictions**: nessuna — la nuova trascrizione ha aggiunto molta più sostanza rispetto alla versione breve precedente
+- **Notes**: Nuovi contenuti chiave: trading singolo vs portfolio bilanciato (decisione centrale aperta), multi-asset vs solo cripto, principio deterministico (LLM solo per ragionamento, tutto il resto Python deterministico), costo token come vincolo architetturale, modelli cinesi open source (DeepSeek) 1/20 del costo su Google Cloud, correlazione intra-crypto con allocazione dinamica nel basket, regole del portafoglio stile fondo professionale (statuto anti-bias), framing "AI Investment Fund / Factory", Luca inizia modulo analisi documenti
+
+## [2026-05-10] artifact | kanban | Luca Board — board personale (tecnico)
+- **File**: [[luca-board]] (in `wiki/artifacts/`)
+- **Based on**: [[ops/backlog]], [[decisions/decision-log]], [[questions/open-questions]], [[references/videochiamata-luca-salvatore-2026-04-30]], [[references/videochiamata-luca-salvatore-2026-05-06]]
+- **Notes**: riorientata su focus tecnico/AI/programmazione dopo chiarimento ruoli del team
+
+## [2026-05-10] artifact | kanban | Salvatore Board — board personale (economico)
+- **File**: [[salvatore-board]] (in `wiki/artifacts/`)
+- **Based on**: [[ops/backlog]], [[decisions/decision-log]], [[questions/open-questions]], [[references/videochiamata-luca-salvatore-2026-04-30]], [[references/videochiamata-luca-salvatore-2026-05-06]]
+- **Notes**: focus su dominio economico/trading, meccanismi di mercato reale, fattori, strategie
+
+## [2026-05-10] update | Integrazione trascrizioni alta fedeltà — videochiamata 2026-04-30
+- **Type**: re-ingest / enrichment
+- **Sources**: `raw/audio/così ce l'abbiamo...txt`, `raw/audio/Invece Obsidian...txt` (trascrizioni ad alta fedeltà della videochiamata 2026-04-30)
+- **Pages updated**: [[references/videochiamata-luca-salvatore-2026-04-30]], [[theory/modular-trading-agent-architecture]], [[system/foundation/architecture]], [[decisions/decision-log]], [[questions/open-questions]], [[ops/backlog]]
+- **Contradictions**: nessuna — le nuove trascrizioni hanno aggiunto dettaglio, non contraddetto contenuto esistente
+- **Notes**: Le trascrizioni ad alta fedeltà hanno rivelato dettagli non presenti nella versione precedente: Prompt Builder come componente architetturale esplicito, meccanismo di esecuzione (limit order + SL + TP + leva), Binance come exchange scelto, problema needle-in-haystack, Factor Investigation Agent come agente separato, metodologia di quantificazione dei fattori (media empirica su serie storiche), strategia Sentiment degli Analisti (idea di King), Volume Spike module, specifiche su FinAgent (Cornell, ~50k stelle, Claude 4° contributore) e AlphaArena (confronto 5 LLM su Bitcoin). Aggiunte 5 decisioni chiuse nel decision log.
+
+## [2026-05-12] ingest | TradingAgents, Alpha Arena & Portfolio Optimizer
+- **Type**: research paper / library documentation
+- **Pages created**: [[prior-art/tradingagents/paper]], [[prior-art/papers/alpha-arena]], [[references/library-portfolio-optimizer]], [[references/architecture-handwritten-notes]], [[agents/trading-agents-framework]], [[agents/cvx-portfolio-optimizer]]
+- **Pages updated**: [[theory/modular-trading-agent-architecture]], [[system/foundation/architecture]], [[_meta/index]]
+- **Contradictions**: nessuna
+- **Notes**: Ingest completa di materiale tecnico di frontiera. TradingAgents introduce il protocollo di comunicazione strutturata e il team di analisti/debater. Portfolio Optimizer (cvx-optimizer) fornisce il motore per il Portfolio Management quantitativo e l'integrazione di opinioni (views) via Black-Litterman. Alpha Arena fornisce benchmark comparativi tra LLM. La system map ora include esplicitamente il portfolio manager e il protocollo di comunicazione strutturato.
+
+## [2026-05-29] ingest+update | Ingest 3 repo GitHub + consolidamento board (migrazione da copia Downloads)
+
+- **Type**: code-ingest + consolidamento artifact
+- **Contesto**: il lavoro era stato fatto per errore su una copia git in `~/Downloads/trading-agent-wiki` (repo senza commit, lineage più vecchio). Migrato qui sul vault vero in modo **chirurgico** (solo i deliverable di sessione, innestati sul contenuto attuale di DST). Backup del vault creato in `~/Downloads/trading-agent-wiki-iCloud-backup-<timestamp>` prima del merge.
+- **Pages created**: [[prior-art/libraries/rizzo-trading-agent]], [[prior-art/libraries/sfc-portfolio-tracker]], [[artifacts/project-board]]
+- **Pages updated**: [[prior-art/libraries/cvx-portfolio-optimizer]] (sezione piattaforma full-stack + BAML LLM-views + frontmatter), [[system/data/data-layer]], [[system/quant/quant-backtesting]], [[system/agents/agents]], [[system/agents/agents]] (sezioni "Riferimenti di codice (repo esterni)"), [[_meta/index]], [[overview]]
+- **Pages deleted**: artifacts/luca-board.md, artifacts/salvatore-board.md (consolidate in project-board; kanban-project-status già rimossa in precedenza)
+- **Sources**: github.com/SilvioBaratto/optimizer, github.com/Rizzo-AI-Academy/rizzo-trading-agent, github.com/Sbirrondi/sfc-portfolio-tracker
+- **Consolidamento board**: project-board ricostruita dal contenuto ATTUALE di luca-board + salvatore-board in DST (NON dalle versioni vecchie di Downloads): preserva decisioni risolte 2026-05-29 (LangGraph, OpenRouter+DeepSeek V4 Pro, portfolio/mid-term, stock-only+benchmark) e i task nuovi (grafo LangGraph, Extractors, market driver, valuation, P/E). Colonne per stato + marker dominio (🛠/📈/🔀). Decisioni storiche superate annotate inline (*aggiornata:*).
+- **Conflicts**: nessuna perdita. Verificato che DST non conteneva alcun deliverable di sessione; che la kanban-project-status cancellata era la versione generica (nessun item unico); che le board DST erano più recenti delle versioni di Downloads (→ ricostruzione da DST).
+- **Skipped**: NON migrati gli altri file divergenti tra le due copie (decision-log, stack, system-map, tradingagents-*, ecc.): appartengono al lineage e non fanno parte di questa sessione.
+- **Notes**: i raw non archiviati (sorgenti = URL GitHub). La copia Downloads resta intatta come riferimento.
+
+## [2026-06-20] update | Sync wiki dal codice + rebuild grafo unificato
+
+- **Type**: project-sync + graphify rebuild
+- **Contesto**: aggiornamento wiki per riflettere i cambiamenti al codice dal 2026-06-14 (ultimo graphify rebuild). 12+ commit di refactor sul branch `feat/refactor-pipeline`.
+- **Graphify**: rebuild grafo codice (`trading-agent/`: 1366 nodi, 3403 edge, 74 communities) + grafo wiki (`trading-agent-wiki/`: 2451 nodi, 2271 edge, 325 communities) → merge → **3817 nodi, 5674 edges** in `graphify-out/graph.json`.
+- **Pages updated**:
+  - [[system/foundation/architecture]] — sezione "Sequenza di sviluppo" aggiornata (track 1-3 ✅), rimosso riferimento LangGraph, aggiunto framework Datapizza AI
+  - [[system/foundation/architecture]] — "Protocollo di comunicazione": LangGraph → Datapizza AI graph
+  - [[system/foundation/stack]] — sezione "AI Agent Framework" riscritta: Datapizza AI al posto di LangChain/LangGraph/LangSmith; aggiunta struttura moduli completa e dipendenze pyproject.toml
+  - [[system/agents/agents]] — box stato aggiornato: Datapizza AI al posto di LangGraph; riferimenti file aggiornati
+  - [[prior-art/libraries/datapizza-ai]] — da draft a active; rimossa mappatura "ipotetica"; aggiunta implementazione effettiva con file chiave e mappatura reale
+  - [[_meta/index]] — riga datapizza-ai: "PoC in corso" → "✅ Framework principale"
+- **Cambiamenti chiave documentati**:
+  - Migrazione completa LangGraph → Datapizza AI (2026-06-17)
+  - Rimossi: `llm_clients/`, `structured.py`, LangChain/LangGraph/LangSmith deps
+  - Refactor: `storage/models.py` → `storage/models/` submodules, `storage/repository.py` → `storage/repository/` submodules
+  - Refactor: `dashboard/app.py` → `dashboard/pages/` + `dashboard/components/`
+  - Nuovi moduli: `universe/`, `indicators/`, `benchmark.py`, `performance.py`, `daemon.py`
+- **Notes**: grafo unificato ricostruito. Report HTML aggiornato.
+
+## [2026-06-20] ingest | Ingest indicatori macroeconomici (Salvatore definitivo)
+
+- **Type**: document / note
+- **Pages created**: nessuna
+- **Pages updated**: [[strategy/indicators/macro-indicators]], [[_meta/index]], [[_meta/hot-cache]]
+- **Contradictions**: nessuna
+- **Notes**: Ingestite le sezioni da 2 a 12 del documento `I Driver di Mercato (definitivo).md` redatto da Salvatore, completando così il framework degli indicatori macroeconomici del vault. Il file sorgente è stato archiviato in `raw/archived/`.
+- **Archiviazione**: Archiviate le note giornaliere vecchie (2026-06-03 fino al 2026-06-06) e i file audio `.opus` in `raw/archived/` per mantenere la cartella `raw/` pulita.
+
+## [2026-06-23] ingest | Commenti wiki + daily notes 2026-06-20/21/22
+
+- **Type**: mixed editorial ingest / wiki realignment
+- **Pages created**: [[system/foundation/codebase-architecture]], [[system/data/data-sources-tool-map]], [[system/foundation/wiki-reorganization]], [[system/interface/frontend-module]], [[prior-art/papers/kronos-foundation-model]]
+- **Pages updated**: [[artifacts/project-board]], [[system/data/data-layer]], [[system/agents/agents]], [[system/execution/execution]], [[system/tools/tools-inventory]], [[system/agents/agent-behaviors]], [[system/foundation/stack]], [[system/foundation/decision-log]], [[strategy/questions-for-salvatore]], [[strategy/index]], [[strategy/methods/factor-investing]], [[strategy/methods/trend-following]], [[strategy/methods/mean-reversion-stat-arb]], [[prior-art/libraries/cvx-portfolio-optimizer]], [[artifacts/trading-floor]], [[_meta/glossario]], [[_meta/index]], [[_meta/hot-cache]]
+- **Contradictions**: risolta la contraddizione tra pagine che descrivevano codice "implementato" e il framing attuale del progetto come codebase da riprogettare. I claim storici sono stati degradati a context/reference design.
+- **Notes**: Il backlog `raw/articles/` resta pending ingest. Questo run ha trasformato task e idee dai commenti `%%...%%` e dalle daily notes in board, pagine target e policy editoriali esplicite.
+
+## [2026-06-23] fix | Review board + integrazione hub dopo feedback Luca
+
+- **Type**: correction / wiki integration
+- **Pages updated**: [[artifacts/project-board]], [[system/foundation/codebase-architecture]], [[system/data/data-sources-tool-map]], [[system/interface/frontend-module]], [[system/foundation/wiki-reorganization]], [[_meta/hot-cache]]
+- **Fix tecnico**: corretti i settings Kanban della board: numero colonne e `list-collapse` allineati, nessun fence `json` nei settings del plugin.
+- **Fix editoriale**: mantenuta la struttura board scelta da Luca, ma collegata a pagine hub operative invece che a riscritture cosmetiche dei commenti.
+- **LightRAG**: tentata query sulla KB `trading-agent-wiki`; risultato `no-context`, quindi non usata come fonte per decisioni di contenuto in questo fix.
+- **Notes**: [[system/foundation/wiki-reorganization]] ora contiene mapping commenti → destinazioni, priorità di pulizia e regola esplicita per i claim storici.
+
+## [2026-06-30] git | Riallineamento copie locali OneDrive/iCloud
+
+- **Type**: git maintenance / vault backup
+- **Path coinvolti**:
+  - `/Users/luca/Library/CloudStorage/OneDrive-Personale/trading-agent-wiki`
+  - `/Users/luca/Library/Mobile Documents/iCloud~md~obsidian/Documents/trading-agent-wiki`
+- **Problema risolto**: la copia iCloud era su una history locale non collegata alla history riscritta di GitHub (`ahead/behind` senza merge-base), mentre OneDrive era allineata al remoto.
+- **Conservazione modifiche**: creato commit `vault backup: 2026-06-30 00:00:00`; salvata la vecchia linea iCloud in `backup/icloud-main-before-realign-2026-06-30` e tag `backup-icloud-main-before-realign-2026-06-30`.
+- **Prevenzione**: riallineato `main` iCloud a `origin/main`; confermato `.gitignore` corrente per `graphify-out/`, `.lightrag/`, `storage_state*`, audio/video e cache locali.
+
+## [2026-07-01] merge | Recupero contenuti umani dalla vecchia iCloud
+
+- **Type**: git merge / source recovery
+- **Fonte**: commit iCloud salvato `70548271453f789cf60f8866a4fd056e2b330370`.
+- **Daily notes recuperate**: `raw/daily-notes/2026-06-25.md`, `raw/daily-notes/2026-06-26.md`, `raw/daily-notes/2026-06-29.md`.
+- **Commenti Obsidian recuperati**: 57 commenti `%%...%%` presenti nella vecchia iCloud risultano ora presenti nel vault corrente; i commenti mancanti sono stati reinseriti nei rispettivi file wiki sotto sezioni "Commenti recuperati da iCloud (2026-07-01)".
+- **Pages updated**: [[artifacts/project-board]], [[_meta/glossario]], [[artifacts/trading-floor]], [[prior-art/libraries/cvx-portfolio-optimizer]], [[strategy/index]], [[strategy/methods/factor-investing]], [[strategy/methods/mean-reversion-stat-arb]], [[strategy/methods/trend-following]], [[system/agents/agent-behaviors]], [[system/agents/agent-memory]], [[system/foundation/architecture]], [[system/_reference/canvas-code-mapping]], [[system/investment/cost-accounting]], [[system/data/data-providers]], [[system/data/db-access-performance]], [[system/_reference/fork-gap-analysis]], [[system/investment/investment-state-template]], [[system/quant/learning-feedback-loop]], [[system/agents/agents]], [[system/interface/observability-dashboard]], [[system/orchestration/parallelism-design]], [[system/investment/position-sizing]], [[system/investment/rating-scoring]], [[system/foundation/stack]], [[system/investment/state-schemas]].
+- **Non reinserito volutamente**: `graphify-out/`, `storage_state.json`, audio/video e cache locali della vecchia history iCloud, perché sono artefatti pesanti/sensibili o rigenerabili già esclusi da `.gitignore`.
+- **Stato editoriale**: materiale umano recuperato ma non ancora completamente normalizzato; la board contiene il task di ingest/pulizia successivo.
+
+## [2026-07-13] update | Normalizzazione integrale commenti e daily notes
+
+- **Type**: editorial ingest / structural reorganization
+- **Sources**: daily note 2026-06-06, 2026-06-20/21/22/25/26/29, 2026-07-12 e tutte le annotazioni `%%…%%` presenti in `wiki/`; i raw non sono stati modificati.
+- **Pages created**: [[comment-resolution-2026-07-13]], [[system/foundation/implementation-status]], [[system/data/data-vendors]], [[artifacts/tool-catalog.base]].
+- **Pages updated**: [[overview]], [[artifacts/project-board]], [[_meta/index]], [[_meta/taxonomy]], [[_meta/hot-cache]], [[_meta/glossario]], [[system/foundation/decision-log]] e le pagine di system/ collegate ai commenti.
+- **Structural change**: `wiki/system/` riorganizzata in sottodomini; wikilink aggiornati. Le analisi di fork/mapping storico sono sotto [[system/_reference]].
+- **Contradictions resolved**: framework LangGraph + LangSmith; state annidato a campi fissi; MVP USD-only senza benchmark dinamico; analisi event-driven con health check periodico; repository esterno non attestato dal vault.
+- **Notes**: commenti rimossi dalle pagine operative dopo assorbimento nel ledger; decisioni umane e ricerca residue sono nella board.
+
+## [2026-09-02] update | Creazione Piano Operativo Sviluppo & Risoluzione Git
+
+- **Type**: architecture plan / git maintenance
+- **Pages created**: [[artifacts/piano-operativo-trading-agent]]
+- **Pages updated**: [[artifacts/project-board]], [[_meta/index]], [[_meta/hot-cache]]
+- **Git status**: allineamento `core.filemode = false` per ignorare i permessi del filesystem Synology Drive.
+- **Skills**: sbloccate in Hermes `codebase-design`, `to-spec`, `to-tickets` sotto `software-development`.
+
+## [2026-10-14] lookup | Recupero del task di rilettura integrale
+
+- **Esito**: ritrovato il risultato persistito in [[comment-resolution-2026-07-13]]; [[artifacts/project-board]] lo marca completato.
+- **Ambito**: daily note dal 2026-06-06 al 2026-07-12 e annotazioni `%%…%%` allora presenti in `wiki/`; il registro conserva le destinazioni e le decisioni risultanti.
+- **Limite del recupero**: la conversazione originale non è stata trovata tra le conversazioni recenti o archiviate consultate.
+
+## [2026-10-30] setup | Workspace GitHub e wiki prima dello sviluppo
+
+- **Richiesta**: Luca avvia il lavoro sul progetto Python; collegare le cartelle locali ai repository omonimi, scaricare la wiki e consultarla prima di ogni attività sul progetto.
+- **Operazione**: clone completo di `cookkie03/trading-agent` e `cookkie03/trading-agent-wiki` sotto `/Users/luca/Documents/Projects/`; `main` con tracking `origin/main` in entrambi.
+- **Evidenza**: HEAD iniziali `20bf209` (codice) e `1d11798` (wiki); remote, tracking e working tree verificati dopo il clone.
+- **Istruzioni**: aggiunti `AGENTS.md` nei due repository per rendere esplicito il flusso di consultazione della wiki.
+- **Pages updated**: [[_meta/hot-cache]], [[artifacts/project-board]], [[system/foundation/implementation-status]].
+- **Questione aperta**: codice precedente presente contro piano di ripartenza da zero; preservato il codice, destinazione da definire con Luca.
+- **Limiti**: nessun avvio dell'applicazione, suite di test, commit o push; modifiche documentali locali.
+
+## [2026-10-30] reset | Ripartenza e recupero appunti sulle classi
+
+- **Autorizzazione**: Luca richiede rimozione codice e commit di ripartenza, con eccezione per le skill di Matt Pocock e preferenza per il loro utilizzo.
+- **Esito verificato**: commit locale `88ca413` nel repo codice; conservate skill, collegamenti, lockfile e istruzioni; cronologia preservata, nessun push.
+- **Recupero fonti**: lista esatta delle classi nella pagina Notion `4012e441-b0e5-81fc-b942-c109716dfb1f`; Todoist task `6hgrJWVFhfGcGpmX` e sottotask `6hjx2hxw8GVvgW45` indicano semplicità e leggibilità, senza lista classi.
+- **Pages updated**: [[system/foundation/codebase-architecture]], [[system/foundation/decision-log]], [[system/foundation/implementation-status]], [[artifacts/project-board]], [[_meta/hot-cache]].
+- **Limiti**: nessuna nuova classe o suite di test; proposta Provider/Data Broker da discutere con Luca.
+
+## [2026-10-30] design | Alberatura modulare, Broker e consulenti dedicati
+
+- **Richiesta Luca**: studiare l'organizzazione repository prima delle classi; iniziare dal broker Alpaca; creare consulente wiki riutilizzabile e sub-agent documentazione.
+- **Attività**: studio wiki con consulente a fonti locali, ricerca documentazione ufficiale Alpaca delegata secondo skill Matt Pocock `research`; proposta di struttura in `docs/architecture.md` del codice.
+- **Documentazione**: agente dedicato incaricato di trovare e usare skill setup documentazione; README e routine di manutenzione in preparazione. Regola di aggiornamento registrata in `AGENTS.md` del codice.
+- **Stato**: struttura e primo contratto Broker proposti, non implementati; nessun ordine, dipendenza prodotto, commit o push di questa fase.
+- **Pages updated**: [[system/foundation/codebase-architecture]], [[artifacts/project-board]], [[_meta/hot-cache]].
+
+## [2026-10-30] docs | Ricerca Alpaca e setup documentazione completati
+
+- **Artefatti locali nel repository codice**: `README.md`, `docs/architecture.md` (proposta), `docs/documentation.md` (routine), `docs/research/alpaca-broker.md` (ricerca ufficiale datata).
+- **Skill**: installate project-local e applicate `find-skills` da `vercel-labs/skills` e `readme-blueprint-generator` da `github/awesome-copilot`; preservate 27 skill di Matt Pocock e aggiornato il relativo lockfile.
+- **Review wiki**: consulente a fonti esclusivamente wiki non rileva omissioni materiali nella proposta di struttura; nomi e contratto restano da concordare.
+- **Risultati ricerca esterna**: Trading API distinta da Broker API; esiti timeout da riconciliare senza retry cieco; bracket attiva uscite dopo fill completo; fonti ufficiali discordanti sui frazionali, da verificare prima di includerli.
+- **Verifiche**: documenti e stato Git letti; `git diff --check` passa. Nessuna nuova implementazione, chiamata autenticata, operazione broker, suite prodotto, commit o push.
+
+## [2026-10-30] scaffold | Alberatura approvata e requisito Docker
+
+- **Richiesta**: Luca approva la struttura, chiede salvataggio wiki e avvio applicazione; requisito deploy produzione Docker.
+- **Operazione**: creati package vuoti con docstring in `src/trading_agent`, directory test, `pyproject.toml`, `.gitignore`, `.dockerignore`; aggiornati README e architettura locale.
+- **Wiki**: albero salvato in [[system/foundation/codebase-architecture]], decisione in [[system/foundation/decision-log]], aggiornati board e hot-cache.
+- **Limiti**: nessuna classe Broker, suite funzionale, build Docker, deploy, commit o push in questo step. Dockerfile e runtime rimangono attività esplicite.
+
+## [2026-10-31] build | Broker read-only, adapter Alpaca e test
+
+- **Richiesta Luca**: scrivere Broker valutabile, compatibilità Alpaca e test usando skill Matt Pocock; Luca dispone di conto Alpaca.
+- **Attività**: TDD progressivo (conto → posizioni → ordini → errori), SDK reale con HTTP simulato; consulenza wiki, revisione tecnica indipendente e agente documentazione.
+- **Regressioni corrette**: timeout HTTP mancante nello SDK (adapter con connect/read 5/30 secondi) e JSON malformato classificato come errore di rete. Entrambe riprodotte da test falliti prima del fix.
+- **Risultato**: 25 offline passati, 1 paper opt-in saltato; mypy senza errori sul modulo. Nessun ordine, chiamata autenticata, commit o push. Dettagli verificabili in [[system/foundation/implementation-status#Broker read-only — verifica 2026-10-31]].
+- **Documentazione**: README, `docs/brokers.md`, architettura, stato, hot-cache e board aggiornati. Requisito Docker resta da completare col runtime.
+
+
+## [2026-10-31] docs | Direzione MVP e quattro chat
+
+- **Richiesta**: accelerare con guida operativa; scelte delegate e quattro filoni vendor/schema, DB, OpenBB e dashboard. Studio codice non è gate.
+- **Scelte registrate**: SQLite MVP condizionato a singolo writer; cache esclusa ma dedup/persistenza conservate; React/TypeScript/Vite con backend Python read-only; vendor agnostic, OpenBB-first in riesame.
+- **Pagine**: [[artifacts/mvp-parallel-work-2026-10-31]], [[artifacts/mvp-database-2026-10-31]], [[artifacts/mvp-openbb-2026-10-31]], [[artifacts/mvp-dashboard-2026-10-31]]. Pagina vendor affidata alla relativa chat: [[system/data/vendor-selection-2026-10-31]].
+- **Allineamenti**: board, index, hot-cache e decision-log; sostituita card Broker già completato offline. Pagine filoni sono incarichi, non prove di funzionamento.
+- **Limiti**: nessun codice modificato dal consulente documentazione, chiamata broker, servizio avviato, commit o push; verifiche nuovi filoni da registrare dopo esecuzione.
+
+## [2026-10-31] ops | Configurazione MCP Mempalace
+
+- **Richiesta Luca**: configurare Mempalace come server MCP Claude Code tramite Docker.
+- **Operazione**: aggiunto a configurazione utente `/home/luca/.claude.json` il server `mempalace`, con volume persistente `mempalace-data:/data` e mount read-only `/home/luca/.claude/projects:/transcripts:ro`.
+- **Verifica**: Docker Engine disponibile; `claude mcp get mempalace` riconosce il server ma il test di connessione va in timeout perché l'immagine `ghcr.io/mempalace/mempalace:latest` non è presente localmente. Nessun pull o avvio persistente eseguito.
+- **Scope**: configurazione personale utente, non repository condiviso; nessun commit o push.
+
+## [2026-11-04] DECISIONE — Priorità tree e workflow agentico
+
+- **Type**: decision + planning
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: sostituita la priorità harness-first; board indice operativo unico. Tree e canvas da concordare, workflow testato con fake prima di tool e infrastruttura reale; frontend successivo. Altri filoni sospesi, non cancellati; risk/safety deterministici e nessuna esecuzione reale.
+- **Pagine**: [[artifacts/project-board]], [[artifacts/piano-operativo-trading-agent]], [[system/foundation/codebase-architecture]], [[system/foundation/decision-log]], [[_meta/hot-cache]]. Nessuna modifica o verifica del codice.
+
+## [2026-11-18] DECISIONE — Sei agenti: parità, PM, Risk, routing
+
+- **Type**: decision
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: agenti pari con scambio di messaggi; PM punto d'ingresso degli alert e decisore; Risk a due livelli; routing MVP con richiamo a tetto; confine Market/Sentiment confermato; termine «Analyst»; rimozione codice reviewer PM decisa.
+- **Pagine**: [[system/foundation/decision-log]], [[system/agents/agent-behaviors]], [[artifacts/project-board]], [[_meta/hot-cache]]. Nessuna modifica al codice oltre a glossario, ADR e AGENTS.md.
+
+## [2026-11-18] DECISIONE — Tool, cicli, ordini (Q28–Q45) e reference OpenAlice
+
+- **Type**: decision + ingest
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: tool per agente con parametri; Valutatore post-MVP; Market Analyst fuori dai cicli; cicli paralleli; watchlist del PM; Alert ripetuti come messaggio o fusione; trailing stop deterministico; sforzo per agente; agenti ignari di paper/live; coda di approvazione umana; kill switch; costi su DB; MCP post-MVP. Studiati OpenAlice e l'optimizer di Silvio Baratto (Neuroespresso).
+- **Pagine**: [[system/agents/agent-tools]], [[prior-art/libraries/openalice]], [[prior-art/libraries/cvx-portfolio-optimizer]], [[system/foundation/decision-log]], [[_meta/hot-cache]].
+
+## [2026-11-18] INGEST — Confronto OpenAlice vs Trading Agent
+
+- **Type**: ingest + synthesis
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: confronto punto per punto tra le decisioni del progetto e le funzionalità di OpenAlice (repo clonato, docs), per valutare un fork.
+- **Pagine**: [[prior-art/openalice-vs-trading-agent]], [[prior-art/libraries/openalice]], [[_meta/hot-cache]].
+
+## [2026-11-18] DECISIONE — Q46–Q56: runtime, Controllo programmato, approvazione
+
+- **Type**: decision
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: nostro codice e non fork di OpenAlice; `schedule_task` al posto di `next_check_date`; flusso di approvazione con Rimando su blocco o rifiuto e bypass attivo per ora; trailing stop a formula ATR; Market Analyst a orari con visione per settore; sforzo, `.env`, CLI dati, concorrenza.
+- **Pagine**: [[system/foundation/decision-log]], [[system/agents/agent-tools]], [[_meta/hot-cache]].
+
+## [2026-11-18] DECISIONE — Scheduled task, dati, deploy, limiti (Q57–Q68)
+
+- **Type**: decision
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: Scheduled task come unico richiamo degli agenti con traduttori deterministici; DB come cache dei dati; deploy Docker sul Minisforum; limiti del Risk Gate con 30 posizioni; Inbox; log completo dei Trade; schema DB da riprogettare.
+- **Pagine**: [[system/foundation/decision-log]], [[system/agents/agent-tools]], [[_meta/hot-cache]].
+
+## [2026-11-18] DECISIONE — Log su DB, dati finanziari, downsampling, vendite, test
+
+- **Type**: decision
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: log completo su DB; dati finanziari in tabelle per tipo con fonte e data; downsampling dei prezzi; vendite a specchio degli acquisti; strategia di test a tre livelli. Intervista di design chiusa.
+- **Pagine**: [[system/foundation/decision-log]], [[_meta/hot-cache]].
+
+## [2026-11-18] SPEC — MVP dell'ufficio di agenti
+
+- **Type**: planning
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: spec MVP con 126 user story, decisioni di implementazione, test e fuori scope, nel repository in `.scratch/agent-mvp/spec.md`. Tracker locale scelto da Luca; punto di test principale: il motore con adapter finti.
+- **Pagine**: [[_meta/hot-cache]].
+
+## [2026-11-18] CODICE + VERIFICA — Motore dell'ufficio di agenti (MVP, implementazione iniziale)
+
+- **Type**: implementation
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: nel repository (branch `docs/agent-restart`) implementati, delegando a `claude -p` con `my-combo` e rivedendo il risultato: Bozza dell'ordine, trailing stop, Risk Gate a guard, Scheduled task (fusione, limiti, traduttori), conservazione/downsampling, DB dell'ufficio con migrazioni e registro asincrono, backend agenti sostituibile (+ finto a copione), impostazioni `config/office.toml`, tool per ruolo, cache dati DB-first, flusso ordine con coda di approvazione e invio seriale idempotente, trade manager, motore `Office`/`CycleRunner`, CLI `trading-agent`, bootstrap, servizio Docker `engine`, prompt in bozza. Rimosso `agents/pm_omniroute.py`.
+- **Verifica**: 376 test passati offline (broker, LLM e dati finti). **Non** eseguiti: smoke test con LLM reali e Alpaca paper, deploy Docker sul Minisforum. Il codice prototipo restante (desks, graph, storage/sqlite, dashboard) non è ancora migrato né eliminato.
+- **Pagine**: [[artifacts/project-board]], [[system/foundation/decision-log]], [[_meta/hot-cache]].
+
+## [2026-11-18] VERIFICA — Smoke test con LLM reale e rimozione del prototipo
+
+- **Type**: verification
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: rimosso il prototipo (grafo di agenti, trade cycle, runtime paper, `agents/pm_omniroute.py`). Primo smoke test reale (`tests/integration/test_office_smoke.py`, LLM `my-combo` via OmniRoute, broker e dati finti) ha rivelato due difetti del `CycleRunner`: il PM non riceveva i risultati degli strumenti e girava senza system prompt. Corretti con ciclo multi-turno limitato dal budget `tool_turns` e caricamento dei prompt da `prompts/`; test di regressione aggiunto. Dopo la correzione il PM legge lo stato, chiede l'analisi, programma il prossimo controllo e chiude il ciclo.
+- **Verifica**: 285 test passati offline + smoke reale passato. **Non** eseguiti: Alpaca paper reale, deploy sul Minisforum, wiring dati live OpenBB/Alpaca, revisione dei prompt da parte di Luca.
+- **Pagine**: [[artifacts/project-board]], [[_meta/hot-cache]].
+
+## [2026-11-18] CODICE + VERIFICA — Dati live e pulizia del prototipo
+
+- **Type**: implementation
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: prova live su Yahoo Finance tramite cache DB-first: scoperto che `ohlcv(limit=N)` restituiva le barre più vecchie (1980) e che `quote()` ripiegava su un prezzo finto di 100; corretto (ultime N barre, errore se manca il dato), log al posto dei fallimenti silenziosi dei provider, client Alpaca news collegato da `ALPACA_API_KEY`/`ALPACA_SECRET_KEY`. Rimossi `execution/paper.py`, `execution/risk.py` e relativi test.
+- **Verifica**: 266 test passati offline; prezzi AAPL live verificati. **Non** provati: news Alpaca (servono chiavi), OpenBB, Alpaca paper reale, deploy Minisforum. `storage/sqlite.py` e dashboard restano (usati da ingestione/indicatori).
+- **Pagine**: [[artifacts/project-board]].
+
+## [2026-11-18] VERIFICA — Dati live end-to-end con LLM reale
+
+- **Type**: verification
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: ciclo reale (`my-combo`) con dati live: prezzi Yahoo e news Alpaca (sola lettura, chiavi dal `.env` del progetto) tramite cache DB-first; broker ancora finto. Corretto il `limit` ignorato in news/insiders/calendario dell'adapter. Opzione `OFFICE_SMOKE_LIVE_DATA=1` nello smoke test.
+- **Verifica**: 267 test offline + smoke live passato. **Non** provati: OpenBB (extra opzionale non installato), Alpaca paper con ordini reali, deploy Minisforum.
+- **Pagine**: [[artifacts/project-board]].
+
+## [2026-11-18] VERIFICA — Lettura reale su Alpaca paper
+
+- **Type**: verification
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: adapter reale (`AlpacaBracketAdapter` + `SafeBrokerReader`) provato in sola lettura sul conto paper: account (equity 100000, cash 100000), nessuna posizione, nessun ordine aperto. Nessun ordine inviato.
+- **Verifica**: lettura ok. **Non** provato: invio e cancellazione di un bracket reale (passo di Luca), deploy Minisforum, OpenBB.
+- **Pagine**: [[artifacts/project-board]].
+
+## [2026-11-18] CODICE + VERIFICA — Guardia sulla decisione del PM
+
+- **Type**: implementation
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: nelle prove reali il PM scriveva a un analista e chiamava `defer` nello stesso passo, chiudendo il ciclo prima della risposta. Il `CycleRunner` ora rifiuta `accept_order`/`defer` finché gli Analyst contattati nel ciclo non hanno avuto il loro turno (errore restituito al PM, che decide al turno dopo). Test di regressione aggiunto. Prompt del PM reso più esplicito. Osservazione per la revisione dei prompt: in alcune prove `my-combo` rimanda senza mai contattare gli Analyst (richiesta "smoke test" senza dati): da valutare se il prompt di apertura deve essere più direttivo.
+- **Verifica**: 268 test offline + due smoke live passati.
+- **Pagine**: [[artifacts/project-board]].
+
+## [2026-11-18] VERIFICA — OpenBB live
+
+- **Type**: verification
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: installato l'extra `openbb` e provato `OpenBBProvider` live: 8 barre giornaliere AAPL (ultima chiusura 352,30, fonte `openbb:yfinance`), in linea con Yahoo diretto. Nessuna modifica a `pyproject.toml` o `uv.lock`.
+- **Verifica**: lettura ok. Il motore usa Yahoo diretto per i prezzi; OpenBB resta provider alternativo.
+- **Pagine**: [[artifacts/project-board]].
+
+## [2026-11-18] DEPLOY + VERIFICA — Ordine bracket reale su Alpaca paper, motore in produzione
+
+- **Type**: verification
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: motore deployato su questo host (Debian/Tailscale) con `compose.engine.yaml`: `OFFICE_LLM_ENDPOINT` punta a OmniRoute sulla rete docker `omniroute_default`. Cicli di produzione reali (`my-combo`, dati live, broker paper) hanno fatto emergere e corretto: `send_message` a destinatari inesistenti (ora validato), decisione del ciclo precedente ereditata (ora azzerata a inizio ciclo), risposte degli Analyst non recapitate al PM (relay + prompt), modifica di stop/TP sul parent invece che sulle gambe del bracket (Alpaca 42210000), prezzi sub-penny rifiutati dal broker (ora arrotondati al centesimo in `build_order_draft` e al caricamento di bozze salvate), errore del broker che lasciava ordine `pending` e ciclo `open` (ora l'ordine va `rejected` e il ciclo chiude in "rimando"). Ciclo #7 su AAPL: PM → Analyst → bozza → Risk Gate → bracket reale (26 azioni, limit 350,04, TP 369,25, stop 338,51) accettato da Alpaca paper; poi cancellato (autorizzato da Luca).
+- **Verifica**: 278 test offline passati. **Aperti**: l'ordine cancellato lato broker resta `submitted` nel DB (manca riconciliazione dello stato ordini), revisione prompt a cura di Luca, OpenBB solo come provider, endpoint di default obsoleto in `config/office.toml`.
+- **Pagine**: [[artifacts/project-board]].
+
+## [2026-11-18] CODICE + VERIFICA — Sync dello stato ordini dal broker
+
+- **Type**: implementation
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: `OrderFlow.sync_broker_orders()` allinea gli ordini locali `submitted` allo stato reale del broker (filled/cancelled/expired/rejected, evento `reconciled`); eseguito ogni 30 s dal loop del motore e a mano con `trading-agent orders sync`. Endpoint di default portato a `http://localhost:20128/v1` (il vecchio IP Tailscale era obsoleto). Pulizia E501 di `workflows/cycle.py` delegata a `claude -p` con `my-combo` (diff verificato, comportamento invariato).
+- **Verifica**: 279 test offline passati; `orders sync` provato sul vero ordine cancellato su Alpaca paper (ordine #3: `submitted` → `cancelled`).
+- **Pagine**: [[artifacts/project-board]].
+
+## [2026-11-18] CODICE — OpenBB nel motore, stato dei resti del prototipo
+
+- **Type**: implementation
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: la cache dati sceglie il provider prezzi da `DATA_PRICES_PROVIDER` (`yahoo` di default, `openbb` opzionale) e ripiega sull'altro se l'inizializzazione fallisce. Test scritti da `claude -p` con `my-combo` (3 offline). Resti del prototipo riverificati: `storage/sqlite.py` e la dashboard sono usati solo da dashboard, script legacy e ingestione, mai dal motore; la spec tiene la dashboard fuori fino al cockpit. Deploy: il motore gira su questo host (Debian/Tailscale) come indicato da Luca, non sul Minisforum.
+- **Verifica**: 282 test offline passati. L'immagine Docker include l'extra `openbb`: provato nel container con `DATA_PRICES_PROVIDER=openbb`, `bootstrap` sceglie `OpenBBProvider` e restituisce barre AAPL reali (correzione di una nota precedente che lo dava non installato).
+- **Pagine**: [[artifacts/project-board]].
+
+## [2026-11-18] CODICE — Bug del Market Analyst e pulizia ruff
+
+- **Type**: implementation
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: la pulizia ruff di `execution`, `tools`, `workflows`, `storage` e `bootstrap.py`, delegata a `claude -p` con `my-combo`, ha portato alla luce un bug reale: `workflows/office.py` usava `OutgoingMessage` senza importarlo, quindi un `send_message` del Market Analyst fatto come chiamata a tool lanciava `NameError`. Corretto l'import e aggiunto un test di regressione (fallisce senza l'import). `TaskSource` diventa `StrEnum` (nessun uso di `str()` sul valore).
+- **Verifica**: 283 test offline passati, ruff pulito sui percorsi indicati, motore ridistribuito.
+- **Pagine**: [[artifacts/project-board]].
+
+## [2026-11-18] PULIZIA — Rimossi i resti del prototipo
+
+- **Type**: implementation
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: su richiesta di Luca eliminati `storage/sqlite.py`, `portfolio.py`, `data/ingestion.py`, `analysis/indicator_worker.py`, `interface/dashboard.py`, `interface/server.py`, la cartella `scripts/`, il vecchio `compose.yaml` della dashboard, il `Dockerfile` radice e i test collegati (−2646 righe). Il motore non importava nessuno di questi moduli. Mappatura dell'analisi e lista dei file prodotte da `claude -p` (`my-combo`); la cancellazione l'ho eseguita io perché il delegato non aveva permesso per `git rm`; README e `docs/architecture.md` aggiornati da `my-combo`. `frontend/`, `openbb-ui/` e `telegram-claude/` restano (app separate, non toccate). Chiarito con Luca: il Minisforum è questo stesso host Debian (ambiente SSH), quindi il deploy è già quello in produzione.
+- **Verifica**: 247 test offline passati (calo dovuto ai test rimossi), motore ricostruito e CLI funzionante sul DB di produzione.
+- **Pagine**: [[artifacts/project-board]].
+
+## [2026-11-18] PROMPT + VERIFICA — Regola d'ingaggio del PM e limiti del Risk Gate
+
+- **Type**: implementation
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: prompt aggiornati (restano bozze per la revisione di Luca): il PM ha una "Regola d'Ingaggio" (primo turno solo messaggi ai quattro Analyst, decisione solo dopo le risposte di Technical e Risk) e le note sugli argomenti dei tool decisionali; il Risk Analyst conosce i limiti deterministici del Risk Gate (rischio 1%, notional 10%, settore 30%, cassa 5%, R:R 1,5) e deve rileggere la bozza dopo `set_coefficients`; tutti gli specialisti sanno che il subagent legge solo stato e portafoglio. Revisione di coerenza prompt/tool prodotta da `claude -p` (`my-combo`), 12 punti, applicati quelli rilevanti.
+- **Verifica**: ciclo di produzione su MSFT: PM → quattro richieste → quattro risposte tutte recapitate → Risk Analyst segnala la bozza fuori limite e la ricalibra → esito `deferred` con controllo futuro programmato (consenso HOLD di tre Analyst su quattro). 247 test offline passati.
+- **Pagine**: [[artifacts/project-board]].
+
+## [2026-11-19] CODICE + VERIFICA — Chiusura dei 9 gap residui dell'ufficio agenti (MVP)
+
+- **Type**: implementation + verification
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: chiusi e verificati con test automatici tutti i 9 gap residui identificati dall'audit della spec (`.scratch/agent-mvp/spec.md`):
+  1. **US 62**: `OrderFlow.reject()` registra l'evento, aggiorna l'ordine e scrive il Rimando con il motivo del rifiuto nella chat del PM per il ticker corrispondente.
+  2. **US 102 / 117**: `OfficeDB.check_db_size_alert()` e `Office.check_db_size()` verificano la dimensione del DB rispetto a `db_size_alert_mb` (inclusi file WAL e SHM) e accodano un avviso in Inbox (senza duplicare avvisi non letti).
+  3. **US 101**: `storage/retention.py` introduce `run_retention_job()` cablato in `Office.run_retention()`, eseguito settimanalmente nel loop: compattazione testo news (>90gg), compattazione blob prompt/risposte LLM (>180gg), downsampling barre orarie (>90gg) in giornaliere e barre giornaliere (>5a / >10a) in settimanali/mensili, ed esecuzione di `PRAGMA incremental_vacuum`.
+  4. **US 89**: `Office.refresh_data()` cablato nel loop di `Office.run()` per eseguire periodicamente il pre-fetch di watchlist e portafoglio tramite `refresh_watchlist_and_portfolio()`.
+  5. **US 12**: `workflows/scheduling.py` e `workflows/office.py` introducono `make_external_alert_task()` e `Office.ingest_external_alert()`, che trasformano allarmi esterni (prezzo, calendario, utili) in Scheduled task immediati per il PM.
+  6. **US 16**: `Office.ensure_fixed_market_analyst_activations()` genera automaticamente attivazioni fisse di base per il Market Analyst (pre-market alle 09:00 nei giorni di borsa e per eventi da `econ_calendar`) salvate con sorgente `fixed_base`.
+  7. **US 77**: Aggiunto il tool `set_sector_view` per il Market Analyst (`tools/schemas.py`, `tools/environment.py`, prompt aggiornato) che registra la visione di mercato in `sector_performance` e aggiorna lo state di tutti i titoli del settore.
+  8. **US 85**: `portfolio_risk` esteso per calcolare la correlazione di portafoglio (matrice di correlazione di Pearson sui rendimenti giornalieri a 30gg tra i titoli in posizione aperta) e il rischio aperto (`open_risk`).
+- **Verifica**: 255 test passati (0 falliti, 2 skipped), `ruff check` pulito su tutti i moduli, `graphify update .` sincronizzato. Container Docker `engine` ricreato e riavviato su host Debian (`trading-agent-engine-1` Up). Ciclo reale su AAPL eseguito via CLI `trading-agent task AAPL`, completato con successo (ciclo #9, esito `accepted`). Stato ordini sincronizzato con broker Alpaca paper (`positions: 0`, nessun ordine pendente aperto).
+- **Pagine**: [[artifacts/project-board]].
+
+## [2026-11-20] DECISIONE — Runtime unico single writer, event-driven
+
+- **Type**: decision + design
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: prima del frontend serve un layer centrale. Scelto un *Runtime*: processo unico sempre acceso, unico writer del DB, client sottili (CLI, UI, Telegram) via HTTP + SSE. Comandi idempotenti con audit nella tabella append-only `events`, letture da read model, eventi dopo il commit. Niente polling: scheduler a scadenza/evento, stream Alpaca `trade_updates` con riconciliazione. Un Runtime per account; CLI a Runtime spento fallisce; niente Redis; migrazione incrementale in 8 fette. La verifica del codice (`6d228b3`) ha rilevato che `record_entry_fill`, `record_exit_fill`, `on_price`, `expire_pending`, `release_queued` e `ingest_external_alert` non sono chiamati in produzione: i fill non diventano Trade. La spec ne collega quattro; `on_price` e le fonti di Alert restano fuori perimetro.
+- **Pagine**: [[system/foundation/decision-log]], [[system/foundation/architecture]], [[artifacts/project-board]], [[_meta/hot-cache]]. Repo: `docs/adr/0003-runtime-unico-writer-event-driven.md`, `.scratch/core-runtime/spec.md`, `.scratch/core-runtime/handoff-implementazione.md`, `GLOSSARY.md`. Solo design: nessun codice implementato né testato.
+
+## [2026-11-20] OPERATIONS — Allineamento GitHub e account al posto di paper/live
+
+- **Type**: operations + decision clarification
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: regola nuova in `AGENTS.md` (repo codice e wiki): a ogni task, pull all'inizio, commit e push alla fine, entrambi i repository senza `ahead` né `behind`. Le modifiche locali non riconosciute vanno su un branch `backup/…`. Wiki del Mac riallineata: le vecchie modifiche non committate sono su `backup/mac-wip-2026-11-20`, il commit Timestral è stato rebasato e pushato. Repo codice: `main` allineato e cinque branch `worktree-*` solo locali pushati. `docs/frontend.md` e `docs/architecture.md`: nessuna modalità paper/live, account selezionabili; paper o live dipende solo dalle credenziali (coerente con PRODUCT.md). Nuova decisione aperta in board: fonte dei prezzi per il trailing stop e per gli Alert di prezzo.
+- **Pagine**: [[artifacts/project-board]].
+
+## [2026-11-20] DECISIONE — Timeframe globale, trailing e Alert a chiusura barra
+
+- **Type**: decision
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: `bar_timeframe` globale (default 1h, configurabile), valido anche per l'ATR di ordini e trailing (coefficienti `k` da ritarare). Job a chiusura barra al posto di uno stream. Quattro condizioni di Alert di prezzo, cooldown di 3 ore, Alert trimestrali a 3 giorni solo per le posizioni. Fetta S9 aggiunta alla spec del Runtime come goal successivo a S1–S8.
+- **Pagine**: [[system/foundation/decision-log]], [[system/orchestration/trigger-engine]], [[artifacts/project-board]], [[_meta/hot-cache]]. Solo decisione: nessun codice.
+
+## [2026-11-20] REVIEW — Runtime S1–S8
+
+- **Type**: code review + verifica
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: rieseguiti test (304 passed, 2 skipped) e ruff (pulito); smoke con Office di test riuscito (comandi CLI via HTTP, consegna immediata del task, eventi SSE, lock contro il secondo Runtime). Trovati 4 problemi bloccanti (R1–R4: stream broker mai avviato per i nomi delle env, effetti broker dentro la transazione, riconciliazione senza Trade, stream senza riconnessione), 5 importanti (job a intervalli fissi e non persistiti, eventi duplicati, Risk Gate non rieseguito all'approvazione, race nel replay SSE, possibile busy-loop) e 3 minori. La board non marca più il Runtime come completato. Handoff per il goal di fix: `.scratch/core-runtime/review.md` (repo codice).
+- **Pagine**: [[artifacts/project-board]], [[_meta/hot-cache]].
+
+## [2026-11-20] REVIEW — Correzioni R1–R12 del Runtime
+
+- **Type**: code review + verifica
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: 336 test verdi, ruff pulito; smoke con Office di test ok (eventi non duplicati, lock con messaggio pulito, consegna immediata). R1, R3, R5–R8 e R10–R12 risolte. Nuovi problemi: **N1 bloccante**, riprodotto (la riconciliazione legge `quantity` ma `SafeBrokerReader` restituisce `qty`, quindi a ogni avvio o riconnessione chiude tutti i Trade aperti a prezzo di entrata con motivo «tp»); **N2** (un timeout all'invio marca `rejected` un ordine forse vivo al broker); **N3** (audit del comando non più atomico); N4–N6 minori. Goal di fix nel repo: `.scratch/core-runtime/review.md` §«Secondo giro».
+- **Pagine**: [[artifacts/project-board]], [[_meta/hot-cache]].
+
+## [2026-11-20] REVIEW CHIUSA — Runtime unico
+
+- **Type**: verifica
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: verificato `e21532d`: 350 test, ruff pulito; N1 corretto (riproduzione superata), N2–N4 e N6 applicati, N5 rinviato. La review offline è chiusa. Prossimo gate: prova reale con Alpaca paper e LLM sul Minisforum, poi S9 e frontend.
+- **Pagine**: [[artifacts/project-board]].
+
+## [2026-11-20] CODICE — Account del Runtime e API per il cockpit
+
+- **Type**: codice + documentazione
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: `TRADING_AGENT_ACCOUNT_LABEL` rende configurabile l'etichetta dell'account mostrata da `/v1/health` (un Runtime per account). `docs/dashboard.md` allineato all'API reale, con i vincoli browser: nessun CORS, `EventSource` senza header del token, nessun registro dei Runtime nel backend. Verifica: 353 test, ruff pulito. Commit `b7c303b`. Il frontend può ripartire sul Facade del Runtime; la prova reale aspetta il cockpit, per scelta di Luca.
+- **Pagine**: [[artifacts/project-board]].
+
+
+## [2026-11-22] CODICE + VERIFICA — Ufficio del cockpit
+
+- **Type**: codice + documentazione
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: pagina Ufficio (panoramica agenti, più chat per agente, tool dal vivo espandibili, scrivi, assegna task, costi e token) e read model del Runtime (`agents`, `chat_topics`, `tool_calls`, `usage`, eventi `chat.message`, `tool.called`, `agent.status`). Uniti su `feat/cockpit-frontend` (`b75a6db`, `de6cb4b`); correzione `6f75f78` per il task corrente e per la chat che restituiva i messaggi più vecchi. Verifica: 377 test, ruff pulito, typecheck e build verdi, prova con Playwright sul Runtime sintetico.
+- **Pagine**: [[system/interface/frontend-module]].
+
+## [2026-11-22] DECISIONE + CONFIGURAZIONE — Flusso GitHub
+
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: flusso issue → branch → PR → CI → merge manuale e criteri SemVer in `AGENTS.md`. CI e release manuale preparate su `chore/github-workflow`, senza deploy. Build pulita, 148 test offline e `actionlint` passano in locale; verifica GitHub ancora da fare.
+- **Pagine**: [[system/foundation/git-workflow]] · [[system/foundation/decision-log]].
+
+## [2026-11-23] CODICE + VERIFICA — Cockpit e Runtime uniti su main
+
+- **Type**: codice + documentazione
+- **Owner**: 🛠 Luca (software)
+- **Contenuto**: uniti su `main` (`78c8917`) shell, Terminale, Ufficio a due livelli, Portafoglio, pagina `/ticker/:symbol` e i backend del Runtime per Portafoglio (metriche, attribuzione, vincoli versionati, `close_position`, `modify_exit`) e agenti del ticker (scheda versionata, proposte al PM). Correzioni in integrazione: in Halt non si allarga lo stop (`e008177`); prezzo della scheda dalla stessa fonte del Portafoglio (`78c8917`). Verifica: 465 test, ruff pulito, typecheck e build verdi, controllo nel browser di Portafoglio, Ufficio e pagina del ticker sul Runtime sintetico.
+- **Metodo**: da qui un branch per pagina (es. `settings-frontend`) che contiene backend e frontend della pagina, unito su `main` dopo le verifiche. `feat/cockpit-frontend` è superato.
+- **Pagine**: [[system/interface/frontend-module]], [[system/foundation/decision-log]].

@@ -8,8 +8,9 @@ services:
         required: false
     environment:
       TRADING_AGENT_DB: /app/data/trading-agent.db
+      TRADING_AGENT_API_HOST: 0.0.0.0
       TRADING_AGENT_ACCOUNT_LABEL: ${TRADING_AGENT_ACCOUNT_LABEL:-default}
-      OFFICE_LLM_ENDPOINT: ${OFFICE_LLM_ENDPOINT:-http://omniroute:20128/v1}
+      OFFICE_LLM_ENDPOINT: ${DOCKER_OFFICE_LLM_ENDPOINT:-http://omniroute:20128/v1}
     ports:
       - "127.0.0.1:8765:8765"
     healthcheck:
@@ -30,7 +31,7 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
     ports:
-      - "${COCKPIT_PUBLIC_PORT:-3000}:80"
+      - "127.0.0.1:${COCKPIT_PUBLIC_PORT:-3000}:80"
     depends_on:
       engine:
         condition: service_healthy

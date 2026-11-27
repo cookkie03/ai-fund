@@ -87,7 +87,7 @@ cleanup() {
 trap cleanup INT TERM EXIT
 
 echo -e "${GREEN}Starting Backend Engine on http://127.0.0.1:${ENGINE_PORT}...${NC}"
-uv run trading-agent run 2>&1 | sed -e "s/^/$(printf '%b' "${BLUE}[engine]${NC} ")/" &
+uv run --env-file .env trading-agent run 2>&1 | sed -e "s/^/$(printf '%b' "${BLUE}[engine]${NC} ")/" &
 ENGINE_PID=$!
 
 echo -e "${GREEN}Starting Frontend Cockpit on http://127.0.0.1:${FRONTEND_PORT}...${NC}"

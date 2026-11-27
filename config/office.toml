@@ -73,55 +73,55 @@ llm_logs_days = 180                         # Prompt e risposte completi 180 gio
 
 [agents.portfolio_manager]
 endpoint = "http://localhost:20128/v1"
-model = "my-combo"
+model = "free"
 effort = "high"
 api_key_env = "OMNIROUTE_API_KEY"
 
 [agents.bridge]
 endpoint = "http://localhost:20128/v1"
-model = "my-combo"
+model = "free"
 effort = "high"
 api_key_env = "OMNIROUTE_API_KEY"
 daily_budget = 10.0
 
 [agents.ticker_agent]
 endpoint = "http://localhost:20128/v1"
-model = "my-combo"
+model = "free"
 effort = "medium"
 api_key_env = "OMNIROUTE_API_KEY"
 
 [agents.market_analyst]
 endpoint = "http://localhost:20128/v1"
-model = "my-combo"
+model = "free"
 effort = "medium"
 api_key_env = "OMNIROUTE_API_KEY"
 
 [agents.sentiment_analyst]
 endpoint = "http://localhost:20128/v1"
-model = "my-combo"
+model = "free"
 effort = "medium"
 api_key_env = "OMNIROUTE_API_KEY"
 
 [agents.technical_analyst]
 endpoint = "http://localhost:20128/v1"
-model = "my-combo"
+model = "free"
 effort = "medium"
 api_key_env = "OMNIROUTE_API_KEY"
 
 [agents.fundamental_analyst]
 endpoint = "http://localhost:20128/v1"
-model = "my-combo"
+model = "free"
 effort = "medium"
 api_key_env = "OMNIROUTE_API_KEY"
 
 [agents.risk_analyst]
 endpoint = "http://localhost:20128/v1"
-model = "my-combo"
+model = "free"
 effort = "medium"
 api_key_env = "OMNIROUTE_API_KEY"
 
 [agents.subagent]
 endpoint = "http://localhost:20128/v1"
-model = "my-combo"
+model = "free"
 effort = "low"
 api_key_env = "OMNIROUTE_API_KEY"

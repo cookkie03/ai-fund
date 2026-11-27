@@ -43,3 +43,4 @@ secrets.meta.json
 
 # Local wiki source archive; never publish it.
 /raw/
+/archieve/
