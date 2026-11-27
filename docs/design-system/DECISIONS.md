@@ -35,13 +35,13 @@ Every decision the UI needs, settled with Luca. The only step left before buildi
 | Navigation | Home · Portfolio · Approvals (count) · Agents · Markets · News · Assistant; Settings + avatar menu in the footer | `AppSidebar` |
 | Landing page | **Home** | §3.1 |
 | Sidebar header | `AfMark` + "AI Fund" + the account switcher showing the **account name Luca chose** (see §8 Accounts) | `AppSidebar` |
-| Top bar | Trigger · breadcrumb · search (⌘K → Combobox) · freshness · Bridge · notifications · Halt | `TopBar` |
+| Top bar | Trigger · breadcrumb · search (⌘K → Combobox) · freshness · market clock · Assistant · notifications · Halt | `TopBar` |
 | Freshness | Dot + word + age, always visible | `FreshnessBadge` |
 | Halt | Destructive button → AlertDialog; halted = destructive `Alert` under the top bar, Resume trading | `HaltButton`, `Alert` |
 | Notifications | Popover with `Item` rows: approvals needed, orders filled, limits near/over, runtime state | `TopBar` |
 | Toasts | Order filled, approval needed, data stale, runtime back | `Toaster` |
 | Runtime unreachable | Freshness turns red, capital actions disabled with tooltip | `FreshnessBadge`, `Tooltip` |
-| Bridge | Assistant page **and** the same chat in a right `Sheet` from the top bar | `ChatThread`, `Composer`, `Sheet` |
+| Assistant | Assistant page **and** the same chat in a right `Sheet` from the top bar | `ChatThread`, `Composer`, `Sheet` |
 | Phone | Bottom tabs Home · Portfolio · Approvals · Agents · More; details in a bottom `Drawer` | `MobileTabBar`, `Drawer` |
 
 ## 3. Pages — what each one holds
@@ -79,8 +79,8 @@ Each page: one job, one hero, cards in order, detail on demand, one primary acti
 - Agent detail: header (`AgentAvatar` lg + status + meters) and `Tabs` **Chat** (`ChatThread`, `Composer`, `Marker` day labels) · **Tool calls** (`ToolCallRow` list, All / Errors filter, freshness) · **Costs**.
 
 ### 3.7 Assistant
-- Job: talk to the Bridge, which can use the same commands as the UI.
-- `ChatThread` + `Composer` full height; commands the Bridge runs show as `Trace` lines with inline confirmations (`AlertDialog` for capital actions).
+- Job: talk to the Assistant, which can use the same commands as the UI.
+- `ChatThread` + `Composer` full height; commands the Assistant runs show as `Trace` lines with inline confirmations (`AlertDialog` for capital actions).
 
 ### 3.8 News
 - Job: read, filter and send news to agents.
@@ -157,11 +157,15 @@ In the Claude Design project on the codebase: draw every page of §3 ex ante —
 
 A `Popover` is not only a definition: it is where quick actions live — a selectable list to switch (markets, accounts), buttons that open a link, edit a value in place or accept something. Anything that needs a reason, a preview or a capital decision still opens a `Dialog`.
 
+## 8c. "Assistant", never "Bridge" (settled 2026-11-27)
+
+The agent Luca talks to and its page are both called **Assistant** everywhere in the UI and the docs. "Bridge" is retired as a name (backend identifiers still carry it until they are renamed).
+
 ## 9. Page design log — Home (in progress, grilling with Luca)
 
 | # | Decision |
 | --- | --- |
-| Q1 | `/` opens Home; Assistant moves to `/assistant` and stays in the Bridge Sheet |
+| Q1 | `/` opens Home; Assistant moves to `/assistant` and stays in the Assistant Sheet |
 | Q2 | Job: how the fund is doing. What needs Luca is the next section, not a second job |
 | Q3/Q11 | Hero: **Total value** (positions at market value + cash, base USD, any instrument class), Popover on the label with the definition |
 | Q4 | The 3 oldest proposals with Approve and Decide, plus "View all" to Approvals |
@@ -169,16 +173,20 @@ A `Popover` is not only a definition: it is where quick actions live — a selec
 | Q6 | Hero + at most 3 sections; everything else behind a link, Sheet or Popover |
 | Q7 | Desktop 1440 first, phone derived |
 | Q8 | Sample figures with a "Sample data" badge in drawings only; real data after wiring |
-| Q9 | Today's Briefing becomes the Home section "Needs you" (counts, items by severity, Ask the Bridge, Mark as read) and holds the 3 proposals; a compact Briefing stays as the opening of an empty Assistant chat |
+| Q9 | Today's Briefing becomes the Home section "Needs you" (counts, items by severity, Ask the Assistant, Mark as read) and holds the 3 proposals; a compact Briefing stays as the opening of an empty Assistant chat |
 | Q10 | Account switcher in the sidebar header; market clock beside freshness in the top bar; no equity figure in the top bar |
 | Q13 | Oldest proposals first, same order as Approvals |
 | Q15 | StatCards: Unrealized P&L, Cash vs reserve (LimitBar), Open risk (LimitBar + Within/Near/Over); positions n/max, realized today and invested stay in Portfolio |
 | Q17 | Backend to add: aggregate `open_risk` in `portfolio_summary` and a unified activity route. No paper/live field (§8) |
 | Q12 | On Home, Approve is `outline` like Decide; the filled `default` Approve stays on the Approvals page (one primary in view). Needs a ProposalCard prop (proposal for `src/ds`) |
 | Q14 | Sections under the hero: StatCards · Needs you · Activity. Agents at work becomes an avatar row with status in the Activity header; a HoverCard shows each agent's current task; link to Agents |
-| Q19 | Needs you, top to bottom: counts as badges (to approve, waiting for PM, alerts, agent errors, filled today) → the 3 proposals → up to 3 briefing items by severity (Ask the Bridge, Mark as read) → View all |
+| Q19 | Needs you, top to bottom: counts as badges (to approve, waiting for PM, alerts, agent errors, filled today) → the 3 proposals → up to 3 briefing items by severity (Ask the Assistant, Mark as read) → View all |
 | Q21 | Severities: Critical (destructive), Review (warning), Info (gray); always icon + word |
 | Q22 | Today's "System" panel (trading on/halted, freshness, account, broker stream, last update, next task, database) opens as a Popover from `FreshnessBadge`; halt stays the Alert under the top bar |
 | Q23 | Market clock shows one market ("NYSE · Open · 10:32 ET"); its Popover lists the other markets and switches between them |
 | Q24 | Hero curve: no axes or grid, `chart-4`, ~120 px, hover tooltip with date and value, 1D · 1W · 1M as small buttons right of the figure |
-| Q18 | A "Today" page in the design canvas (captures + inventory of each current page) **and** the local dev server on Luca's machine for real time |
+| Q20 | Assistant actions to confirm sit in "Needs you" (Briefing card), first: the action in words, Cancel and Confirm, an AlertDialog for capital actions |
+| Q26 | Runtime unreachable: Alert with Retry now; last known values with "Last known · 4 min ago"; every command disabled with the tooltip "Runtime unreachable", navigation only |
+| Q27 | Empty fund: starting value with a gray 0.00%, "Not enough history" instead of the curve, Empty "Nothing needs you — agents will ask here when they propose a trade", Empty "No activity yet" |
+| Q28 | Loading: a Skeleton shaped like each section, freshness "Connecting…", no full-page spinner |
+| Q18 | Superseded: no "Today" page. The design canvas shows a live draft of the page being designed, updated after every round, so Luca can comment on its parts; the local dev server on Luca's machine gives the real-time current app |

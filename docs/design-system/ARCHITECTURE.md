@@ -16,7 +16,7 @@ frontend/src/
     identity/                 ← AgentAvatar, AfMark, Delta, StatusBadge
     motion/                   ← Reveal, AnimatedNumber, PriceFlash
     blocks/
-      shell/                  ← AppSidebar, TopBar, FreshnessBadge, HaltButton, MobileTabBar, BridgeSheet
+      shell/                  ← AppSidebar, TopBar, FreshnessBadge, HaltButton, MobileTabBar, AssistantSheet
       pages/                  ← PageHeader, HeroBalance, StatCard
       portfolio/              ← PositionsTable, OrdersTable, LimitBar, AllocationList, EquityChart
       approvals/              ← ProposalCard, DecideDialog

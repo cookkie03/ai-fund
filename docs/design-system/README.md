@@ -47,10 +47,10 @@ Inter Variable, tabular numerals for figures.
 
 ## Layout
 
-- **Shell:** `AppShell` — `AppSidebar` in the **inset** variant (collapsible to icons) and a `SidebarInset` that starts with `TopBar`: sidebar toggle, breadcrumb, instrument search (⌘K), `FreshnessBadge`, Bridge, notifications, `HaltButton`.
+- **Shell:** `AppShell` — `AppSidebar` in the **inset** variant (collapsible to icons) and a `SidebarInset` that starts with `TopBar`: sidebar toggle, breadcrumb, instrument search (⌘K), `FreshnessBadge`, Assistant, notifications, `HaltButton`.
 - **Accounts:** one account = one broker account, named by Luca. The software never knows whether it is paper or live and never shows that as a state; the sidebar header shows the account name with the account switcher.
 - **Navigation:** Home · Portfolio · Approvals (count) · Agents · Markets · News · Assistant, Settings in the footer, Luca's avatar menu (theme, settings). **Home** is the landing page.
-- **Bridge:** its own Assistant page for long conversations, and the same chat in a right `Sheet` from the top bar on every page.
+- **Assistant:** the agent Luca talks to (formerly "Bridge"): its own Assistant page for long conversations, and the same chat in a right `Sheet` from the top bar on every page.
 - **Pages:** `PageHeader` → hero (`HeroBalance` or three to four `StatCard`s) → cards in a 12-column grid with `gap-6` (`space-section`) and `p-6` page padding.
 - **Markets** is the one pro workspace: resizable panels (`MarketsWorkspace`) — watchlist | TradingView chart | agents & drawings, over orders.
 - **Density:** shadcn default sizes everywhere; tables of positions, orders and tool calls use compact 32 px rows and `Card size="sm"`.
