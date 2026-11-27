@@ -237,3 +237,16 @@ Open, for the Agents page: where scheduled tasks, the task queue and analysis cy
 | D6 | A row (Needs you or History) opens a side **Sheet**: the proposal in short (one-line thesis, entry/stop/target, risk gate verdict, signing agents), the lifecycle proposal → decision (who, what, why) → order → fill → close with P&L, and the actions when pending; Open instrument link. The decision record and its lifecycle are **persisted in the database** (backend) |
 | D7 | History rows: who decided (avatar), what (Approved, Rejected, Postponed, Asked, Confirmed), instrument, one-line reason, outcome (Working, Filled, Cancelled, Closed +$…), time; grouped by day, newest first; filters by decider, outcome, instrument, date; search |
 | D8 | Approve and Decide in outline on rows; the filled primary only inside the Decide dialog or the Sheet when confirming |
+
+## 12. Page design log — Instrument (in progress)
+
+| # | Decision |
+| --- | --- |
+| I1 | Job: everything we know and decide about one instrument, updated in real time |
+| I2 | Header: symbol, name, class, price (native + USD), change, time, facts; if held, a position strip (qty, value, P&L, weight, stop, target, risk to stop, days · proposed by) with **Sell** and **Modify stop & target** opening the **same shared dialogs as Portfolio** (`SellDialog`, `ExitsDialog`: one component, dialog on desktop, bottom sheet on phone). Not held: "Not in portfolio · on the watchlist" |
+| I3 | Overview leads with **Investment state**: direction, conviction, horizon, next check, last update + version + author, stale-fact warning |
+| I4 | Tabs: Overview · Analysis · Chart (TradingView untouched, agents' drawings) · Notes · History; tabs reuse the blocks of the other pages wherever they can (History › Decisions is the Decisions history filtered by instrument) |
+| I5 | Signatures filter (show/hide each author's analyses and drawings) sits on the Analysis and Chart tabs — to be judged on the draft |
+| I6 | History: Decisions (filtered, "Open in Decisions"), Lessons, Versions |
+| I7 | Header links: Agent chat (instrument agent's page, Chat tab), News (filtered); no Portfolio link |
+| I8 | **One page for every instrument class**: the template knows every field (equity: sector, industry, market cap, P/E, dividend yield, next earnings; bond: issuer, coupon, maturity, YTM, duration, rating, price % of par) and shows only the fields that have a value — no empty fields |
