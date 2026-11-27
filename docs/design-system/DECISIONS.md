@@ -161,7 +161,7 @@ A `Popover` is not only a definition: it is where quick actions live — a selec
 
 The agent Luca talks to and its page are both called **Assistant** everywhere in the UI and the docs. "Bridge" is retired as a name (backend identifiers still carry it until they are renamed).
 
-## 9. Page design log — Home (in progress, grilling with Luca)
+## 9. Page design log — Home (desktop validated by Luca on 2026-11-27; phone in progress)
 
 | # | Decision |
 | --- | --- |
