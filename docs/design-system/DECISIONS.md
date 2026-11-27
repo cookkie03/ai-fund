@@ -162,6 +162,10 @@ A `Popover` is not only a definition: it is where quick actions live — a selec
 
 The agent Luca talks to and its page are both called **Assistant** everywhere in the UI and the docs. "Bridge" is retired as a name (backend identifiers still carry it until they are renamed).
 
+## 8d. How the pages are drawn (settled 2026-11-27)
+
+One design canvas for the whole product: a page per app section plus a Shell page of shared components (AppSidebar, TopBar, MobileTopBar, MobileTabBar) that every artboard imports. One artboard per screen, desktop 1440 and phone 390 side by side, interactive, with Tweaks for theme and state. Sidebar and tab links join the artboards into one clickable prototype. Home is the template for the other pages.
+
 ## 9. Page design log — Home (desktop and phone validated by Luca on 2026-11-27)
 
 | # | Decision |
