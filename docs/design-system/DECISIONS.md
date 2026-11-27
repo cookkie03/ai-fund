@@ -185,6 +185,7 @@ The agent Luca talks to and its page are both called **Assistant** everywhere in
 | Q22 | Today's "System" panel (trading on/halted, freshness, account, broker stream, last update, next task, database) opens as a Popover from `FreshnessBadge`; halt stays the Alert under the top bar |
 | Q23 | Market clock shows one market ("NYSE · Open · 10:32 ET"); its Popover lists the other markets and switches between them |
 | Q24 | Hero curve: no axes or grid, `chart-4`, ~120 px, hover tooltip with date and value, 1D · 1W · 1M as small buttons right of the figure |
+| Q29 | "Needs you" is **one inbox list, most urgent first** (supersedes the cards + Briefing layout of Q19/Q12): one Card, Tabs with counts (All · To approve · To confirm · Alerts), each row = kind badge (Critical, To approve, To confirm, Review, Info) + what + detail + age + two actions (Decide/Approve, Cancel/Confirm, Ask/Mark read); 5 rows then View all; a proposal opens in a Sheet |
 | Q20 | Assistant actions to confirm sit in "Needs you" (Briefing card), first: the action in words, Cancel and Confirm, an AlertDialog for capital actions |
 | Q25 | Trading halted: destructive Alert with Resume trading; Approve disabled with the tooltip "Trading halted"; Decide stays enabled (Postpone and Reject send no order), only Accept is disabled inside it |
 | Q26 | Runtime unreachable: Alert with Retry now; last known values with "Last known · 4 min ago"; every command disabled with the tooltip "Runtime unreachable", navigation only |
