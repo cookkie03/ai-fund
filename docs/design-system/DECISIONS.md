@@ -206,7 +206,7 @@ One design canvas for the whole product: a page per app section plus a Shell pag
 | Q28 | Loading: a Skeleton shaped like each section, freshness "Connecting…", no full-page spinner |
 | Q18 | Superseded: no "Today" page. The design canvas shows a live draft of the page being designed, updated after every round, so Luca can comment on its parts; the local dev server on Luca's machine gives the real-time current app |
 
-## 10. Page design log — Portfolio (in progress)
+## 10. Page design log — Portfolio (desktop and phone validated by Luca on 2026-11-27)
 
 | # | Decision |
 | --- | --- |
@@ -216,6 +216,8 @@ One design canvas for the whole product: a page per app section plus a Shell pag
 | F4/G3 | Tabs: **Positions** (default) · **Performance** · **Risk**. No Activity tab: the equity curve and allocation move inside Performance and Risk |
 | F5 | Positions shows 7 columns: Instrument, Qty, Last (native + USD), Value, Weight, P&L, Risk to stop. Sector, Avg price, Stop, Target, Days, Proposed by live on the Instrument page |
 | F6 | A row opens the **Instrument** page (the one place for everything about an instrument, investment state included); a ⋯ menu on the row holds Sell, Modify stop, Open instrument, Decision history. No side Sheet |
-| F7/F8 | Sell / Modify stop confirmation and Edit limits dialogs: postponed until drawn |
+| F7 | **Sell** dialog: amount as Shares, Amount $ or % of position (25/50/75/All shortcuts, equivalent shown in all three), order type Market/Limit, Runtime preview (no effect) with estimated price, value, realized P&L, open risk before → after and the risk gate verdict, required reason, destructive "Sell". **Modify exits** dialog (menu "Modify stop & target…"): stop loss and take profit side by side (current → new, either or both), preview with tighten/widen and raise/lower notes, risk to stop, reward to target, R:R and open risk before → after, risk gate, reason, "Confirm" |
+| F8 | **Edit limits**: step 1 the six limits as editable values (changed fields outlined) + reason → step 2 before → after table (unchanged rows dimmed) and the effect on current positions → Back · Cancel · Confirm & apply |
+| F9 | One **page-level period bar** (SPY toggle + 1D · 1W · 1M · 3M · YTD · 1Y · All) next to the title drives both the hero change and everything in Performance (curve, range, return, SPY, drawdown, axis, metrics period) |
 | G1/G2 | The Approvals page becomes **Decisions**: tabs Needs you (the full Home list) and History (every decision by Luca, PM, risk gate, Assistant, with who, what, why and the outcome: order working, filled, cancelled, trade closed). Sidebar label "Decisions" with the count of what waits for Luca |
 | G4 | Performance is the summary and navigation of portfolio performance (curve with SPY and drawdown, metrics, attribution, closed trades); every trade there has a "Decision history" button that lands on Decisions › History for that position. The detail lives only in Decisions |
