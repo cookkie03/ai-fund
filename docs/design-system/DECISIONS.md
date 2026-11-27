@@ -42,6 +42,7 @@ Every decision the UI needs, settled with Luca. The only step left before buildi
 | Toasts | Order filled, approval needed, data stale, runtime back | `Toaster` |
 | Runtime unreachable | Freshness turns red, capital actions disabled with tooltip | `FreshnessBadge`, `Tooltip` |
 | Assistant | Assistant page **and** the same chat in a right `Sheet` from the top bar | `ChatThread`, `Composer`, `Sheet` |
+| Scrolling | Only the page content scrolls (and the components inside it that scroll on their own). The sidebar and the top bar stay fixed; on phone the top bar and the bottom tabs stay fixed | `AppShell`, `SidebarInset` |
 | Phone | Bottom tabs Home · Portfolio · Approvals · Agents · More; details in a bottom `Drawer` | `MobileTabBar`, `Drawer` |
 
 ## 3. Pages — what each one holds
@@ -186,6 +187,13 @@ The agent Luca talks to and its page are both called **Assistant** everywhere in
 | Q23 | Market clock shows one market ("NYSE · Open · 10:32 ET"); its Popover lists the other markets and switches between them |
 | Q24 | Hero curve: no axes or grid, `chart-4`, ~120 px, hover tooltip with date and value, 1D · 1W · 1M as small buttons right of the figure |
 | Q29 | "Needs you" is **one inbox list, most urgent first** (supersedes the cards + Briefing layout of Q19/Q12): one Card, Tabs with counts (All · To approve · To confirm · Alerts), each row = kind badge (Critical, To approve, To confirm, Review, Info) + what + detail + age + two actions (Decide/Approve, Cancel/Confirm, Ask/Mark read); 5 rows then View all; a proposal opens in a Sheet |
+| P1 | Phone order: MobileTopBar → Total value + curve + 1D/1W/1M → figures → Needs you → Activity → MobileTabBar |
+| P2 | Phone figures: one card with three rows (label + figure left, bar or change right), no Carousel |
+| P3 | Phone Needs you: same list and Tabs (scroll sideways); rows show kind, title, age; a tap opens a bottom Drawer with the detail and the two actions |
+| P4 | Phone Activity: avatar row with status summary, 5 compact rows, status badge under the text, View all |
+| P5 | Phone: an Assistant icon in MobileTopBar (beside search, notifications, Halt) |
+| P6 | Phone: the market clock lives in the freshness Popover with System and market switching |
+| P7 | Phone curve: same as desktop, 80 px, value on press-and-hold |
 | Q20 | Assistant actions to confirm sit in "Needs you" (Briefing card), first: the action in words, Cancel and Confirm, an AlertDialog for capital actions |
 | Q25 | Trading halted: destructive Alert with Resume trading; Approve disabled with the tooltip "Trading halted"; Decide stays enabled (Postpone and Reject send no order), only Accept is disabled inside it |
 | Q26 | Runtime unreachable: Alert with Retry now; last known values with "Last known · 4 min ago"; every command disabled with the tooltip "Runtime unreachable", navigation only |
